@@ -1,0 +1,57 @@
+== gfxchgr.py ==
+v7 Custom types support added
+   Unicode output for data now supported
+v6 Made ROM potentially optional
+   Fixed std lib loading (attempts to resolve collisions instead of overwriting
+    the module with the std)
+   Fixed bug with specifying a struct to handle by name
+v5 Will now create missing folders defined in file keys
+v4 Added support for defining an environment variable to tell gfxchgr where
+    its resouces are.
+   Added support for only managing a certain struct. Should manage substructs
+    too.
+   Implemented autonames.
+   Modularized ROM info checking
+v3 Added support for the std module
+v2 Rewrote entirety
+
+== rpl.py ==
+v7 Fixed bug where changes to a struct wasn't persistent
+   Added references
+v6 Custom types support added
+v5 Fixed bug in RPLStruct.__getitem__ that gave improper defaults on dAllowed
+    entries of type string only
+v4 Added __contains__ to RPL class
+   Fixed a bubbling issue to allow using the default of a parent struct
+   Fixed a bug in RPLStruct.parent, wasn't returning correct type
+v3 Added gray default
+   Can now support keynames that end with numbers
+v2 Fixed bug in unescape, preventing it from working at all
+   Fixed bugs in addData, now supports data-only RPLs properly
+
+== std.py ==
+v7 Added basic value for data, font
+   Fixed bug where numbers in rpl type may have been fucked on export
+   Unpadding on custom types is now handled by that type's handler
+   Strings in txt type now import with padding
+   Other data struct related bugs..should all work now!
+v6 Custom types support added
+   Standard color type added
+   Fixed bug where .txt comment could be interpreted as data
+   Fixed bug where only rpl importing worked
+   Fixed bug where rpl importing would error when finished
+   Now removes padding properly on export
+v5 Added padding keys to text struct
+v4 Fixed bug not allowing rpl data to import correctly
+v3 Added typesetting
+   Fixed bug not allowing importing strings from rpl data
+v2 Added comment field to data struct
+   Will now create missing folders defined in file keys
+v1 Made data import/export
+
+== min.py ==
+v6 Added katakana, pokestr, and sodate custom types
+v5 Fixed gray separation (for importing) so that it's meshed.
+v4 Added sprite3/tile3(/sprite3s/tile3s) structs for three colour graphics
+v3 Moved ROM info grabbing method to this
+v2 Added tilemap.map importing
