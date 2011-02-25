@@ -111,11 +111,10 @@ format = format of output. Each entry is a list of a string and a number or
 	with any amount of sublists. The string is the data type and the number is
 	the data size. Standard data types include:
 	"string", "number", and "hexnum"
-	A module may add other types. /!\ NOT IMPLEMENTED YET /!\
-file = filename to get data from, if this isn't supplied you must use data
-	Can be a .bin file for binary data, .txt for string data, or .rpl for
-	descriptor style marked up data. The .rpl should only contain a list with
-	the data to insert in it.
+	A module may add other types.
+file = filename to get data from. Can be a .bin file for binary data, .txt for 
+	string data, or .rpl for descriptor style marked up data. The .rpl should 
+	only contain the data to insert.
 times = (optional) times to read (default: 1)
 export = see tilemap
 import = see tilemap
@@ -129,9 +128,9 @@ Lists of data will be condensed into raw data per the size spec as necessary.
 = font =
 Basic value: Will always be the struct name.
 file = image file to read the font from
-spacing = (optional) spacing between characters (pixels) when writing (default 0)
-backspace = (optional) negative spacing between characters when writing (default 0)
-vertical = (optional) how to vertically align characters when printing,
+spacing = (optional) spacing between characters (pixels) when writing (default: 0)
+backspace = (optional) negative spacing between characters when writing (default: 0)
+vertical = (optional) how to vertically align characters when printing.
 	Can be base (default), top, middle (unimplemented), or bottom
 charset{}
 chars{}
@@ -139,8 +138,8 @@ char{}
 
 = charset =
 set = (optional) character set that is in this font (default:
-	" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~")
-dimensions = (optional) dimenions of each character
+	" !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~")
+dimensions = (optional) dimensions of each character
 spacing = (optional) space between each character in the image (default: 0)
 start = (optional) [x,y] starting position of the first char (default: [0,0])
 base = (optional) baseline of the letters (in pixels, 0 being the top of the char) (default: height)
@@ -152,12 +151,14 @@ set = see charset
 dimensions = see charset
 spacing = see charset
 start = see charset
+base = see charset
 
 = char =
 c = the character
 box = [x,y,width,height] on the image
 position = [x,y] on the image
 size = [width,height] on the image
+base = see charset
 Must use either box or position/size, will prefer position/size if both are given.
 
 = typeset =
@@ -199,7 +200,7 @@ index = (optional) index via entry/dimensions info in LRUD order
 position = [x,y] location to draw section. Will use size or entry for
 	width/height depending on what's available.
 size = [width,height] of section
-box": [x,y,width,height]
+box = [x,y,width,height]
 mirror = see tilemap
 flip = see tilemap
 rotate = see tilemap

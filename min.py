@@ -19,7 +19,6 @@ dAllowed = {
 		,"sprites": ["struct",False]
 		,"sprite3": ["struct",False]
 		,"sprite3s": ["struct",False]
-		,"data": ["struct",False]
 	},
 	"ROM": {
 		"id": ["string",True]
@@ -33,6 +32,7 @@ dAllowed = {
 		,"dimensions": [["number","number"],False]
 		,"white": ["color",False,RPL.static["white"]]
 		,"black": ["color",False,RPL.static["black"]]
+		,"gray": ["color",False,RPL.static["gray"]]
 		,"invert": ["number",False,RPL.static["false"]]
 		,"rotate": ["number",False,RPL.static["false"]]
 		,"mirror": ["number",False,RPL.static["false"]]
@@ -54,6 +54,7 @@ dAllowed = {
 		,"dimensions": [["number","number"],False]
 		,"white": ["color",False,RPL.static["white"]]
 		,"black": ["color",False,RPL.static["black"]]
+		,"gray": ["color",False,RPL.static["gray"]]
 		,"alpha": ["color",False,RPL.static["cyan"]]
 		,"setalpha": ["color",False,RPL.static["magenta"]]
 		,"invert": ["number",False,RPL.static["false"]]
