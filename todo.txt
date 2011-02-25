@@ -1,2 +1,0 @@
-* Finish type checking
-* Add automated tests
