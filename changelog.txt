@@ -50,6 +50,7 @@ v2 Added comment field to data struct
 v1 Made data import/export
 
 == min.py ==
+v7 Fixed tile3 support
 v6 Added katakana, pokestr, and sodate custom types
 v5 Fixed gray separation (for importing) so that it's meshed.
 v4 Added sprite3/tile3(/sprite3s/tile3s) structs for three colour graphics
