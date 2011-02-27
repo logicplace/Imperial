@@ -2,7 +2,7 @@
 #-*- coding:utf-8 -*-
 
 """
-Pokemon Mini module for gfxchgr by Wa (logicplace.com) - v6
+Pokemon Mini module for gfxchgr by Wa (logicplace.com) - v7
 """
 
 ## Struct defs
@@ -274,7 +274,7 @@ def Tile32Image(hROM,info,fTrans,imBase):
 		g1 = hROM.read(8)
 		hROM.seek(info.base2+idx*8) # 8(w)*8(h)/8(bpp)
 		m = "\x00"*8
-		Combine3Mask(g1,hROM.read(8),m,m,[
+		Combine3Mask(g1,m,hROM.read(8),m,[
 			info.white,info.black,
 			info.white,info.black,
 			info.gray
@@ -441,10 +441,12 @@ def Image2Tile3(hROM,info,fTrans,imBase):
 		x *= 8
 		y *= 8
 		imTile = fTrans(info,imBase.crop((x,y,x+8,y+8)))
-		Tile = Uncombine3Mask(imTile.crop((0,0,8,8)),lCol)[0]
+		Tile = Uncombine3Mask(imTile.crop((0,0,8,8)),lCol)
 		
-		hROM.seek(info.base+idx*8)
-		hROM.write(Tile)
+		hROM.seek(info.base1+idx*8)
+		hROM.write(Tile[0])
+		hROM.seek(info.base2+idx*8)
+		hROM.write(Tile[2])
 	#endfor
 	return True
 #enddef
