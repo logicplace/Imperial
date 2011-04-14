@@ -44,12 +44,19 @@ def main():
 		,['i', "import", 0, False, "Import graphics via the descriptor"]
 		,['t', "template", 0, False, "Generate a descriptor template"]
 		,['d', "debug", 1, None, None]
+		,['r', "romless", 0, False, "Skip validation"]
+		,['f', "format", 1, None, "Provide format name (Default: Uses file extension)"]
+		,['m', "makefile", 0, False, "Make ROM file if it doesn't exist"]
+		,['b', "binary", "rmf", None, "Compiling to binary instead of a ROM, same as -rmf"]
+		,['d', "define", 2, None, "Define a value that can be referenced by @Defs.name\n"\
+			+"Format is -d name value[:type]\nDefault type is string"
+		]
 	]).parse()
 	
 	lDebug = clArgs.debug
 	
 	if clArgs.help:
-		print(("%s v2 by Wa (logicplace.com)\n" % clArgs[0])
+		print(("%s v8 by Wa (logicplace.com)\n" % clArgs[0])
 			+"Modify graphics in a Pokemon Mini ROM easily.\n"
 			+("Usage: %s [OPTIONS] ROM_FILE DESCRIPTOR [STRUCTs]\n" % clArgs[0])
 			+"Structs are what structs to behave on only. If nothing's passed assume all.\n"
@@ -61,7 +68,14 @@ def main():
 	
 	# Open ROM
 	try: hRom = open(clArgs[1],"r+b")
-	except: return error("Could not open ROM.",1)
+	except:
+		if clArgs.makefile:
+			try:
+				open(clArgs[1],"w").close()
+				hRom = open(clArgs[1],"r+b")
+			except: return error("Could not create ROM file.",1)
+		else: return error("Could not open ROM.",1)
+	#endtry
 	
 	sRomFileName,sRomExt = re.match(r'(?:.*/|^)(.+?)(?:\.(.*))?$',clArgs[1]).groups()
 	
@@ -70,7 +84,7 @@ def main():
 		hMod = open("%sstd.py" % sBaseDir,"rb")
 		exec(hMod.read()) in globals() 
 		hMod.close()
-		hMod = open("%s%s.py" % (sBaseDir,sRomExt),"rb")
+		hMod = open("%s%s.py" % (sBaseDir,clArgs.format[0] or sRomExt),"rb")
 		exec(hMod.read()) in globals() 
 		hMod.close()
 	except:
@@ -128,33 +142,35 @@ def main():
 				if x not in dCustomType: dCustomType[x] = dStdCustomType[x]
 			#endfor
 			
-			rpl = RPL(dAllowed,dCustomType,hRpl)
+			rpl = RPL(dAllowed,dCustomType,clArgs.define,hRpl)
 			if not rpl: raise Exception(4)
 			
-			# Find the ROM struct and verify data
-			if "ROM" in rpl:
-				rplROM = rpl.ROM
-				if sRomId != rplROM["id"] and sRomId not in rplROM["id"]:
-					error("Game ID does not match. Got \"%s\" Expected%s: %s" % (
-						sRomId," one of" if type(rplROM["id"]) is list else "",rplROM["id"]
-					))
-					sYN = ""
-					while not re.match(r'[yn]|yes|no',sYN,re.I):
-						sYN = raw_input("Continue (y/n)? ")
-					#endwhile
-					if re.match(r'no?',sYN,re.I): raise Exception(5)
-				#endif
-				if rplROM["name"] is not None and sRomName != rplROM["name"] and sRomName not in rplROM["name"]:
-					error("Game name does not match. Got \"%s\" Expected%s: %s" % (
-						sRomId," one of" if type(rplROM["name"]) is list else "",rplROM["name"]
-					))
-					sYN = ""
-					while not re.match(r'[yn]|yes|no',sYN,re.I):
-						sYN = raw_input("Continue (y/n)? ")
-					#endwhile
-					if re.match(r'no?',sYN,re.I): raise Exception(5)
-				#endif
-			else: error("Warning: No verification performed.")
+			if not clArgs.romless:
+				# Find the ROM struct and verify data
+				if "ROM" in rpl:
+					rplROM = rpl.ROM
+					if sRomId != rplROM["id"] and sRomId not in rplROM["id"]:
+						error("Game ID does not match. Got \"%s\" Expected%s: %s" % (
+							sRomId," one of" if type(rplROM["id"]) is list else "",rplROM["id"]
+						))
+						sYN = ""
+						while not re.match(r'[yn]|yes|no',sYN,re.I):
+							sYN = raw_input("Continue (y/n)? ")
+						#endwhile
+						if re.match(r'no?',sYN,re.I): raise Exception(5)
+					#endif
+					if rplROM["name"] is not None and sRomName != rplROM["name"] and sRomName not in rplROM["name"]:
+						error("Game name does not match. Got \"%s\" Expected%s: %s" % (
+							sRomId," one of" if type(rplROM["name"]) is list else "",rplROM["name"]
+						))
+						sYN = ""
+						while not re.match(r'[yn]|yes|no',sYN,re.I):
+							sYN = raw_input("Continue (y/n)? ")
+						#endwhile
+						if re.match(r'no?',sYN,re.I): raise Exception(5)
+					#endif
+				else: error("Warning: No verification performed.")
+			#endif
 			
 			# For exporting
 			def TransformEX(info,im):
@@ -215,8 +231,8 @@ def main():
 					st._name = st._type + str(dTypeCount[st._type])
 				#endif
 				#print "<%s %s>" % (st._type,st._name)
-				bFocusOK = not sFocus or st._name == sFocus or st._type in lIgnoreFocus
-				if bFocusOK or bFocusChild:
+				bFocusOK = not sFocus or st._name == sFocus
+				if bFocusOK or bFocusChild or st._type in lIgnoreFocus:
 					sFn = stdhandle_create(hRom,st,dFiles) or handle_create(hRom,st,dFiles)
 					#print sFn
 					if sFn is not None:
@@ -253,6 +269,7 @@ def main():
 			print("Nothing to do.")
 		#endif
 	except Exception as x:
+		raise
 		hRom.close()
 		hRpl.close()
 		if type(x[0]) is int: return x[0]
