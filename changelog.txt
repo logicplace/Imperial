@@ -1,4 +1,6 @@
 == gfxchgr.py ==
+v8 Added --romless, --format, --makefile, --binary, and --define command line
+   flags
 v7 Custom types support added
    Unicode output for data now supported
 v6 Made ROM potentially optional
@@ -16,6 +18,8 @@ v3 Added support for the std module
 v2 Rewrote entirety
 
 == rpl.py ==
+v8 Added ability to accept any key via * (see static)
+   Added functionality for handling --define flag
 v7 Fixed bug where changes to a struct wasn't persistent
    Added references
 v6 Custom types support added
@@ -30,6 +34,9 @@ v2 Fixed bug in unescape, preventing it from working at all
    Fixed bugs in addData, now supports data-only RPLs properly
 
 == std.py ==
+v8 Added static struct
+   Formatting adjustments
+   Made data.base optional and default to 0
 v7 Added basic value for data, font
    Fixed bug where numbers in rpl type may have been fucked on export
    Unpadding on custom types is now handled by that type's handler
@@ -50,6 +57,8 @@ v2 Added comment field to data struct
 v1 Made data import/export
 
 == min.py ==
+v8 Formatting adjustments
+   Made *.base optional and default to 0
 v7 Fixed tile3 support
 v6 Added katakana, pokestr, and sodate custom types
 v5 Fixed gray separation (for importing) so that it's meshed.
