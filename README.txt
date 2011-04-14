@@ -45,6 +45,18 @@ A basic value is determined by the type of the struct. If the struct does not
 define a basic value, the struct's name is returned instead. Unless stated 
 otherwise, it may not be a good idea to rely on it returning the name.
 
+You may chain list indexes for nested lists.
+
+The Defs struct refers to what is passed via the --define flag on the command
+line. If you were to use
+	gfxchgr --define x 123:number ...
+You could reference the number passed (123) with
+	@Defs.x
+in your code. Note that the colon in the value denotes typecasting. If this
+is omitted it will assume the string type. If you wish to pass a string with
+a colon in it just add :string to the end. Currently only supports simple and
+custom types, it does not support hexnum, range, list, or reference.
+
 You may also use a keyword as a value:
 false = 0
 true = 1
