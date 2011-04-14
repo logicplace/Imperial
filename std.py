@@ -2,13 +2,13 @@
 #-*- coding:utf-8 -*-
 
 """
-Standard data type handlers for gfxchgr.py by Wa (logicplace.com) - v7
+Standard data type handlers for gfxchgr.py by Wa (logicplace.com) - v8
 """
 
-lIgnoreFocus = ["font","ROM"]
+lIgnoreFocus = ["font","ROM","static"]
 
 dStdCustomType = {
-	"color": [
+	"color": [ "number",
 		(lambda x,i: ((x&0xff)<<16)|(x&0xff00)|((x&0xff0000)>>16)),
 		(lambda x,i: ((x&0xff)<<16)|(x&0xff00)|((x&0xff0000)>>16))
 	]
@@ -19,95 +19,99 @@ dStdAllowed = {
 		"data": ["struct",False]
 		,"font": ["struct",False]
 		,"typeset": ["struct",False]
+		,"static": ["struct",False]
 	}
-	,"data": {
-		"base": ["number",True]
-		,"format": ["[string|[string,int]]*",True]
-		,"file": ["string",True]
-		,"times": ["number",False,1]
-		,"export": ["number",False,RPL.static["true"]]
-		,"import": ["number",False,RPL.static["true"]]
-		,"endian": ["string",False,"little"]
-		,"pad": ["string",False,"\x00"]
-		,"padleft": ["number",False,RPL.static["false"]]
-		,"pretty": ["number",False,RPL.static["false"]]
-		,"comment": ["string",False]
-	}
-	,"font": {
-		"file": ["string",True]
-		,"spacing": ["number",False,0]
-		,"backspace": ["number",False,0]
-		,"vertical": ["string",False,"base"] # base, bottom, middle, top
-		,"charset": ["struct",False]
-		,"chars": ["struct",False]
-		,"char": ["struct",False]
-	}
-	,"charset": {
-		"set": ["string",False,
-			" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
-		]
-		,"dimensions": [["number","number"],False]
-		,"spacing": ["number",False,0]
-		,"start": [["number","number"],False,[0,0]]
-		,"chars": ["struct",False]
-		,"char": ["struct",False]
-		,"base": ["number",False]
-	}
-	,"chars": {
-		"set": ["string",True]
-		,"dimensions": [["number","number"],True]
-		,"spacing": ["number",False,0]
-		,"start": [["number","number"],False,[0,0]]
-		,"base": ["number",False]
-	}
-	,"char": {
-		"c": ["string",True]
-		,"box": [["number","number","number","number"],False]
-		,"position": [["number","number"],False]
-		,"size": [["number","number"],False]
-		,"base": ["number",False]
-	}
-	,"typeset": {
-		"font": ["string",False,"font0"]
-		,"file": ["string",True]
-		,"dimensions": [["number","number"],False]
-		,"entry": [["number","number"],False]
-		,"align": [["string","string"],False,["left","top"]]
-		,"padding": [["number","number","number","number"],False,[0,0,0,0]]
-		,"paddingleft": ["number",False,0]
-		,"paddingright": ["number",False,0]
-		,"paddingtop": ["number",False,0]
-		,"paddingbottom": ["number",False,0]
-		,"import": ["number",False,RPL.static["true"]]
-		,"bg": ["number",False,RPL.static["white"]]
-		,"colorize": ["[[number,number]]+",False]
-		,"mirror": ["number",False,RPL.static["false"]]
-		,"flip": ["number",False,RPL.static["false"]]
-		,"rotate": ["number",False,0]
-		,"text": ["struct",False]
-	}
-	,"text": {
-		"font": ["string",False]
-		,"dimensions": [["number","number"],True]
-		,"entry": [["number","number"],False]
-		,"text": ["string",True]
-		,"align": [["string","string"],False]
-		,"padding": [["number","number","number","number"],False]
-		,"paddingleft": ["number",False]
-		,"paddingright": ["number",False]
-		,"paddingtop": ["number",False]
-		,"paddingbottom": ["number",False]
-		,"index": ["number",False]
-		,"position": [["number","number"],False]
-		,"size": [["number","number"],False]
-		,"box": [["number","number","number","number"],False]
-		,"colorize": ["[[number,number]]+",False]
-		,"mirror": ["number",False]
-		,"flip": ["number",False]
-		,"rotate": ["number",False]
-		,"import": ["number",False]
-		,"bg": ["number",False]
-	}
+		,"data": {
+			"base": ["number",False,0]
+			,"format": ["string|[string,number]|[string|[string,number]]+",True]
+			,"file": ["string",True]
+			,"times": ["number",False,1]
+			,"export": ["number",False,RPL.static["true"]]
+			,"import": ["number",False,RPL.static["true"]]
+			,"endian": ["string",False,"little"]
+			,"pad": ["string",False,"\x00"]
+			,"padleft": ["number",False,RPL.static["false"]]
+			,"pretty": ["number",False,RPL.static["false"]]
+			,"comment": ["string",False]
+		}
+		,"font": {
+			"file": ["string",True]
+			,"spacing": ["number",False,0]
+			,"backspace": ["number",False,0]
+			,"vertical": ["string",False,"base"] # base, bottom, middle, top
+			,"charset": ["struct",False]
+			,"chars": ["struct",False]
+			,"char": ["struct",False]
+		}
+			,"charset": {
+				"set": ["string",False,
+					" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+				]
+				,"dimensions": ["[number,number]",False]
+				,"spacing": ["number",False,0]
+				,"start": ["[number,number]",False,[0,0]]
+				,"chars": ["struct",False]
+				,"char": ["struct",False]
+				,"base": ["number",False]
+			}
+			,"chars": {
+				"set": ["string",True]
+				,"dimensions": ["[number,number]",True]
+				,"spacing": ["number",False,0]
+				,"start": ["[number,number]",False,[0,0]]
+				,"base": ["number",False]
+			}
+			,"char": {
+				"c": ["string",True]
+				,"box": ["[number,number,number,number]",False]
+				,"position": ["[number,number]",False]
+				,"size": ["[number,number]",False]
+				,"base": ["number",False]
+			}
+		,"typeset": {
+			"font": ["string",False,"font0"]
+			,"file": ["string",True]
+			,"dimensions": ["[number,number]",False]
+			,"entry": ["[number,number]",False]
+			,"align": ["[string,string]",False,["left","top"]]
+			,"padding": ["[number,number,number,number]",False,[0,0,0,0]]
+			,"paddingleft": ["number",False,0]
+			,"paddingright": ["number",False,0]
+			,"paddingtop": ["number",False,0]
+			,"paddingbottom": ["number",False,0]
+			,"import": ["number",False,RPL.static["true"]]
+			,"bg": ["number",False,RPL.static["white"]]
+			,"colorize": ["[[number,number]]+",False]
+			,"mirror": ["number",False,RPL.static["false"]]
+			,"flip": ["number",False,RPL.static["false"]]
+			,"rotate": ["number",False,0]
+			,"text": ["struct",False]
+		}
+			,"text": {
+				"font": ["string",False]
+				,"dimensions": ["[number,number]",True]
+				,"entry": ["[number,number]",False]
+				,"text": ["string",True]
+				,"align": ["[string,string]",False]
+				,"padding": ["[number,number,number,number]",False]
+				,"paddingleft": ["number",False]
+				,"paddingright": ["number",False]
+				,"paddingtop": ["number",False]
+				,"paddingbottom": ["number",False]
+				,"index": ["number",False]
+				,"position": ["[number,number]",False]
+				,"size": ["[number,number]",False]
+				,"box": ["[number,number,number,number]",False]
+				,"colorize": ["[[number,number]]+",False]
+				,"mirror": ["number",False]
+				,"flip": ["number",False]
+				,"rotate": ["number",False]
+				,"import": ["number",False]
+				,"bg": ["number",False]
+			}
+		,"static": {
+			"*": ["all",False]
+		}
 }
 
 def EscapeData(data):
@@ -183,7 +187,7 @@ def ExportData(hROM,info,fTrans,sFile):
 			data = hROM.read(size)
 			if fmt == "string": pdata = Unpad(data,info)
 			elif fmt in ["number","hexnum"]: pdata = Bytes2Num(data,info.endian)
-			elif fmt in dCustomType: pdata = dCustomType[fmt][1](data,info)
+			elif fmt in dCustomType: pdata = dCustomType[fmt][2](data,info)
 			addbasic(pdata)
 			if sExt == ".bin": hOut.write(str(data))
 			elif sExt == ".txt":
@@ -298,7 +302,7 @@ def ImportData(hROM,info,fTrans,sFile):
 				data = hIn.read(size)
 				if fmt == "string": addbasic(Unpad(data,info))
 				elif fmt in ["number","hexnum"]: addbasic(Bytes2Num(data,info.endian))
-				elif fmt in dCustomType: addbasic(dCustomType[fmt][1](data,info))
+				elif fmt in dCustomType: addbasic(dCustomType[fmt][2](data,info))
 				bytes += data
 			elif sExt == ".txt":
 				data = hIn.readline().rstrip("\r\n")
@@ -315,7 +319,7 @@ def ImportData(hROM,info,fTrans,sFile):
 					bytes += Num2Bytes(data,size,info)
 				elif fmt in dCustomType:
 					addbasic(data)
-					data = dCustomType[fmt][0](data,info)
+					data = dCustomType[fmt][1](data,info)
 					if type(data) in [str,unicode]: bytes += PadString(data,size,info)
 					elif type(data) is int: bytes += Num2Bytes(data,size,info)
 				else: return error("Unknown type %s." % fmt)
@@ -496,34 +500,40 @@ def stdhandle_create(hRom,info,dFiles):
 		sFn = "FONT:"+info._name
 		if sFn not in dFiles: dFiles[sFn] = Font(info)
 		return sFn
+	elif info._type == "static":
+		sFn = "STATIC:"+info._name
+		if sFn not in dFiles: dFiles[sFn] = sFn
+		return sFn
 	#endif
 #enddef
 
 def stdhandle_export(hROM,info,fTrans,sFile):
+	f = {
+		"data": ExportData
+	}
 	try:
 		if "export" in info and info.export:
-			{
-				"data": ExportData
-			}[info._type](hROM,info,fTrans,sFile)
+			f[info._type](hROM,info,fTrans,sFile)
 			return True
 		#endif
 	except:
-		if info._type in ["data"]: raise
+		if info._type in f: raise
 		else: return False
 	#endtry
 #enddef
 
 def stdhandle_import(hROM,info,fTrans,sFile):
+	f = {
+		"data": ImportData
+		,"text": ImportTypeset
+	}
 	try:
 		if "import" in info and info["import"]:
-			{
-				"data": ImportData
-				,"text": ImportTypeset
-			}[info._type](hROM,info,fTrans,sFile)
+			f[info._type](hROM,info,fTrans,sFile)
 			return True
 		#endif
 	except:
-		if info._type in ["data","text"]: raise
+		if info._type in f: raise
 		else: return False
 	#endtry
 #enddef
