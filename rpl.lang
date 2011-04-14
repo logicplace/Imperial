@@ -1,1 +1,163 @@
-/media/Data/Projects/Modding-Hacking/gedit/language-specs/pm-rpl.lang
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+ Author: Wa <admin@logicplace.com>
+
+-->
+<language id="rpl" _name="GFX Replacement" version="2.0" _section="Markup">
+	<metadata>
+		<property name="globs">*.rpl</property>
+		<property name="line-comment-start">#</property>
+	</metadata>
+
+	<styles>
+		<style id="comment" _name="Comment" map-to="def:comment"/>
+		<style id="name" _name="Struct Name" map-to="def:statement"/>
+		<style id="struct" _name="Struct Type" map-to="def:type"/>
+		<style id="keyword" _name="Keyword" map-to="def:special-constant"/>
+		<style id="key" _name="Key Name" map-to="def:builtin"/>
+		<style id="number" _name="Number" map-to="def:decimal"/>
+		<style id="hex" _name="Hexadecimal" map-to="def:base-n-integer"/>
+		<style id="string" _name="String" map-to="def:string"/>
+		<style id="error" _name="Error" map-to="def:error"/>
+		<style id="escape" _name="Escaped character" map-to="def:special-char"/>
+		<style id="ref" _name="Reference" map-to="def:identifier"/>
+	</styles>
+
+	<default-regex-options case-sensitive="false"/>
+
+	<definitions>
+		<context id="escape-error" style-ref="error">
+			<match>\$([^\$]|.?[^0-9a-fA-F])</match>
+		</context>
+
+		<context id="escape" style-ref="escape">
+			<match>\$(\$|[0-9a-fA-F]{2})</match>
+		</context>
+
+		<context id="string" style-ref="string" end-at-line-end="true" class="string" class-disabled="no-spell-check">
+			<start>"</start>
+			<end>"</end>
+			<include>
+				<context ref="escape"/>
+				<context ref="escape-error"/>
+			</include>
+		</context>
+
+		<!--define-regex id="struct-type">(?:ROM|(?:tile|sprite)map|(?:tile|sprite)s?3?|data)</define-regex-->
+		<define-regex id="struct-name">[a-zA-Z_][a-zA-Z_\-0-9]*</define-regex>
+		
+		<context id="struct-def">
+			<match>^[ \t]*([a-zA-Z_][a-zA-Z_0-9]*)( +\%{struct-name})?[ \t\r\n]*\{</match>
+			<include>
+				<context style-ref="struct" sub-pattern="1"/>
+				<context style-ref="name" sub-pattern="2"/>
+			</include>
+		</context>
+		
+		<define-regex id="key-name">[a-z]+[0-9]*</define-regex>
+		<!--define-regex id="key-name" extended="true">(?:
+			  id
+			| name
+			| base
+			| file
+			| dimensions
+			| white
+			| black
+			| alpha
+			| setalpha
+			| invert
+			| inverta
+			| rotate
+			| mirror
+			| flip
+			| export
+			| import
+			| dir
+			| position
+			| index
+			| size
+			| map
+			| format
+			| times
+			| pretty
+			| endian
+			| pad
+			| padleft
+			| comment
+		)</define-regex-->
+		
+		<define-regex id="keywords" extended="true">(?:
+			  false
+			| true
+			| black
+			| white
+			| red
+			| blue
+			| green
+			| yellow
+			| magenta
+			| pink
+			| cyan
+			| gray
+			| byte
+			| short
+			| long
+			| double
+			| LRUD|LU
+			| LRDU|LD
+			| RLUD|RU
+			| RLDU|RD
+			| UDLR|UL
+			| UDRL|UR
+			| DULR|DL
+			| DURL|DR
+			| big
+			| little
+		)</define-regex>
+		
+		<define-regex id="number">(?:[0-9]+|[xi](?=:))(?:(?:[\-*][0-9]+)?:(?:[0-9]+|[xi](?=:)))*(?:[\-*][0-9]+)?</define-regex>
+		<define-regex id="number-invalid">[0-9:\-*xi]+</define-regex>
+		<define-regex id="hexnum">\$[0-9a-fA-F]+</define-regex>
+		
+		<define-regex id="ref">@\%{struct-name}(?:\.\%{key-name})?(?:\[[0-9]+\])*</define-regex>
+		
+		<define-regex id="value">(\%{ref})|(\%{keywords})|(\%{number})|(\%{number-invalid})|(\%{hexnum})|([^,\["][^#,]*)</define-regex>
+		
+		<context id="key-value">
+			<match>(?:^|,|(?&lt;={))[ \t]*(\%{key-name}): *(?&lt;!\[)(?:\%{value}|)</match>
+			<include>
+				<context style-ref="key" sub-pattern="1"/>
+				<context style-ref="ref" sub-pattern="2"/>
+				<context style-ref="keyword" sub-pattern="3"/>
+				<context style-ref="number" sub-pattern="4"/>
+				<context style-ref="error" sub-pattern="5"/>
+				<context style-ref="hex" sub-pattern="6"/>
+				<context style-ref="string" sub-pattern="7"/>
+			</include>
+		</context>
+		
+		<!-- TODO: Allow data on its own line, assuming it's in a list -->
+		<context id="list">
+			<match>(?&lt;=[\[,])[ \t]*\%{value}[ \t]*(?=[\],])</match>
+			<include>
+				<context style-ref="ref" sub-pattern="1"/>
+				<context style-ref="keyword" sub-pattern="2"/>
+				<context style-ref="number" sub-pattern="3"/>
+				<context style-ref="error" sub-pattern="4"/>
+				<context style-ref="hex" sub-pattern="5"/>
+				<context style-ref="string" sub-pattern="6"/>
+			</include>
+		</context>
+		
+		<context id="rpl">
+			<include>
+				<context ref="def:shell-like-comment"/>
+				<context ref="string"/>
+				<context ref="struct-def"/>
+				<context ref="key-value"/>
+				<context ref="list"/>
+			</include>
+		</context>
+	</definitions>
+</language>
