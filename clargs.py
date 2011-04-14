@@ -2,7 +2,7 @@
 #-*- coding:utf-8 -*-
 
 """
-Command Line Arguments library v1 by Wa (logicplace.com)
+Command Line Arguments library v3 by Wa (logicplace.com)
 Make command line arguments easy, efficient, and standardized!
 Get the latest version at: http://logicplace.com/pc/projects/clargs.py
 
