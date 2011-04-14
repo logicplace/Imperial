@@ -1,4 +1,4 @@
-Graphics Changer by Wa (logicplace.com) - v7
+Graphics Changer by Wa (logicplace.com) - v8
 Requires clargs library, get it here: http://logicplace.com/pc/projects/clargs.py
 
 See gfxchgr.py --help for basic usage info.
