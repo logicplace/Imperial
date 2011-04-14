@@ -22,7 +22,7 @@ name = (optional) game name as in ROM, not including $00 padding
 Both can be lists of possible values.
 
 = tilemap =
-base = base address of the tilemap in the ROM
+base = (optional) base address of the tilemap in the ROM (default: 0)
 base1 = base of first set of tiles
 base2 = base of second set of tiles (these are composited to make gray)
 file = file to read the graphics from

@@ -2,7 +2,7 @@
 #-*- coding:utf-8 -*-
 
 """
-Pokemon Mini module for gfxchgr by Wa (logicplace.com) - v7
+Pokemon Mini module for gfxchgr by Wa (logicplace.com) - v8
 """
 
 ## Struct defs
@@ -21,15 +21,15 @@ dAllowed = {
 		,"sprite3s": ["struct",False]
 	},
 	"ROM": {
-		"id": ["string",True]
-		,"name": ["pokestr",False]
+		"id": ["[string]*",True]
+		,"name": ["[pokestr]*",False]
 	},
 	"tilemap": {
-		"base": ["number",False]
+		"base": ["number",False,0]
 		,"base1": ["number",False]
 		,"base2": ["number",False]
 		,"file": ["string",False]
-		,"dimensions": [["number","number"],False]
+		,"dimensions": ["[number,number]",False]
 		,"white": ["color",False,RPL.static["white"]]
 		,"black": ["color",False,RPL.static["black"]]
 		,"gray": ["color",False,RPL.static["gray"]]
@@ -39,7 +39,7 @@ dAllowed = {
 		,"flip": ["number",False,RPL.static["false"]]
 		,"export": ["number",False,RPL.static["true"]]
 		,"import": ["number",False,RPL.static["true"]]
-		,"map": ["[number|string]",False]
+		,"map": ["[number|string]+",False]
 		,"tile": ["struct",False]
 		,"tiles": ["struct",False]
 		,"tile3": ["struct",False]
@@ -47,11 +47,11 @@ dAllowed = {
 	},
 	"tilemap3": "tilemap",
 	"spritemap": {
-		"base": ["number",False]
+		"base": ["number",False,0]
 		,"base1": ["number",False]
 		,"base2": ["number",False]
 		,"file": ["string",False]
-		,"dimensions": [["number","number"],False]
+		,"dimensions": ["[number,number]",False]
 		,"white": ["color",False,RPL.static["white"]]
 		,"black": ["color",False,RPL.static["black"]]
 		,"gray": ["color",False,RPL.static["gray"]]
@@ -71,12 +71,12 @@ dAllowed = {
 	},
 	"spritemap3": "spritemap",
 	"tile": {
-		"position": [["number|[number]","number|[number]"],False,[0,0]]
-		,"index": ["number|[number]",False,0]
+		"position": ["[[number]*,[number]*]",False,[0,0]]
+		,"index": ["[number]*",False,0]
 		,"dir": ["string",False,"LRUD"]
-		,"base": ["number",True]
+		,"base": ["number",False,0]
 		,"file": ["string",True]
-		,"dimensions": [["number","number"],True]
+		,"dimensions": ["[number,number]",True]
 		,"white": ["color",False,RPL.static["white"]]
 		,"black": ["color",False,RPL.static["black"]]
 		,"invert": ["number",False,RPL.static["false"]]
@@ -88,13 +88,13 @@ dAllowed = {
 	},
 	"tiles": "tile",
 	"tile3": {
-		"position": [["number|[number]","number|[number]"],False,[0,0]]
-		,"index": ["number|[number]",False,0]
+		"position": ["[[number]*,[number]*]",False,[0,0]]
+		,"index": ["[number]*",False,0]
 		,"dir": ["string",False,"LRUD"]
 		,"base1": ["number",True]
 		,"base2": ["number",True]
 		,"file": ["string",True]
-		,"dimensions": [["number","number"],True]
+		,"dimensions": ["[number,number]",True]
 		,"white": ["color",False,RPL.static["white"]]
 		,"black": ["color",False,RPL.static["black"]]
 		,"gray": ["color",False,RPL.static["gray"]]
@@ -107,12 +107,12 @@ dAllowed = {
 	},
 	"tile3s": "tile3",
 	"sprite": {
-		"position": [["number|[number]","number|[number]"],False,[0,0]]
-		,"index": ["number|[number]",False,0]
+		"position": ["[[number]*,[number]*]",False,[0,0]]
+		,"index": ["[number]*",False,0]
 		,"dir": ["string",False,"LRUD"]
-		,"base": ["number",True]
+		,"base": ["number",False,0]
 		,"file": ["string",True]
-		,"dimensions": [["number","number"],True]
+		,"dimensions": ["[number,number]",True]
 		,"white": ["color",False,RPL.static["white"]]
 		,"black": ["color",False,RPL.static["black"]]
 		,"alpha": ["color",False,RPL.static["cyan"]]
@@ -127,13 +127,13 @@ dAllowed = {
 	},
 	"sprites": "sprite",
 	"sprite3": {
-		"position": [["number|[number]","number|[number]"],False,[0,0]]
-		,"index": ["number|[number]",False,0]
+		"position": ["[[number]*,[number]*]",False,[0,0]]
+		,"index": ["[number]*",False,0]
 		,"dir": ["string",False,"LRUD"]
 		,"base1": ["number",True]
 		,"base2": ["number",True]
 		,"file": ["string",True]
-		,"dimensions": [["number","number"],True]
+		,"dimensions": ["[number,number]",True]
 		,"white": ["color",False,RPL.static["white"]]
 		,"black": ["color",False,RPL.static["black"]]
 		,"alpha": ["color",False,RPL.static["cyan"]]
@@ -557,44 +557,46 @@ def handle_create(hROM,info,dFiles):
 
 # Export handler
 def handle_export(hROM,info,fTrans,imBase):
+	f = {
+		"sprite": Sprite2Image
+		,"sprites": Sprite2Image
+		,"sprite3": Sprite32Image
+		,"sprite3s": Sprite32Image
+		,"tile": Tile2Image
+		,"tiles": Tile2Image
+		,"tile3": Tile32Image
+		,"tile3s": Tile32Image
+		,"tilemap": Tilemap2Image
+	}
 	try:
 		if "export" in info and info.export:
-			return {
-				"sprite": Sprite2Image
-				,"sprites": Sprite2Image
-				,"sprite3": Sprite32Image
-				,"sprite3s": Sprite32Image
-				,"tile": Tile2Image
-				,"tiles": Tile2Image
-				,"tile3": Tile32Image
-				,"tile3s": Tile32Image
-				,"tilemap": Tilemap2Image
-			}[info._type](hROM,info,fTrans,imBase)
+			return f[info._type](hROM,info,fTrans,imBase)
 		#endif
 	except:
-		if info._type in ["sprite","sprites","tile","tiles","sprite3","sprite3s","tile3","tile3s","tilemap"]: raise
+		if info._type in f: raise
 		else: return False
 	#endtry
 #enddef
 
 # Import handler
 def handle_import(hROM,info,fTrans,imBase):
+	f = {
+		"sprite": Image2Sprite
+		,"sprites": Image2Sprite
+		,"sprite3": Image2Sprite3
+		,"sprite3s": Image2Sprite3
+		,"tile": Image2Tile
+		,"tiles": Image2Tile
+		,"tile3": Image2Tile3
+		,"tile3s": Image2Tile3
+		,"tilemap": Image2Tilemap
+	}
 	try:
 		if "import" in info and info["import"]:
-			return {
-				"sprite": Image2Sprite
-				,"sprites": Image2Sprite
-				,"sprite3": Image2Sprite3
-				,"sprite3s": Image2Sprite3
-				,"tile": Image2Tile
-				,"tiles": Image2Tile
-				,"tile3": Image2Tile3
-				,"tile3s": Image2Tile3
-				,"tilemap": Image2Tilemap
-			}[info._type](hROM,info,fTrans,imBase)
+			return f[info._type](hROM,info,fTrans,imBase)
 		#endif
 	except:
-		if info._type in ["sprite","sprites","tile","tiles","sprite3","sprite3s","tile3","tile3s","tilemap"]: raise
+		if info._type in f: raise
 		else: return False
 	#endtry
 #enddef
@@ -606,7 +608,7 @@ def GetROMInfo(hROM):
 #enddef
 
 dCustomType = {
-	"katakana": [UTF82Katakana,Katakana2UTF8] # Pokedex entries in Puzzle 2
-	,"pokestr": [UTF82Pokestr,Pokestr2UTF8] # Names
-	,"sodate": [UTF82Sodate,Sodate2UTF8] # Sodate text
+	"katakana": ["string",UTF82Katakana,Katakana2UTF8] # Pokedex entries in Puzzle 2
+	,"pokestr": ["string",UTF82Pokestr,Pokestr2UTF8] # Names
+	,"sodate": ["string",UTF82Sodate,Sodate2UTF8] # Sodate text
 }
