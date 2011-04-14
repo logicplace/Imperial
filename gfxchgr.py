@@ -25,12 +25,21 @@ def verror(sKey,sErr):
 	return error("Value error %s: %s" % (sKey,sErr))
 #enddef
 
-def eopen(sFile,sMethod,bBin=False):
-	sDir = os.path.dirname(sFile)
+def normpath(path):
+	if os.sep == "/": return path.replace("\\","/")
+	elif os.sep == "\\": return path.replace("/","\\")
+	else: return re.sub(r'[/\\]',os.sep,path)
+#endif
+
+def eopen(path,method,bin=False):
+	path = normpath(path)
+	
+	sDir = os.path.dirname(path)
 	try: os.mkdir(sDir)
 	except: pass
-	if bBin: return open(sFile,sMethod)
-	return codecs.open(sFile,encoding='utf-8',mode=sMethod)
+	if type(method) not in [str,unicode]: return method.open(path)
+	elif bin: return open(path,method)
+	return codecs.open(path,encoding='utf-8',mode=method)
 #enddef
 
 dCustomType = {}
@@ -67,12 +76,12 @@ def main():
 	#endif
 	
 	# Open ROM
-	try: hRom = open(clArgs[1],"r+b")
+	try: hRom = eopen(clArgs[1],"r+b",True)
 	except:
 		if clArgs.makefile:
 			try:
-				open(clArgs[1],"w").close()
-				hRom = open(clArgs[1],"r+b")
+				eopen(clArgs[1],"w").close()
+				hRom = eopen(clArgs[1],"r+b",True)
 			except: return error("Could not create ROM file.",1)
 		else: return error("Could not open ROM.",1)
 	#endtry
@@ -81,10 +90,10 @@ def main():
 	
 	# Load module
 	try:
-		hMod = open("%sstd.py" % sBaseDir,"rb")
+		hMod = eopen("%sstd.py" % sBaseDir,"rb",True)
 		exec(hMod.read()) in globals() 
 		hMod.close()
-		hMod = open("%s%s.py" % (sBaseDir,clArgs.format[0] or sRomExt),"rb")
+		hMod = eopen("%s%s.py" % (sBaseDir,clArgs.format[0] or sRomExt),"rb",True)
 		exec(hMod.read()) in globals() 
 		hMod.close()
 	except:
@@ -97,8 +106,8 @@ def main():
 	
 	# Open descriptor
 	try:
-		if clArgs.template: hRpl = open(clArgs[2],"w")
-		else: hRpl = open(clArgs[2],"r")
+		if clArgs.template: hRpl = eopen(clArgs[2],"w")
+		else: hRpl = eopen(clArgs[2],"r")
 	except: return error("Could not open descriptor.",3)
 	
 	sFocus = clArgs[3] if len(clArgs) > 3 else None
@@ -259,9 +268,10 @@ def main():
 			for sI in dFiles:
 				try:
 					dFiles[sI].save # Ensure it has a save method..kinda
-					try: os.mkdir(os.path.dirname(sI))
+					sNormI = normpath(sI)
+					try: os.mkdir(os.path.dirname(sNormI))
 					except: pass
-					dFiles[sI].save(sI)
+					dFiles[sI].save(sNormI)
 					#...dFiles[sI].close()?
 				except: pass
 			#endfor

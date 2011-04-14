@@ -251,8 +251,8 @@ def PadString(sStr,iSize,info):
 def ImportData(hROM,info,fTrans,sFile):
 	if "file" in info and info.file:
 		sExt = sFile[-4:]
-		if sExt == ".bin": hIn = open(sFile,"rb")
-		elif sExt == ".txt": hIn = codecs.open(sFile,encoding='utf-8',mode="r")
+		if sExt == ".bin": hIn = eopen(sFile,"rb",True)
+		elif sExt == ".txt": hIn = eopen(sFile,"r")
 		elif sExt == ".rpl": hIn = RPL({},dCustomType,sFile)
 		
 		info.pad = (info.pad or "\x00")
@@ -404,7 +404,7 @@ class Font:
 		#enddef
 		recurse(info)
 		
-		im = Image.open(info.file)
+		im = eopen(info.file,Image)
 		for i in dCharDesc:
 			x = dCharDesc[i]
 			self.char[i] = {
@@ -484,7 +484,7 @@ class Font:
 
 def ImportTypeset(hRom,info,fTrans,font):
 	sFn = info.parent().file
-	try: im = Image.open(sFn)
+	try: im = eopen(sFn,Image)
 	except: im = Image.new("RGBA",(info.dimensions[0],info.dimensions[1]))
 	if not font.draw(im,info,fTrans): error("Typesetting failed for %s." % info._type)
 	im.save(sFn)

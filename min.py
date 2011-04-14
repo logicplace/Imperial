@@ -548,7 +548,7 @@ def handle_create(hROM,info,dFiles):
 		lDmn = info.dimensions
 		
 		if sFn not in dFiles:
-			try: dFiles[sFn] = Image.open(sFn)
+			try: dFiles[sFn] = eopen(sFn,Image)
 			except: dFiles[sFn] = Image.new("RGB",(lDmn[0]*iMul,lDmn[1]*iMul))
 		#endif
 		return sFn
