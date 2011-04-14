@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 
+# TODO: Allow \n and format it properly
+
 """
 Command Line Arguments library v3 by Wa (logicplace.com)
 Make command line arguments easy, efficient, and standardized!
@@ -321,19 +323,21 @@ class clargs:
 		for sIdx in self.__helpOrder:
 			if self.__reg[sIdx][1] != "": # Has a description
 				lDesc = []
-				sDesc = self.__reg[sIdx][1]
-				if self.__reg[sIdx][2] is not None: sDesc += " (Default: %s)"%self.__reg[sIdx][2]
-				while sDesc != "":
-					iTo = min(len(sDesc),iRight)
-					if iTo == iRight:
-						# Wrap
-						iTo = (lambda i: iTo if i==-1 else i+1)(
-							max(map((lambda i: sDesc.rfind(i,max(iTo-15,0),iTo))," ,-.:;+!?'\""))
-						)
-					#endif
-					lDesc.append(sDesc[0:iTo])
-					sDesc = sDesc[iTo:]
-				#endwhile
+				sDescs = self.__reg[sIdx][1].split("\n")
+				for sDesc in sDescs:
+					if self.__reg[sIdx][2] is not None: sDesc += " (Default: %s)"%self.__reg[sIdx][2]
+					while sDesc != "":
+						iTo = min(len(sDesc),iRight)
+						if iTo == iRight:
+							# Wrap
+							iTo = (lambda i: iTo if i==-1 else i+1)(
+								max(map((lambda i: sDesc.rfind(i,max(iTo-15,0),iTo))," ,-.:;+!?'\""))
+							)
+						#endif
+						lDesc.append(sDesc[0:iTo])
+						sDesc = sDesc[iTo:]
+					#endwhile
+				#endfor
 				lShort = dName2Opts[sIdx][0]
 				lLong = dName2Opts[sIdx][1]
 				iDescLen = len(lDesc)
