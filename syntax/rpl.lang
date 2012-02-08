@@ -116,13 +116,13 @@
 			| little
 		)</define-regex>
 		
-		<define-regex id="number">(?:[0-9]+|[xi](?=:))(?:(?:[\-*][0-9]+)?:(?:[0-9]+|[xi](?=:)))*(?:[\-*][0-9]+)?</define-regex>
-		<define-regex id="number-invalid">[0-9:\-*xi]+</define-regex>
-		<define-regex id="hexnum">\$[0-9a-fA-F]+</define-regex>
+		<define-regex id="number">(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=:))(?:(?:[\-*](?:[0-9]+|\$[0-9a-fA-F]+))?:(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=[: ]|$)))*(?:[\-*](?:[0-9]+|\$[0-9a-fA-F]+))?</define-regex>
+		<define-regex id="number-invalid">(?:[0-9]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)(?:[0-9:\-*]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)*(?=[ ,]|$)</define-regex>
+		<define-regex id="hexnum">\$[0-9a-fA-F]+(?![0-9a-fA-F]*[\-:])</define-regex>
 		
 		<define-regex id="ref">@\%{struct-name}(?:\.\%{key-name})?(?:\[[0-9]+\])*</define-regex>
 		
-		<define-regex id="value">(\%{ref})|(\%{keywords})|(\%{number})|(\%{number-invalid})|(\%{hexnum})|([^,\["][^#,]*)</define-regex>
+		<define-regex id="value">(\%{ref})|(\%{keywords})|(\%{hexnum})|(\%{number})|(\%{number-invalid})|([^,\["][^#,]*)</define-regex>
 		
 		<context id="key-value">
 			<match>(?:^|,|(?&lt;={))[ \t]*(\%{key-name}): *(?&lt;!\[)(?:\%{value}|)</match>
@@ -130,9 +130,9 @@
 				<context style-ref="key" sub-pattern="1"/>
 				<context style-ref="ref" sub-pattern="2"/>
 				<context style-ref="keyword" sub-pattern="3"/>
-				<context style-ref="number" sub-pattern="4"/>
-				<context style-ref="error" sub-pattern="5"/>
-				<context style-ref="hex" sub-pattern="6"/>
+				<context style-ref="hex" sub-pattern="4"/>
+				<context style-ref="number" sub-pattern="5"/>
+				<context style-ref="error" sub-pattern="6"/>
 				<context style-ref="string" sub-pattern="7"/>
 			</include>
 		</context>
@@ -143,9 +143,9 @@
 			<include>
 				<context style-ref="ref" sub-pattern="1"/>
 				<context style-ref="keyword" sub-pattern="2"/>
-				<context style-ref="number" sub-pattern="3"/>
-				<context style-ref="error" sub-pattern="4"/>
-				<context style-ref="hex" sub-pattern="5"/>
+				<context style-ref="hex" sub-pattern="3"/>
+				<context style-ref="number" sub-pattern="4"/>
+				<context style-ref="error" sub-pattern="5"/>
 				<context style-ref="string" sub-pattern="6"/>
 			</include>
 		</context>

@@ -19,6 +19,9 @@ v3 Added support for the std module
 v2 Rewrote entirety
 
 == rpl.py ==
+v9 Now reports an error when a nonexistant parent is requested
+   Ranges should allow one-letter, lowercase literals now.
+   Range token no longer misrepresents solo : * - as ranges.
 v8 Added ability to accept any key via * (see static)
    Added functionality for handling --define flag
 v7 Fixed bug where changes to a struct wasn't persistent

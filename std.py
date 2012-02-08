@@ -112,6 +112,18 @@ dStdAllowed = {
 		,"static": {
 			"*": ["all",False]
 		}
+		,"calc": {
+			 "_basic": [Calculate,None,RPL.static["false"]]
+			,"expr": ["all",True]
+			,"val": ["all",False,None]
+			,"true": ["all",False,RPL.static["true"]]
+			,"false": ["all",False,RPL.static["false"]]
+		}
+		,"assert": {
+			 "calc": ["all",True]
+			,"error": ["string",False,"%n assertion failed."]
+		}
+	#
 }
 
 def EscapeData(data):
@@ -489,6 +501,14 @@ def ImportTypeset(hRom,info,fTrans,font):
 	if not font.draw(im,info,fTrans): error("Typesetting failed for %s." % info._type)
 	im.save(sFn)
 #enddef
+
+def Calculate(callee,default,caller,keyname):
+	
+#enddef
+
+########################################################
+####################### HANDLES ########################
+########################################################
 
 def stdhandle_create(hRom,info,dFiles):
 	if info._type == "data" and "file" in info:

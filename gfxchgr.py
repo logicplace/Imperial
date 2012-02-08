@@ -88,6 +88,7 @@ def main():
 	
 	sRomFileName,sRomExt = re.match(r'(?:.*/|^)(.+?)(?:\.(.*))?$',clArgs[1]).groups()
 	
+	# TODO: Use __import__ instead
 	# Load module
 	try:
 		hMod = eopen("%sstd.py" % sBaseDir,"rb",True)

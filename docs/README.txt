@@ -84,7 +84,7 @@ Strings must be in quotes if they meet any of these conditions:
 * Starts or ends with spacing.
 * Starts with a [
 * Contains a , or #
-* Is entirely numbers, hyphens, or colons
+* Begins with a number (or $ followed by hexnum) and contains entirely numbers, hyphens, or colons
 * Is a keyword
 * Contains no characters
 

@@ -6,12 +6,14 @@ RPL Parser class by Wa (logicplace.com) - v8
 Part of gfxchgr.py
 """
 
-# TODO: Fix bug that a literal at the end of an array must directly be followed with ] or ,
-#       (Should allow you to not have anything and put ] on the next line)
+# TODO (test): Fix bug that a literal at the end of an array must directly be
+# followed with ] or , (Should allow you to not have anything and put ] on the 
+# next line)
 
 import re
 import codecs
 from sys import stderr
+from types import FunctionType as function
 
 def error(s,r=False):
 	stderr.write(str(s)+"\n")
@@ -22,6 +24,8 @@ class RPLRef:
 	spec = re.compile(
 		r'@?([^.]+)(?:\.([^\[]*))?((?:\[[0-9]+\])*)'
 	)
+	
+	heir = re.compile(r'(g*)parent')
 	
 	def __init__(self,rpl,ref,tPos):
 		self.rpl = rpl
@@ -47,8 +51,20 @@ class RPLRef:
 		if bShowData: error("  <reference %s>" % str(self))
 	#enddef
 	
-	def v(self):
-		info = self.rpl[self.struct]
+	def v(self,calling,keyname):
+		if self.struct == "this": effName = calling._name
+		else:
+			moHeir = self.heir.match(self.struct)
+			if moHeir:
+				pr = calling
+				for i in range(len(moHeir.group(1))+1):
+					pr = calling.parent
+				#endfor
+				if pr is None: return None
+				effName = pr._name
+			else: effName = self.struct
+		#endif
+		info = self.rpl[effName]
 		if self.key:
 			if self.key not in info:
 				error("Key %s not allowed in %s." % (self.key,self.struct))
@@ -56,9 +72,9 @@ class RPLRef:
 			#endif
 			data = info[self.key]
 		else:
-			data = info.basicVal()
+			data = info.basicVal(calling,keyname)
 		#endif
-		
+	
 		for i in range(len(self.idxs)):
 			x = self.idxs[i]
 			if type(data) is not list: error("Error: Data is not deep enough for this request (%i)" % i)
@@ -72,24 +88,41 @@ class RPLRef:
 class RPL:
 	# Tokenize
 	tokenize = re.compile(
-		 r'[ \t\r\n]*(?:'          # Whitespace
+		(r'[ \t\r\n]*(?:'          # Whitespace
 		+r'"([^"\r\n]*)"|'         # String
-		+r'\$([0-9a-fA-F]+)|'      # Hexadecimal number
-		+r'([0-9\-:]+)|'           # Number or range (verify syntactically correct range later)
-		+r'([a-z]+[0-9]*):|'       # Key
+		+r'\$[0-9a-fA-F]+(?![0-9a-fA-F]*[\-:])|' # Hexadecimal number
+		# Number or range (verify syntactically correct range later)
+		+r'(%(r1)%(r2)%(r1):\-*%(r2)*(?=[ ,]|$))|'
+		+r'(%(key)):|'             # Key
 		+r'([{}\[\],])|'           # Flow Identifier
-		+r'@([^{}\[\],.\$"#\r\n]+(?:\.[a-z]+[0-9]*)?(?:\[[0-9]+\])*)|' # Reference
-		+r'([^{}\[\],\$"#\r\n]+)|' # Unquoted string or struct name/type
+		# Reference
+		+r'@([^%(lit).]+(?:\.%(key))?(?:\[[0-9]+\])*)|'
+		+r'([^%(lit)]+)|'          # Unquoted string or struct name/type
 		+r'#.*$)'                  # Comment
+		) % {
+			'r1': r'(?:[0-9'
+			,'r2': r']|(?<![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)'
+			,'lit': r'{}\[\],\$"#\r\n'
+			,'key': r'[a-z]+[0-9]*'
+		}
 	,re.M)
 	
 	number = re.compile(
-		r'(?:[0-9]+|[xi](?=:))'   # Must start with a number, or an x or i followed by a :
-		+r'(?:'                   # Range split group
-		+r'(?:[\-*][0-9]+)?'      # Can match a range or times here
-		+r':(?:[0-9]+|[xi](?=:))' # Must match a split, can either be a number or x/i followed by a :
+		# Must start with a number, or a single letter followed by a :
+		(r'(?:%(numx)|[a-z](?=:))'
+		# Range split group
+		+r'(?:'
+		# Can match a range or times here
+		+r'(?:%(bin)(%(numx)))?'
+		# Must match a split, can either be a number or single letter followed by a :
+		+r':(?:%(numx)|[a-z](?=[: ]|$))'
 		+r')*'
-		+r'(?:[\-*][0-9]+)?'      # To be sure we're able to end in a range
+		# To be sure we're able to end in a range/times
+		+r'(?:%(bin)(?:%(numx)))?'
+		) % {
+			'bin': r'[\-*]'
+			,'numx': r'[0-9]+|\$[0-9a-fA-F]+' 
+		}
 	)
 	
 	static = {
@@ -323,6 +356,8 @@ class RPL:
 					elif len(lMulti) == 2:
 						iV,iM = int(lMulti[0]),int(lMulti[1])
 						lNum += map((lambda(x): [x,"number",(iLine,iChr)]),[iV]*iM)
+					elif len(lBounds[0]) == 1 and lBounds[0] in "abcdefghijklmnopqrstuvwxyz":
+						lNum.append(lBounds[0])
 					else: lNum.append(int(lBounds[0]))
 					iChr += len(sRange)+1
 				#endfor
@@ -330,6 +365,7 @@ class RPL:
 				if len(lNum) == 1: addData(lNum[0],"number")
 				else: addData(lNum,"range")
 				sCurrentKey = None
+			else: continue
 			#endif
 			
 			if not sLit and sPotentialStruct:
@@ -342,9 +378,9 @@ class RPL:
 		self.dataonly = bool(len(self.data))
 	#enddef
 	
-	# TODO: Make this use RPLData instead
 	def __getitem__(self,idx):
 		if type(idx) is int:
+			# TODO: Make this use RPLData instead
 			if self.dataonly: return RPLStruct(self,{"_data":self.data[idx]})
 			else: return RPLStruct(self,self.root[idx])
 		elif idx == "ROM":
@@ -383,7 +419,6 @@ class RPL:
 	#enddef
 #endclass
 
-# TODO: Make this return RPLData, which also now handles conversion..
 class RPLStruct:
 	hexesc = re.compile(r'\$([0-9a-fA-F]{2})')
 	
@@ -400,7 +435,13 @@ class RPLStruct:
 		return lRet
 	#enddef
 	
-	def parent(self): return RPLStruct(self.rpl,self.struct["_parent"])
+	def parent(self):
+		if self.struct["_parent"] is None:
+			return error("Parent of %s requested when it has no parent." % self.struct["_name"],None)
+		else:
+			return RPLStruct(self.rpl,self.struct["_parent"])
+		#endif
+	#enddef
 	
 	def createChild(self,sType,sName,dInfo):
 		# Convert to tokens
@@ -422,8 +463,27 @@ class RPLStruct:
 		return RPLStruct(self.rpl,dInfo)
 	#enddef
 	
-	def basicVal(self):
+	def basicVal(self,calling=None,keyname=None):
 		if "_basic" in self.struct: return self._basic
+		elif "_basic" in self.rpl.allowed[self._type]:
+			lChk = self.rpl.allowed[self._type]["_basic"]
+			vDef = lChk[2] if len(lChk >= 3) else None
+			if lChk[0] == "link":
+				if calling is None:
+					return error("Cannot link keys when there is no caller.",vDef)
+				elif keyname is None:
+					return error("Cannot link keys, I don't know the caller's key.",vDef)
+				elif len(lChk) >= 2 and keyname == lChk[1]:
+					return self._name
+				elif keyname not in self:
+					return error("Cannot link keys, %s not allowed in %s." % (keyname,self._type),vDef)
+				else:
+					return self[keyname]
+			elif type(lChk[0]) is function:
+				return lChk[0](self,vDef,calling,keyname)
+			else:
+				return vDef
+			#endif
 		else: return self._name
 	#enddef
 	
@@ -479,7 +539,7 @@ class RPLStruct:
 					check = check["_parent"]
 					tmpCh = [idx]
 				#endwhile
-				data = RPLData(self,check[idx],tmp[allowedIdx][0]).v()
+				data = RPLData(self,check[idx],tmp[allowedIdx][0],keyname=idx).v()
 		
 #				# Check if it's a reference
 #				try:
@@ -581,9 +641,10 @@ class RPLData:
 	#  Note: Lists may only have optional entries at the end of them. There can be
 	#   multiples but the user must enter all up to the one they want.
 
-	def __init__(self,rplst,data,types=None):
+	def __init__(self,rplst,data,types=None,keyname=None):
 		self.rplst = rplst
 		self.data = None
+		self.keyname = keyname
 		
 		if data is None: return 
 		
@@ -769,7 +830,7 @@ class RPLData:
 					for x in d[0]: lRet.append(Recurse(x))
 					return lRet
 				elif d[1][1] == "reference":
-					val = d[0].v()
+					val = d[0].v(rplst,self.keyname)
 					tmpty = d[1][0]
 					if tmpty not in ["string","number","list"]:
 						if tmpty in rplst.rpl.types: val = rplst.rpl.types[tmpty][1](val,rplst)
