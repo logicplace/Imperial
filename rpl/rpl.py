@@ -1,7 +1,10 @@
 import re
 import codecs
-from copy import deepcopy
-#from textwrap import dedent
+from sys import stderr
+
+def err(msg): stderr.write(unicode(msg) + u"\n")
+
+class RPLError(Exception): pass
 
 class RPL:
 	"""
@@ -13,9 +16,9 @@ class RPL:
 	tokenize = re.compile(
 		(r'\s*(?:'                                 # Whitespace
 		+r'"([^"\r\n]*)"|'                         # String
-		# Have to remove `s in postprocessing
-		+r'((?:`(?:\\.|[^`])*`\s*)+)|'             # Multi-line String
-		+r'\$([0-9a-fA-F]+)(?![0-9a-fA-F]*[\-:])|' # Hexadecimal number
+		# Have to remove `s in processing
+		+r'((?:`[^`]*`\s*)+)|'             # Multi-line String
+		#+r'\$([0-9a-fA-F]+)(?![0-9a-fA-F]*[\-:])|' # Hexadecimal number
 		# Number or range (verify syntactically correct range later)
 		+r'(%(r1)%(r2)%(r1):\-*%(r2)*(?=[ ,]|$))|'
 		+r'(%(key)):|'                             # Key
@@ -30,6 +33,8 @@ class RPL:
 			,'key': r'[a-z]+[0-9]*'
 		}
 	, re.M | re.U)
+
+	multilineStr = re.compile(r'`([^`]*)`')
 
 	number = re.compile(
 		# Must start with a number, or a single letter followed by a :
@@ -48,6 +53,7 @@ class RPL:
 			,'numx': r'[0-9]+|\$[0-9a-fA-F]+'
 		}
 	)
+	isRange = re.compile(r'.*[:\-*].*')
 
 	# Predefined
 	static = {
@@ -78,6 +84,8 @@ class RPL:
 	}
 
 	types = {}
+	structs = {}
+	root = {}
 
 	def readFrom(self, etc):
 		"""
@@ -107,10 +115,167 @@ class RPL:
 		"""
 		Read in a file and parse it.
 		"""
-		tokens = self.tokenize.findall(self.readFrom(inFile))
+		raw = self.readFrom(inFile)
+		tokens = self.tokenize.findall(raw)
+
+		lastLit = None
+		currentKey = None
+		currentStruct = None
+		counts = {}
+		adder = []
 
 		for token in tokens:
+			sstr,mstr,num,key,flow,ref,lit = token.groups()
+			add = None
+			error = None
+
+			try:
+				if lit:
+					# Literals can either be the struct head (type and optionally name)
+					# or a string that has no quotes.
+					lit = lit.rstrip()
+					# If the last token was a key or this is inside a list,
+					#  this is string data
+					if currentKey or adder: add = ("literal", lit)
+					# Otherwise this might be a struct head
+					else: lastLit = lit
+				elif flow:
+					if flow == "{":
+						# Open struct
+						structHead = lastLit.split(" ")
+						lastLit = None
+
+						if len(structHead) > 2:
+							error = "Expects only type and name for struct declaration."
+						elif currentKey is not None:
+							error = 'Cannot have a struct in a key. (Did you mean "type %s {"?)' % currentKey
+						# TODO: "Cannot have a struct in a data file."
+						else:
+							# Extract type and name
+							structType = structHead[0]
+							if structType not in counts: counts[structType] = 0
+							else: counts[structType] += 1
+							structName = (
+								structHead[1] if len(structHead) == 2 else
+								"%s%i" % (structType, counts[structType])
+							)
+
+							currentStruct = (
+								currentStruct if currentStruct else self
+							).addChild(structType, structName)
+						#endif
+					elif flow == "}":
+						# Close struct
+						if currentStruct is None: error = "} without a {."
+						elif adder: error = "Unclosed list."
+						elif currentKey is not None:
+							error = "Key with no value. (Above here!)"
+						#endif
+
+						currentStruct.validate()
+						currentStruct = currentStruct.parent()
+					elif flow == "[":
+						# Begins list
+						adder.append([])
+					elif flow == "]":
+						# End list
+						if adder: add = ("list", adder.pop())
+						else: error = "] without a [."
+					elif flow == ",":
+						# Separator
+						pass
+					#endif
+				elif key:
+					if currentStruct is None or adder:
+						error = "Key can only be in a struct."
+					#endif
+
+					currentKey = key
+				elif ref: add = ("reference", RPLRef(self, ref, None))
+				elif sstr: add = ("string", sstr)
+				elif mstr:
+					# Need to remove all `s
+					add = ("string", String("".join(RPL.multilineStr.findall(mstr))))
+				elif num:
+					if not RPL.number.match(num):
+						error = "Invalid range formatting."
+					elif RPL.isRange.match(num):
+						# Range
+						numList = []
+						ranges = num.split(":")
+
+						for r in ranges:
+							bounds = r.split("-")
+							times = r.split("*")
+							if len(bounds) == 2:
+								l, r = int(bounds[0]), int(bounds[1])
+								numList += map(lambda(x): ("number",x), (
+									range(l, r+1) if l < r else range(l, r-1, -1)
+								)
+							elif len(times) == 2:
+								l, r = int(times[0]), int(times[1])
+								numList += map(lambda(x): ("number",x), [l] * r)
+							elif r in "abcdefghijklmnopqrstuvwxyz":
+								numList.append(("string", r))
+							elif r[0] == "$": numList.append(("hexnum", int(r[1:], 16)))
+							else: numList.append(("number", int(r)))
+						#endfor
+
+						add = ("range", numList)
+					elif num[0] == "$":
+						# Hexnum
+						add = ("hexnum", int(num[1:], 16))
+					else:
+						# Number
+						add = ("number", int(num))
+					#endif
+				# This is for whitespace, comments, etc. Things with no return.
+				else: continue
+			except RPLError(x): error = x
+
+			if not lit and lastLit:
+				error = "Literal with no purpose: %s" % lastLit
+			#endif
+
+			if add:
+				dtype, val = add
+				if type(val) is not list: nl, val = True, [val]
+				else: nl = False
+				map(lambda(x): self.wrap(x[0], x[1]), val)
+				if nl: val = val[0]
+
+				if adder:
+					adder[-1].append(val)
+				elif currentStruct and currentKey:
+					currentStruct[currentKey] = val
+					currentKey = None
+				else:
+					error = "Unused " + dtype
+				#endif
+			#endif
+
+			if error:
+				# Find the position
+				pos = token.start()
+				err("Error in line %i char %i: %s" % (
+					raw.count("\n",0,pos), pos - raw.rfind("\n",0,pos),
+					error
+				)
+				return False
+			#endif
 		#endfor
+	#enddef
+
+	def addChild(self, sType, name):
+		"""
+		Add a new struct to the root "element"
+		"""
+		if sType not in self.structs:
+			raise RPLError("%s isn't allowed as a substruct of root." % sType)
+		#endif
+		new = self.structs[sType](self, name)
+		self.root[name] = new
+		return new
 	#enddef
 
 	def __unicode__(self):
@@ -130,6 +295,12 @@ class RPL:
 		Method to register a custom static variable. Use sparingly.
 		"""
 		self.static[name] = value
+	#enddef
+
+	def regStruct(self, name, classRef):
+		"""
+		Method to register a custom struct.
+		"""
 	#enddef
 
 	def template(self, outFile):
@@ -180,16 +351,37 @@ class RPLStruct:
 	Base class for a struct
 	"""
 
-	def __init__(self, rpl, name):
+	# Be sure to define typeName here!
+
+	def __init__(self, rpl, name, parent=None):
 		"""
 		Be sure to call this with:
 		super(StructName,self).__init__(rpl, name)
 		"""
 		self.__rpl = rpl
 		self.__name = name
+		self.__parent = parent
 		self.__data = {}
 		self.__keys = {}
+		self.__structs = {}
+		self.__children = {}
 	#enddef
+
+	def addChild(self, sType, name):
+		"""
+		Add a new struct as a child of this one
+		"""
+		if sType not in self.__structs:
+			raise RPLError("%s isn't allowed as a substruct of %s." % (
+				sType, self.typeName
+			))
+		#endif
+		new = self.__structs[sType](self.__rpl, name, self)
+		self.__children[name] = new
+		return new
+	#enddef
+
+	def parent(self): return self.__parent
 
 	def regKey(self, name, basic, default=None):
 		"""
@@ -201,10 +393,19 @@ class RPLStruct:
 		else: return False
 	#enddef
 
-	def parse(self, obj):
+	def validate(self):
 		"""
-		Parse object, verifying entries
+		Validate self
 		"""
+		missingKeys = []
+		for k,v in self.__keys.iteritems():
+			if k not in self.__data:
+				if v[1] is not None: self.__data[k] = v[1]
+				else: missingKeys.append(k)
+			#endif
+		#endfor
+		if missingKeys: raise RPLError("Missing keys: " + ", ".join(missingKeys))
+		return True
 	#enddef
 
 	def __unicode__(self):
@@ -226,7 +427,7 @@ class RPLStruct:
 		"""
 		if key in self.__keys:
 			x = self.__keys[key]
-			self.__data =self.__rpl.wrap(x[0], value)
+			self.__data = self.__rpl.wrap(x[0], value)
 		else: raise KeyError(key)
 	#enddef
 
@@ -250,19 +451,51 @@ class Static(RPLStruct):
 	A generic struct that accepts all keys. Used to store static information.
 	Does not import or export anything.
 	"""
+
+	typeName = "static"
+
 	def __init__(self, rpl, name):
 		"""Honestly, this is just an example."""
 		super(Static,self).__init__(rpl, name)
 	#enddef
 
-	def parse(self, obj):
+	def verify(self):
 		"""Overwrite this cause Static accepts all keys"""
-		self.__data = deepcopy(obj)
+		return True
 	#enddef
 
 	def __setitem__(self, key, value):
 		"""Overwrite this cause Static accepts all keys"""
 		self.__data[key] = value
+	#enddef
+#endclass
+
+################################################################################
+#################################### RPLRef ####################################
+################################################################################
+class RPLRef:
+	"""
+	Manages references to other fields
+	"""
+
+	spec = re.compile(r'@?([^.]+)(?:\.([^\[]*))?((?:\[[0-9]+\])*)')
+	heir = re.compile(r'(g*)parent')
+
+	def __init__(self, rpl, ref, pos):
+		self.__rpl = rpl
+		self.__pos = pos
+
+		self.__struct, self.__key, idxs = self.spec.match(ref).groups()
+		if idxs: self.__idxs = map(int, idxs[1:-1].split("]["))
+		else: self.__idxs = []
+	#enddef
+
+	def __unicode__(self):
+		"""Output ref to RPL format"""
+		ret = "@%s" % self.__struct
+		if self.__key: ret += "."+self.__key
+		if self.__idxs: ret += "[%s]" % "][".join(self.__idxs)
+		return ret
 	#enddef
 #endclass
 
