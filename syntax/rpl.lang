@@ -4,7 +4,7 @@
  Author: Wa <admin@logicplace.com>
 
 -->
-<language id="rpl" _name="GFX Replacement" version="2.0" _section="Markup">
+<language id="rpl" _name="Resource Replacement" version="2.0" _section="Markup">
 	<metadata>
 		<property name="globs">*.rpl</property>
 		<property name="line-comment-start">#</property>
@@ -44,9 +44,18 @@
 			</include>
 		</context>
 
+		<context id="mstring" style-ref="string" end-at-line-end="true" class="string" class-disabled="no-spell-check">
+			<start>`</start>
+			<end>`</end>
+			<include>
+				<context ref="escape"/>
+				<context ref="escape-error"/>
+			</include>
+		</context>
+
 		<!--define-regex id="struct-type">(?:ROM|(?:tile|sprite)map|(?:tile|sprite)s?3?|data)</define-regex-->
 		<define-regex id="struct-name">[a-zA-Z_][a-zA-Z_\-0-9]*</define-regex>
-		
+
 		<context id="struct-def">
 			<match>^[ \t]*([a-zA-Z_][a-zA-Z_0-9]*)( +\%{struct-name})?[ \t\r\n]*\{</match>
 			<include>
@@ -54,7 +63,7 @@
 				<context style-ref="name" sub-pattern="2"/>
 			</include>
 		</context>
-		
+
 		<define-regex id="key-name">[a-z]+[0-9]*</define-regex>
 		<!--define-regex id="key-name" extended="true">(?:
 			  id
@@ -86,7 +95,7 @@
 			| padleft
 			| comment
 		)</define-regex-->
-		
+
 		<define-regex id="keywords" extended="true">(?:
 			  false
 			| true
@@ -115,15 +124,15 @@
 			| big
 			| little
 		)</define-regex>
-		
+
 		<define-regex id="number">(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=:))(?:(?:[\-*](?:[0-9]+|\$[0-9a-fA-F]+))?:(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=[: ]|$)))*(?:[\-*](?:[0-9]+|\$[0-9a-fA-F]+))?</define-regex>
 		<define-regex id="number-invalid">(?:[0-9]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)(?:[0-9:\-*]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)*(?=[ ,]|$)</define-regex>
 		<define-regex id="hexnum">\$[0-9a-fA-F]+(?![0-9a-fA-F]*[\-:])</define-regex>
-		
+
 		<define-regex id="ref">@\%{struct-name}(?:\.\%{key-name})?(?:\[[0-9]+\])*</define-regex>
-		
+
 		<define-regex id="value">(\%{ref})|(\%{keywords})|(\%{hexnum})|(\%{number})|(\%{number-invalid})|([^,\["][^#,]*)</define-regex>
-		
+
 		<context id="key-value">
 			<match>(?:^|,|(?&lt;={))[ \t]*(\%{key-name}): *(?&lt;!\[)(?:\%{value}|)</match>
 			<include>
@@ -136,7 +145,7 @@
 				<context style-ref="string" sub-pattern="7"/>
 			</include>
 		</context>
-		
+
 		<!-- TODO: Allow data on its own line, assuming it's in a list -->
 		<context id="list">
 			<match>(?&lt;=[\[,])[ \t]*\%{value}[ \t]*(?=[\],])</match>
@@ -149,11 +158,12 @@
 				<context style-ref="string" sub-pattern="6"/>
 			</include>
 		</context>
-		
+
 		<context id="rpl">
 			<include>
 				<context ref="def:shell-like-comment"/>
 				<context ref="string"/>
+				<context ref="mstring"/>
 				<context ref="struct-def"/>
 				<context ref="key-value"/>
 				<context ref="list"/>
