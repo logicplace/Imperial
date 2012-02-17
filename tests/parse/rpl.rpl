@@ -1,0 +1,20 @@
+# Test BASE entities (basic types, static struct)
+static {
+	string: "hi",
+	literal: bye,
+	number: 1,
+	hexnum: $2222 # OOPS no comma. Also comment!!
+	range: 1-5:2*4:5-3:x:1:$a,
+	list: [ "str", lit, 1, $babe, 1:2:3 ],
+	multi: `abcd`
+	`efghi` # `sneaky sneaky`
+	`jklmnop` # Aligning things is for ninneys
+	`qrs` `tuv` `wxyz`
+	static sub {
+		lit: :D
+	}
+}
+
+static AndAnotherStatic {
+	just: because
+} # because, because, because. A wonderful thing, because!

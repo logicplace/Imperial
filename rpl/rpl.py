@@ -2,6 +2,14 @@ import re
 import codecs
 from sys import stderr
 
+# TODO:
+#  * Appropriate type checking (RPLStruct.__setitem__, etc. Mind refs)
+#  * Proper errors for RPLRef.get
+#  * Range.__unicode__
+#  * Empty functions in RPL
+#  * Maybe move RPL.gfxTransform ot a different Image(RPLData) class?
+#  * Compare to old one, make sure everything exists..
+
 def err(msg): stderr.write(unicode(msg) + u"\n")
 
 class RPLError(Exception): pass
@@ -14,40 +22,39 @@ class RPL:
 
 	# Constants
 	tokenize = re.compile(
-		(r'\s*(?:'                                 # Whitespace
-		+r'"([^"\r\n]*)"|'                         # String
+		(r'\s*(?:'                                # Whitespace
+		r'"([^"\r\n]*)"|'                         # String
 		# Have to remove `s in processing
-		+r'((?:`[^`]*`\s*)+)|'             # Multi-line String
-		#+r'\$([0-9a-fA-F]+)(?![0-9a-fA-F]*[\-:])|' # Hexadecimal number
+		r'((?:\s*`[^`]*`\s*(?:#.*)?)+)|'          # Multi-line String
 		# Number or range (verify syntactically correct range later)
-		+r'(%(r1)%(r2)%(r1):\-*%(r2)*(?=[ ,]|$))|'
-		+r'(%(key)):|'                             # Key
-		+r'([{}\[\],])|'                           # Flow Identifier
-		+r'@([^%(lit).]+(?:\.%(key))?(?:\[[0-9]+\])*)|' # Reference
-		+r'([^%(lit)]+)|'                          # Unquoted string or struct name/type
-		+r'#.*$)'                                  # Comment
+		r'(%(r1)s%(r2)s%(r1)s:\-*%(r2)s*(?=[ ,]|$))|'
+		r'(%(key)s):|'                            # Key
+		r'([{}\[\],])|'                           # Flow Identifier
+		r'@([^%(lit)s.]+(?:\.%(key)s)?(?:\[[0-9]+\])*)|' # Reference
+		r'([^%(lit)s]+)|'                         # Unquoted string or struct name/type
+		r'#.*$)'                                  # Comment
 		) % {
-			'r1': r'(?:[0-9'
-			,'r2': r']|(?<![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)'
-			,'lit': r'{}\[\],\$"#\r\n'
-			,'key': r'[a-z]+[0-9]*'
+			"r1": r'(?:[0-9',
+			"r2": r']|(?<![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)',
+			"lit": r'{}\[\],\$"#\r\n',
+			"key": r'[a-z]+[0-9]*'
 		}
 	, re.M | re.U)
 
-	multilineStr = re.compile(r'`([^`]*)`')
+	multilineStr = re.compile(r'`([^`]*)`\s*(?:#.*)?')
 
 	number = re.compile(
 		# Must start with a number, or a single letter followed by a :
-		(r'(?:%(numx)|[a-z](?=:))'
+		(r'(?:%(numx)s|[a-z](?=:))'
 		# Range split group
 		+r'(?:'
 		# Can match a range or times here
-		+r'(?:%(bin)(%(numx)))?'
+		+r'(?:%(bin)s(%(numx)s))?'
 		# Must match a split, can either be a number or single letter followed by a :
-		+r':(?:%(numx)|[a-z](?=[: ]|$))'
+		+r':(?:%(numx)s|[a-z](?=[: ]|$))'
 		+r')*'
 		# To be sure we're able to end in a range/times
-		+r'(?:%(bin)(?:%(numx)))?'
+		+r'(?:%(bin)s(?:%(numx)s))?'
 		) % {
 			'bin': r'[\-*]'
 			,'numx': r'[0-9]+|\$[0-9a-fA-F]+'
@@ -86,6 +93,8 @@ class RPL:
 	types = {}
 	structs = {}
 	root = {}
+	structsByName = {}
+	didBase = False
 
 	def readFrom(self, etc):
 		"""
@@ -115,8 +124,20 @@ class RPL:
 		"""
 		Read in a file and parse it.
 		"""
+
+		if not self.didBase:
+			# Register all the basic stuff
+			didBase = True
+			self.regStruct(Static)
+			self.regType(String)
+			self.regType(Literal)
+			self.regType(Number)
+			self.regType(HexNum)
+			self.regType(List)
+			self.regType(Range)
+		#endif
+
 		raw = self.readFrom(inFile)
-		tokens = self.tokenize.findall(raw)
 
 		lastLit = None
 		currentKey = None
@@ -124,10 +145,9 @@ class RPL:
 		counts = {}
 		adder = []
 
-		for token in tokens:
+		for token in RPL.tokenize.finditer(raw):
 			sstr,mstr,num,key,flow,ref,lit = token.groups()
-			add = None
-			error = None
+			add, error, skipSubInst = None, None, False
 
 			try:
 				if lit:
@@ -153,16 +173,25 @@ class RPL:
 						else:
 							# Extract type and name
 							structType = structHead[0]
-							if structType not in counts: counts[structType] = 0
-							else: counts[structType] += 1
-							structName = (
-								structHead[1] if len(structHead) == 2 else
-								"%s%i" % (structType, counts[structType])
-							)
+							counts[structType] = counts.get(structType, -1) + 1
+							if len(structHead) >= 2: structName = structHead[1]
+							else:
+								# Form name from type + incrimenter
+								# NOTE: There must be a prettier way to do this!
+								structName = "%s%i" % (structType, counts[structType])
+								while structName in self.structsByName:
+									counts[structType] += 1
+									structName = "%s%i" % (structType, counts[structType])
+								#endwhile
+							#endif
 
-							currentStruct = (
-								currentStruct if currentStruct else self
-							).addChild(structType, structName)
+							if structName in self.structsByName:
+								error = 'Struct name "%s" is already taken' % structName
+							else:
+								self.structsByName[structName] = currentStruct = (
+									currentStruct if currentStruct else self
+								).addChild(structType, structName)
+							#endif
 						#endif
 					elif flow == "}":
 						# Close struct
@@ -179,7 +208,9 @@ class RPL:
 						adder.append([])
 					elif flow == "]":
 						# End list
-						if adder: add = ("list", adder.pop())
+						if adder:
+							add = ("list", adder.pop())
+							skipSubInst = True
 						else: error = "] without a [."
 					elif flow == ",":
 						# Separator
@@ -191,11 +222,11 @@ class RPL:
 					#endif
 
 					currentKey = key
-				elif ref: add = ("reference", RPLRef(self, ref, None))
+				elif ref: add = ("reference", ref)
 				elif sstr: add = ("string", sstr)
 				elif mstr:
 					# Need to remove all `s
-					add = ("string", String("".join(RPL.multilineStr.findall(mstr))))
+					add = ("string", "".join(RPL.multilineStr.findall(mstr)))
 				elif num:
 					if not RPL.number.match(num):
 						error = "Invalid range formatting."
@@ -211,12 +242,12 @@ class RPL:
 								l, r = int(bounds[0]), int(bounds[1])
 								numList += map(lambda(x): ("number",x), (
 									range(l, r+1) if l < r else range(l, r-1, -1)
-								)
+								))
 							elif len(times) == 2:
 								l, r = int(times[0]), int(times[1])
 								numList += map(lambda(x): ("number",x), [l] * r)
 							elif r in "abcdefghijklmnopqrstuvwxyz":
-								numList.append(("string", r))
+								numList.append(("literal", r))
 							elif r[0] == "$": numList.append(("hexnum", int(r[1:], 16)))
 							else: numList.append(("number", int(r)))
 						#endfor
@@ -231,18 +262,30 @@ class RPL:
 					#endif
 				# This is for whitespace, comments, etc. Things with no return.
 				else: continue
-			except RPLError(x): error = x
+			except RPLError as x: error = x.args[0]
 
 			if not lit and lastLit:
 				error = "Literal with no purpose: %s" % lastLit
 			#endif
 
+			# Find the position (used for ref and errors)
+			pos = token.start()
+			line, char = raw.count("\n",0,pos) + 1, pos - raw.rfind("\n",0,pos) + 1
+
 			if add:
 				dtype, val = add
-				if type(val) is not list: nl, val = True, [val]
-				else: nl = False
-				map(lambda(x): self.wrap(x[0], x[1]), val)
-				if nl: val = val[0]
+
+				# Special handler for references (cause they're so speeshul)
+				if dtype == "reference":
+					val = RPLRef(self, currentStruct, ref, line, char)
+				elif skipSubInst: val = self.wrap(*add)
+				else:
+					if type(val) is not list: nl, val = True, [add]
+					else: nl = False
+					val = map(lambda(x): self.wrap(*x), val)
+					if nl: val = val[0]
+					else: val = self.wrap(dtype, val)
+				#endif
 
 				if adder:
 					adder[-1].append(val)
@@ -255,12 +298,9 @@ class RPL:
 			#endif
 
 			if error:
-				# Find the position
-				pos = token.start()
 				err("Error in line %i char %i: %s" % (
-					raw.count("\n",0,pos), pos - raw.rfind("\n",0,pos),
-					error
-				)
+					line, char, error
+				))
 				return False
 			#endif
 		#endfor
@@ -284,10 +324,11 @@ class RPL:
 		"""
 	#enddef
 
-	def regType(self, name, classRef):
+	def regType(self, classRef):
 		"""
 		Method to register a custom type.
 		"""
+		self.types[classRef.typeName] = classRef
 	#enddef
 
 	def regStatic(self, name, value):
@@ -297,10 +338,11 @@ class RPL:
 		self.static[name] = value
 	#enddef
 
-	def regStruct(self, name, classRef):
+	def regStruct(self, classRef):
 		"""
 		Method to register a custom struct.
 		"""
+		self.structs[classRef.typeName] = classRef
 	#enddef
 
 	def template(self, outFile):
@@ -340,66 +382,226 @@ class RPL:
 	def wrap(self, typeName, value):
 		if typeName in self.types:
 			return self.types[typeName](value)
+		else: raise RPLError('No type "%s" defined' % typeName)
+	#enddef
+
+	def __iter__(self): return self.root.itervalues()
+#endclass
+
+################################################################################
+################################# RPLTypeCheck #################################
+################################################################################
+class RPLTypeCheck:
+	"""
+	Checks a RPLData struct against a set of possibilities.
+	The passed syntax is as follows:
+	 * type - Type name
+	 * all - Any type allowed
+	 * [type, ...] - List containing specific types
+	 * | - Boolean or
+	 * []* - Can either be just the contents, or a list containing multiple
+	         of that content. NOTE: May only be a single type (no commas).
+	 * []+ - Contents may be repeated indefinitely within the list.
+	"""
+
+	tokenize = re.compile(r'\s+|([\[\]*+|,])|([^\s\[\]*+|,]+)')
+
+	def __init__(self, rpl, name, syntax):
+		"""
+		FYI: This is one of the most ridiculous looking parsers I've written
+		"""
+		lastType = None
+		remain = None
+		parents = []
+		lastWasListEnd, lastWasRep = False, False
+		for token in RPLTypeCheck.tokenize.finditer(syntax):
+			try:
+				flow, tName = token.groups()
+
+				if tName: lastType = RPLTCData(rpl, tName)
+				elif flow == "[":
+					if lastType is None:
+						# New list, append to list/parents
+						tmp = ["list",[]]
+						if len(parents): parents[-1][1].append(tmp)
+						parents.append(tmp)
+					else: raise RPLError("Unused type.")
+				elif flow == "]":
+					if lastType:
+						parents[-1][1].append(lastType)
+						lastType = None
+					#endif
+
+					try:
+						if parents[-1][0] == "or":
+							# `.pop()` > `[-1] =`
+							parents[-1][1][-1] = RPLTCOr(parents.pop()[1])
+						#endif
+						remain = RPLTCList(parents.pop()[1])
+						if len(parents): parents[-1][1][-1] = remain
+					except IndexError: raise RPLError("] without [")
+					lastWasListEnd = True
+				elif flow and flow in "*+":
+					if lastWasListEnd: remain.rep(flow)
+					else: raise RPLError("Repeater out of place.")
+					lastWasRep = True
+				elif flow == "|":
+					if lastWasListEnd or lastWasRep:
+						# If the list was the first part of this OR sequence
+						# then it will be in remain and parents[-1][1][-1] if
+						# len(parents). parents[-1][0] == "list" in this case.
+						# If the list was in the middle the same is true above
+						# but parents[-1][0] == "or", so nothing needs to be done
+						tmp = ["or",[remain]]
+						if not len(parents): parents.append(tmp)
+						elif parents[-1][0] == "list":
+							parents[-1][1][-1] = tmp
+							parents.append(tmp)
+						#endif
+					elif len(parents) and parents[-1][0] == "or":
+						parents[-1][1].append(lastType)
+					else:
+						# New OR, append to list/parents
+						tmp = ["or",[lastType]]
+						if len(parents): parents[-1][1].append(tmp)
+						parents.append(tmp)
+					#endif
+					lastType = None
+				elif flow == ",":
+					try:
+						if lastType:
+							parents[-1][1].append(lastType)
+							lastType = None
+						#endif
+						if parents[-1][0] == "or":
+							# `.pop()` > `[-1] =`
+							parents[-1][1][-1] = RPLTCOr(parents.pop()[1])
+						#endif
+					except IndexError:
+						raise RPLError("Comma only allowed in lists")
+					#edntry
+				#endif
+
+				if flow != "]": lastWasListEnd = False
+				if not flow or flow not in "*+": lastWasRep = False
+			except RPLError as x:
+				raise RPLError('Key "%s" Char %i: %s' % (
+					name, token.start(), x.args[0]
+				))
+			#endtry
+		#endfor
+		if len(parents):
+			if lastType: parents[-1][1].append(lastType)
+			if parents[0][0] == "or": self.__root = RPLTCOr(parents[0][1])
+			else: raise RPLError('Key "%s": Unclosed lists.' % name)
+		elif lastType: self.__root = lastType
+		elif remain: self.__root = remain
+		else: raise RPLError('Key "%s": I did nothing!' % name)
+	#enddef
+
+	def verify(self, data): return self.__root.verify(data)
+#endclass
+
+class RPLTCData:
+	"""Helper class for RPLTypeCheck, contains one type"""
+	def __init__(self, rpl, t): self.__rpl, self.__type = rpl, t
+
+	# Starting to feel like I'm overdoing this class stuff :3
+	def verify(self, data):
+		return (self.__type == "all"
+			or isinstance(data, self.__rpl.types[self.__type])
+		)
+	#enddef
+#endclass
+
+class RPLTCList:
+	"""Helper class for RPLTypeCheck, contains one list"""
+	def __init__(self, l, r=''): self.__list, self.__repeat = l,r
+	def rep(self, r): self.__repeat = r
+
+	def verify(self, data):
+		# Make sure data is a list (unless repeat is *)
+		if not isinstance(data, List):
+			if self.__repeat == '*': return self.__list[0].verify(data)
+			else: return False
+		#endif
+
+		# Check lengths
+		d = data.get()
+		if self.__repeat and len(d) % len(self.__list) != 0: return False
+		elif not self.__repeat and len(d) != len(self.__list): return False
+
+		# Loop through list contents to check them all
+		for i,x in enumerate(self.__list):
+			if not x.verify(d[i]): return False
+		#endfor
+		return True
+	#enddef
+#endclass
+
+class RPLTCOr:
+	"""Helper class for RPLTypeCheck, contains one OR set"""
+	def __init__(self, orSet): self.__or = orSet
+
+	def verify(self, data):
+		for x in self.__or:
+			if x.verify(data): return True
+		#endfor
+		return False
 	#enddef
 #endclass
 
 ################################################################################
 ################################### RPLStruct ##################################
 ################################################################################
-class RPLStruct:
-	"""
-	Base class for a struct
-	"""
+class RPLStruct(object):
+	"""Base class for a struct"""
 
 	# Be sure to define typeName here!
 
 	def __init__(self, rpl, name, parent=None):
-		"""
-		Be sure to call this with:
-		super(StructName,self).__init__(rpl, name)
-		"""
-		self.__rpl = rpl
-		self.__name = name
-		self.__parent = parent
-		self.__data = {}
-		self.__keys = {}
-		self.__structs = {}
-		self.__children = {}
+		"""Be sure to call this in your own subclasses!"""
+		self._rpl = rpl
+		self._name = name
+		self._parent = parent
+		self._data = {}
+		self._keys = {}
+		self._structs = {}
+		self._children = {}
 	#enddef
 
 	def addChild(self, sType, name):
-		"""
-		Add a new struct as a child of this one
-		"""
-		if sType not in self.__structs:
+		"""Add a new struct as a child of this one"""
+		if sType not in self._structs:
 			raise RPLError("%s isn't allowed as a substruct of %s." % (
 				sType, self.typeName
 			))
 		#endif
-		new = self.__structs[sType](self.__rpl, name, self)
-		self.__children[name] = new
+		new = self._structs[sType](self._rpl, name, self)
+		self._children[name] = new
 		return new
 	#enddef
 
-	def parent(self): return self.__parent
-
 	def regKey(self, name, basic, default=None):
-		"""
-		Register a key by name with type and default.
-		"""
-		if name not in self.__keys:
-			self.__keys[name] = [basic, default]
+		"""Register a key by name with type and default."""
+		if name not in self._keys:
+			self._keys[name] = [basic, default]
 			return True
 		else: return False
 	#enddef
 
+	def regStruct(self, classRef):
+		"""
+		Method to register a custom struct.
+		"""
+		self._structs[classRef.typeName] = classRef
+	#enddef
+
 	def validate(self):
-		"""
-		Validate self
-		"""
+		"""Validate self"""
 		missingKeys = []
-		for k,v in self.__keys.iteritems():
-			if k not in self.__data:
+		for k,v in self._keys.iteritems():
+			if k not in self._data:
 				if v[1] is not None: self.__data[k] = v[1]
 				else: missingKeys.append(k)
 			#endif
@@ -409,41 +611,42 @@ class RPLStruct:
 	#enddef
 
 	def __unicode__(self):
-		"""
-		Write struct to RPL format
-		"""
+		"""Write struct to RPL format"""
 	#enddef
 
 	def __getitem__(self, key):
-		"""
-		Return data for key
-		"""
-		return self.__data[key]
+		"""Return data for key"""
+		return self._data[key]
 	#enddef
 
 	def __setitem__(self, key, value):
-		"""
-		Set data for key, verifying and casting as necessary
-		"""
+		"""Set data for key, verifying and casting as necessary"""
 		if key in self.__keys:
 			x = self.__keys[key]
-			self.__data = self.__rpl.wrap(x[0], value)
+			self.__data[key] = self.__rpl.wrap(x[0], value)
 		else: raise KeyError(key)
 	#enddef
 
 	def fromBin(self, key, value):
-		"""
-		Stub. Import data from binary representation instead.
-		"""
+		"""Stub. Import data from binary representation instead."""
 		pass
 	#enddef
 
+	def name(self): return self._name
+	def parent(self): return self._parent
+
 	def basic(self):
-		"""
-		Stub. Return basic data (name by default)
-		"""
-		return self.__name
+		"""Stub. Return basic data (name by default)"""
+		return self._name
 	#enddef
+
+	def __len__(self):
+		"""Return number of children (including keys)"""
+		return len(self._data) + len(self._children)
+	#enddef
+
+	def __nonzero__(self): return True
+	def __iter__(self): return self._children.itervalues()
 #endclass
 
 class Static(RPLStruct):
@@ -454,9 +657,10 @@ class Static(RPLStruct):
 
 	typeName = "static"
 
-	def __init__(self, rpl, name):
+	def __init__(self, rpl, name, parent=None):
 		"""Honestly, this is just an example."""
-		super(Static,self).__init__(rpl, name)
+		RPLStruct.__init__(self, rpl, name, parent)
+		self.regStruct(Static)
 	#enddef
 
 	def verify(self):
@@ -466,7 +670,7 @@ class Static(RPLStruct):
 
 	def __setitem__(self, key, value):
 		"""Overwrite this cause Static accepts all keys"""
-		self.__data[key] = value
+		self._data[key] = value
 	#enddef
 #endclass
 
@@ -474,16 +678,17 @@ class Static(RPLStruct):
 #################################### RPLRef ####################################
 ################################################################################
 class RPLRef:
-	"""
-	Manages references to other fields
-	"""
+	"""Manages references to other fields"""
 
 	spec = re.compile(r'@?([^.]+)(?:\.([^\[]*))?((?:\[[0-9]+\])*)')
-	heir = re.compile(r'(g*)parent')
+	heir = re.compile(r'^(g*)parent$')
 
-	def __init__(self, rpl, ref, pos):
+	typeName = "reference"
+
+	def __init__(self, rpl, container, ref, line, char):
 		self.__rpl = rpl
-		self.__pos = pos
+		self.__container = container
+		self.__pos = (line, char)
 
 		self.__struct, self.__key, idxs = self.spec.match(ref).groups()
 		if idxs: self.__idxs = map(int, idxs[1:-1].split("]["))
@@ -497,32 +702,54 @@ class RPLRef:
 		if self.__idxs: ret += "[%s]" % "][".join(self.__idxs)
 		return ret
 	#enddef
+
+	def get(self):
+		"""Return referenced value"""
+		# First check if we're referring to self or parents
+		parent = RPLRef.heir.match(self.__struct)
+		if self.__struct == "this" or parent:
+			ret = self.__container
+			if parent:
+				for g in parent.group(1): ret = ret.parent()
+			#endif
+		else: ret = self.__rpl.structsByName[self.__struct]
+
+		if not self.__key: return ret.basic()
+		ret = ret[self.__key]
+		for x in self.__idxs: ret = ret.get()[x]
+
+		# TODO: Verify type
+
+		return ret.get()
+	#endif
 #endclass
 
 ################################################################################
 #################################### RPLData ###################################
 ################################################################################
 
-class RPLData:
+class RPLData(object):
 	def __init__(self, data): self.set(data)
-	def get(self): return self.__data
-	def set(self, data): return self.__data = data
+	def get(self): return self._data
+	def set(self, data): self._data = data
 #endclass
 
 class String(RPLData):
 	"""String basic type"""
-	escape = re.compile(r'$($|[0-9a-fA-F]{2})')
+	typeName = "string"
+
+	escape = re.compile(r'\$(\$|[0-9a-fA-F]{2})')
 	binchr = re.compile(r'[\x00-\x08\x0a-\x1f\x7f-\xff]')
 	def set(self, data):
 		if type(data) is str: data = unicode(data)
 		elif type(data) is not unicode:
 			raise TypeError('Type "string" expects unicode or str.')
 		#endif
-		self.__data = String.escape.sub(String.replIn, data)
+		self._data = String.escape.sub(String.replIn, data)
 	#enddef
 
 	def __unicode__(self):
-		return '"' + String.binchr.sub(String.replOut, self.__data) + '"'
+		return '"' + String.binchr.sub(String.replOut, self._data) + '"'
 	#enddef
 
 	@staticmethod
@@ -538,38 +765,56 @@ class String(RPLData):
 	#enddef
 #endclass
 
+class Literal(String):
+	"""Literal basic type"""
+	typeName = "literal"
+
+	def __unicode__(self):
+		return String.binchr.sub(String.replOut, self._data)
+	#enddef
+#endclass
+
 class Number(RPLData):
 	"""Number basic type"""
+	typeName = "number"
+
 	def set(self, data):
 		if type(data) not in [int, long]:
 			raise TypeError('Type "number" expects int or long.')
 		#endif
-		self.__data = data
+		self._data = data
 	#enddef
 
-	def __unicode__(self): return str(self.__data)
+	def __unicode__(self): return str(self._data)
 #endclass
 
 class HexNum(Number):
 	"""HexNum interpreted type"""
-	def __unicode__(self): return "$%x" % self.__data
+	typeName = "hexnum"
+
+	def __unicode__(self): return "$%x" % self._data
 #endclass
 
 class List(RPLData):
 	"""List basic type"""
+	typeName = "list"
+
 	def set(self, data):
 		if type(data) is not list:
 			raise TypeError('Type "list" expects list.')
 		#endif
-		self.__data = data
+		self._data = data
 	#enddef
 
 	def __unicode__(self):
-		return "[ " + ", ".join(map(unicode, self.__data)) + " ]"
+		return "[ " + ", ".join(map(unicode, self._data)) + " ]"
 	#enddef
 #enclass
 
 class Range(List):
 	"""Range interpreted type"""
+	typeName = "range"
+
+	# TODO: def __unicode__(self):
 	pass
 #endclass
