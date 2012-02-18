@@ -3,11 +3,9 @@ import codecs
 from sys import stderr
 
 # TODO:
-#  * Appropriate type checking (RPLStruct.__setitem__, etc. Mind refs)
 #  * Proper errors for RPLRef.get
-#  * Range.__unicode__
 #  * Empty functions in RPL
-#  * Maybe move RPL.gfxTransform ot a different Image(RPLData) class?
+#  * Maybe move RPL.gfxTransform to a different Image(RPLData) class?
 #  * Compare to old one, make sure everything exists..
 
 def err(msg): stderr.write(unicode(msg) + u"\n")
@@ -508,9 +506,14 @@ class RPLTCData:
 
 	# Starting to feel like I'm overdoing this class stuff :3
 	def verify(self, data):
-		return (self.__type == "all"
+		if (self.__type == "all"
 			or isinstance(data, self.__rpl.types[self.__type])
-		)
+		): return data
+		elif issubclass(self.__rpl.types[self.__type], data.__class__):
+			# Attempt to recast to subclass
+			try: return self.__rpl.types[self.__type](data.get())
+			except RPLError: return None
+		else: return None
 	#enddef
 #endclass
 
@@ -523,19 +526,23 @@ class RPLTCList:
 		# Make sure data is a list (unless repeat is *)
 		if not isinstance(data, List):
 			if self.__repeat == '*': return self.__list[0].verify(data)
-			else: return False
+			else: return None
 		#endif
 
 		# Check lengths
 		d = data.get()
-		if self.__repeat and len(d) % len(self.__list) != 0: return False
-		elif not self.__repeat and len(d) != len(self.__list): return False
+		if self.__repeat and len(d) % len(self.__list) != 0: return None
+		elif not self.__repeat and len(d) != len(self.__list): return None
 
 		# Loop through list contents to check them all
+		nd = []
 		for i,x in enumerate(self.__list):
-			if not x.verify(d[i]): return False
+			nd.append(x.verify(d[i]))
+			if nd[-1] is None: return None
 		#endfor
-		return True
+
+		if d != nd: return List(nd)
+		else: return data
 	#enddef
 #endclass
 
@@ -545,9 +552,10 @@ class RPLTCOr:
 
 	def verify(self, data):
 		for x in self.__or:
-			if x.verify(data): return True
+			tmp = x.verify(data)
+			if tmp is not None: return tmp
 		#endfor
-		return False
+		return None
 	#enddef
 #endclass
 
@@ -568,6 +576,9 @@ class RPLStruct(object):
 		self._keys = {}
 		self._structs = {}
 		self._children = {}
+
+		try: self.typeName
+		except AttributeError: self.typeName = self.__class__.__name__.lower()
 	#enddef
 
 	def addChild(self, sType, name):
@@ -585,7 +596,7 @@ class RPLStruct(object):
 	def regKey(self, name, basic, default=None):
 		"""Register a key by name with type and default."""
 		if name not in self._keys:
-			self._keys[name] = [basic, default]
+			self._keys[name] = [RPLTypeCheck(basic), default]
 			return True
 		else: return False
 	#enddef
@@ -602,7 +613,8 @@ class RPLStruct(object):
 		missingKeys = []
 		for k,v in self._keys.iteritems():
 			if k not in self._data:
-				if v[1] is not None: self.__data[k] = v[1]
+				# Should this wrap? Or verify? Or should the definers have to do that?
+				if v[1] is not None: self._data[k] = v[1]
 				else: missingKeys.append(k)
 			#endif
 		#endfor
@@ -621,10 +633,11 @@ class RPLStruct(object):
 
 	def __setitem__(self, key, value):
 		"""Set data for key, verifying and casting as necessary"""
-		if key in self.__keys:
-			x = self.__keys[key]
-			self.__data[key] = self.__rpl.wrap(x[0], value)
-		else: raise KeyError(key)
+		if key in self._keys:
+			# Reference's types are lazily checked
+			if isinstance(value, RPLRef) self._data[key] = value
+			else: self._data[key] = self._keys[key][0].verify(value)
+		else: raise RPLError('"%s" has no key "%s".' % (self.typeName, key))
 	#enddef
 
 	def fromBin(self, key, value):
@@ -743,7 +756,7 @@ class String(RPLData):
 	def set(self, data):
 		if type(data) is str: data = unicode(data)
 		elif type(data) is not unicode:
-			raise TypeError('Type "string" expects unicode or str.')
+			raise RPLError('Type "%s" expects unicode or str.' % self.typeName)
 		#endif
 		self._data = String.escape.sub(String.replIn, data)
 	#enddef
@@ -780,7 +793,7 @@ class Number(RPLData):
 
 	def set(self, data):
 		if type(data) not in [int, long]:
-			raise TypeError('Type "number" expects int or long.')
+			raise RPLError('Type "%s" expects int or long.'  % self.typeName)
 		#endif
 		self._data = data
 	#enddef
@@ -801,7 +814,7 @@ class List(RPLData):
 
 	def set(self, data):
 		if type(data) is not list:
-			raise TypeError('Type "list" expects list.')
+			raise RPLError('Type "%s" expects list.' % self.typeName)
 		#endif
 		self._data = data
 	#enddef
@@ -815,6 +828,45 @@ class Range(List):
 	"""Range interpreted type"""
 	typeName = "range"
 
-	# TODO: def __unicode__(self):
-	pass
+	def set(self, data):
+		if type(data) is not list:
+			raise TypeError('Type "%s" expects list.' % self.typeName)
+		#endif
+		for x in data:
+			if not isinstance(x, Number) and (not isinstance(x, Literal)
+			or len(x.get()) != 1):
+				raise RPLError('Types in a "%s" must be a number or one character literal' % self.typeName)
+			#endif
+		#endfor
+		self._data = data
+	#enddef
+
+	def __unicode__(self):
+		ret, posseq, negseq, mul, last = [], [], [], [], None
+		for x in self._data:
+			d = x.get()
+			if isinstance(x, Literal): ret.append(d)
+			elif last is None: last = d
+			else:
+				isPos = (d - last == 1)
+				isNeg = (last - d == 1)
+				isSame = (last == d)
+				if not isNeg and negseq:
+					ret.append("%i-%i" % (negseq[0], negseq[-1]))
+					negseq = []
+				if not isPos and posseq:
+					ret.append("%i-%i" % (posseq[0], posseq[-1]))
+					posseq = []
+				if not isSame and mul:
+					ret.append("%i*%i" % (mul[0], len(mul)))
+					mul = []
+				#endif
+				if isPos: posseq.append(d)
+				elif isNeg: negseq.append(d)
+				elif isSame: mul.append(d)
+				else: ret.append(unicode(d))
+			#endif
+		#endfor
+		return ":".join(ret)
+	#enddef
 #endclass

@@ -124,47 +124,52 @@ def main():
 
 	log("# Test 2: type checking #")
 	def typeCheck(key, syn, data, expect):
-		if rpl.RPLTypeCheck(basic, key, syn).verify(data) != expect:
-			return err('Failed test: "%s"' % key, False)
+		tmp = rpl.RPLTypeCheck(basic, key, syn).verify(data)
+		if (not expect and tmp is None) or (tmp.typeName == expect):
+			return True
 		#endif
-		return True
+		print(tmp)
+		return err('Failed test: "%s"' % key, False)
 	#enddef
 
 	Str, Lit, Num = rpl.String("hi"), rpl.Literal("hi"), rpl.Number(1)
 	def RL(*x): return rpl.List(list(x))
-	if (not typeCheck("StrStrTest", "string", Str, True)
-	or  not typeCheck("StrLitTest", "string", Lit, True)
-	or  not typeCheck("StrNumTest", "string", Num, False)
-	or  not typeCheck("OrNumTest", "string|number", Num, True)
-	or  not typeCheck("ListNumTest", "[number]", Num, False)
-	or  not typeCheck("ListListTest", "[number]", RL(Num), True)
-	or  not typeCheck("ListBadListTest", "[number]", RL(Str), False)
-	or  not typeCheck("LONumTest", "[string|number]", Num, False)
-	or  not typeCheck("LOListTest", "[string|number]", RL(Num), True)
-	or  not typeCheck("SublistTest", "[number,[number],number]", RL(Num,RL(Num),Num), True)
-	or  not typeCheck("SublistBadTest", "[number,[number],number]", RL(Num,RL(Str),Num), False)
-	or  not typeCheck("OLTest1", "string|[number]", Str, True)
-	or  not typeCheck("OLTest2", "string|[number]", RL(Num), True)
-	or  not typeCheck("OLBadTest", "string|[number]", Num, False)
-	or  not typeCheck("OLTest1", "[number|[string],number]", RL(Num,Num), True)
-	or  not typeCheck("OLTest1", "[number|[string],number]", RL(RL(Str),Num), True)
-	or  not typeCheck("SSSSSLTest", "[[[[[string]]]]]", RL(RL(RL(RL(RL(Str))))), True)
-	or  not typeCheck("Repeat1Test1", "[number]*", Num, True)
-	or  not typeCheck("Repeat1Test2", "[number]*", RL(Num), True)
-	or  not typeCheck("Repeat1Test3", "[number]*", RL(Num,Num), True)
-	or  not typeCheck("Repeat1Test4", "[number]*", Str, False)
-	or  not typeCheck("Repeat2Test1", "[number]+", Num, False)
-	or  not typeCheck("Repeat2Test2", "[number]+", RL(Num), True)
-	or  not typeCheck("Repeat2Test3", "[number]+", RL(Num,Num), True)
-	or  not typeCheck("Repeat2Test4", "[number|string|list]+", RL(Str), True)
-	or  not typeCheck("ROTest1", "[number]*|string", Num, True)
-	or  not typeCheck("ROTest2", "[number]*|string", RL(Num), True)
-	or  not typeCheck("ROTest3", "[number]*|string", Str, True)
-	or  not typeCheck("HeirTest1", "range", rpl.Range([1,2]), True)
-	# Honeslty I'm not super sure I like this one
-	or  not typeCheck("HeirTest2", "range", RL(1,2), False)
+	if (not typeCheck("StrStrTest", "string", Str, "string")
+	or  not typeCheck("StrLitTest", "string", Lit, "literal")
+	or  not typeCheck("StrNumTest", "string", Num, None)
+	or  not typeCheck("OrNumTest", "string|number", Num, "number")
+	or  not typeCheck("ListNumTest", "[number]", Num, None)
+	or  not typeCheck("ListListTest", "[number]", RL(Num), "list")
+	or  not typeCheck("ListBadListTest", "[number]", RL(Str), None)
+	or  not typeCheck("LONumTest", "[string|number]", Num, None)
+	or  not typeCheck("LOListTest", "[string|number]", RL(Num), "list")
+	or  not typeCheck("SublistTest", "[number,[number],number]", RL(Num,RL(Num),Num), "list")
+	or  not typeCheck("SublistBadTest", "[number,[number],number]", RL(Num,RL(Str),Num), None)
+	or  not typeCheck("OLTest1", "string|[number]", Str, "string")
+	or  not typeCheck("OLTest2", "string|[number]", RL(Num), "list")
+	or  not typeCheck("OLBadTest", "string|[number]", Num, None)
+	or  not typeCheck("OLTest1", "[number|[string],number]", RL(Num,Num), "list")
+	or  not typeCheck("OLTest1", "[number|[string],number]", RL(RL(Str),Num), "list")
+	or  not typeCheck("SSSSSLTest", "[[[[[string]]]]]", RL(RL(RL(RL(RL(Str))))), "list")
+	or  not typeCheck("Repeat1Test1", "[number]*", Num, "number")
+	or  not typeCheck("Repeat1Test2", "[number]*", RL(Num), "list")
+	or  not typeCheck("Repeat1Test3", "[number]*", RL(Num,Num), "list")
+	or  not typeCheck("Repeat1Test4", "[number]*", Str, None)
+	or  not typeCheck("Repeat2Test1", "[number]+", Num, None)
+	or  not typeCheck("Repeat2Test2", "[number]+", RL(Num), "list")
+	or  not typeCheck("Repeat2Test3", "[number]+", RL(Num,Num), "list")
+	or  not typeCheck("Repeat2Test4", "[number|string|list]+", RL(Str), "list")
+	or  not typeCheck("ROTest1", "[number]*|string", Num, "number")
+	or  not typeCheck("ROTest2", "[number]*|string", RL(Num), "list")
+	or  not typeCheck("ROTest3", "[number]*|string", Str, "string")
+	or  not typeCheck("HeirTest1", "range", rpl.Range([Num,Num]), "range")
+	or  not typeCheck("HeirTest2", "range", RL(Num,Num), "range")
 	): return 2
 	log("Test 2 end")
+
+	#log("# Test 3: write tests #")
+	# TODO: Allow parsing data files, then I can add this
+	#log("Test 3 end")
 
 	return 0
 #enddef
