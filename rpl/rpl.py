@@ -1,11 +1,11 @@
 import re
 import codecs
 from sys import stderr
+import os
 
 # TODO:
 #  * Proper errors for RPLRef.get
-#  * Empty functions in RPL
-#  * Maybe move RPL.gfxTransform to a different Image(RPLData) class?
+#  * Make RPLRef.get verify types (pass calling struct/key)
 #  * Compare to old one, make sure everything exists..
 
 def err(msg): stderr.write(unicode(msg) + u"\n")
@@ -62,22 +62,22 @@ class RPL:
 
 	# Predefined
 	static = {
-		 "false":   0
-		,"true":    1
-		,"black":   0x000000
-		,"white":   0xffffff
-		,"red":     0xff0000
-		,"blue":    0x00ff00
-		,"green":   0x0000ff
-		,"yellow":  0xffff00
-		,"magenta": 0xff00ff
-		,"pink":    0xff00ff
-		,"cyan":    0x00ffff
-		,"gray":    0xa5a5a5
-		,"byte":    1
-		,"short":   2
-		,"long":    4
-		,"double":  8
+		 "false":   "0"
+		,"true":    "1"
+		,"black":   "$000000"
+		,"white":   "$ffffff"
+		,"red":     "$ff0000"
+		,"blue":    "$00ff00"
+		,"green":   "$0000ff"
+		,"yellow":  "$ffff00"
+		,"magenta": "$ff00ff"
+		,"pink":    "$ff00ff"
+		,"cyan":    "$00ffff"
+		,"gray":    "$a5a5a5"
+		,"byte":    "1"
+		,"short":   "2"
+		,"long":    "4"
+		,"double":  "8"
 		,"LU":      "LRUD"
 		,"LD":      "LRDU"
 		,"RU":      "RLUD"
@@ -133,6 +133,11 @@ class RPL:
 			self.regType(HexNum)
 			self.regType(List)
 			self.regType(Range)
+
+			# Premake these~
+			for x in self.static:
+				self.static[x] = self.parseData(self.static[x])
+			#endfor
 		#endif
 
 		raw = self.readFrom(inFile)
@@ -144,7 +149,8 @@ class RPL:
 		adder = []
 
 		for token in RPL.tokenize.finditer(raw):
-			sstr,mstr,num,key,flow,ref,lit = token.groups()
+			groups = token.groups() # Used later
+			sstr,mstr,num,key,flow,ref,lit = groups
 			add, error, skipSubInst = None, None, False
 
 			try:
@@ -154,7 +160,7 @@ class RPL:
 					lit = lit.rstrip()
 					# If the last token was a key or this is inside a list,
 					#  this is string data
-					if currentKey or adder: add = ("literal", lit)
+					if currentKey or adder: add = self.parseData(groups)
 					# Otherwise this might be a struct head
 					else: lastLit = lit
 				elif flow:
@@ -172,7 +178,7 @@ class RPL:
 							# Extract type and name
 							structType = structHead[0]
 							counts[structType] = counts.get(structType, -1) + 1
-							if len(structHead) >= 2: structName = structHead[1]
+							if len(structHead) >= 2: structName, genned = structHead[1], False
 							else:
 								# Form name from type + incrimenter
 								# NOTE: There must be a prettier way to do this!
@@ -181,6 +187,7 @@ class RPL:
 									counts[structType] += 1
 									structName = "%s%i" % (structType, counts[structType])
 								#endwhile
+								genned = True
 							#endif
 
 							if structName in self.structsByName:
@@ -189,6 +196,7 @@ class RPL:
 								self.structsByName[structName] = currentStruct = (
 									currentStruct if currentStruct else self
 								).addChild(structType, structName)
+								currentStruct._gennedName = genned
 							#endif
 						#endif
 					elif flow == "}":
@@ -220,44 +228,7 @@ class RPL:
 					#endif
 
 					currentKey = key
-				elif ref: add = ("reference", ref)
-				elif sstr: add = ("string", sstr)
-				elif mstr:
-					# Need to remove all `s
-					add = ("string", "".join(RPL.multilineStr.findall(mstr)))
-				elif num:
-					if not RPL.number.match(num):
-						error = "Invalid range formatting."
-					elif RPL.isRange.match(num):
-						# Range
-						numList = []
-						ranges = num.split(":")
-
-						for r in ranges:
-							bounds = r.split("-")
-							times = r.split("*")
-							if len(bounds) == 2:
-								l, r = int(bounds[0]), int(bounds[1])
-								numList += map(lambda(x): ("number",x), (
-									range(l, r+1) if l < r else range(l, r-1, -1)
-								))
-							elif len(times) == 2:
-								l, r = int(times[0]), int(times[1])
-								numList += map(lambda(x): ("number",x), [l] * r)
-							elif r in "abcdefghijklmnopqrstuvwxyz":
-								numList.append(("literal", r))
-							elif r[0] == "$": numList.append(("hexnum", int(r[1:], 16)))
-							else: numList.append(("number", int(r)))
-						#endfor
-
-						add = ("range", numList)
-					elif num[0] == "$":
-						# Hexnum
-						add = ("hexnum", int(num[1:], 16))
-					else:
-						# Number
-						add = ("number", int(num))
-					#endif
+				elif sstr or mstr or num or ref: add = self.parseData(groups)
 				# This is for whitespace, comments, etc. Things with no return.
 				else: continue
 			except RPLError as x: error = x.args[0]
@@ -271,19 +242,8 @@ class RPL:
 			line, char = raw.count("\n",0,pos) + 1, pos - raw.rfind("\n",0,pos) + 1
 
 			if add:
-				dtype, val = add
-
-				# Special handler for references (cause they're so speeshul)
-				if dtype == "reference":
-					val = RPLRef(self, currentStruct, ref, line, char)
-				elif skipSubInst: val = self.wrap(*add)
-				else:
-					if type(val) is not list: nl, val = True, [add]
-					else: nl = False
-					val = map(lambda(x): self.wrap(*x), val)
-					if nl: val = val[0]
-					else: val = self.wrap(dtype, val)
-				#endif
+				if type(add) is tuple: dtype, val = self.parseCreate(add, skipSubInst)
+				else: dtype, val = add.typeName, add # For statics
 
 				if adder:
 					adder[-1].append(val)
@@ -303,6 +263,88 @@ class RPL:
 			#endif
 		#endfor
 	#enddef
+
+	def parseCreate(self, add, skipSubInst=False):
+		"""Instantiates data. Used by parse and parseData"""
+		dtype, val = add
+
+		# Special handler for references (cause they're so speeshul)
+		if dtype == "reference":
+			val = RPLRef(self, currentStruct, ref, line, char)
+		elif skipSubInst: val = self.wrap(*add)
+		else:
+			if type(val) is not list: nl, val = True, [add]
+			else: nl = False
+			val = map(lambda(x): self.wrap(*x), val)
+			if nl: val = val[0]
+			else: val = self.wrap(dtype, val)
+		#endif
+
+		return (dtype, val)
+	#enddef
+
+	def parseData(self, data):
+		"""Parse one value"""
+		pp = type(data) is tuple
+		if pp: sstr,mstr,num,key,flow,ref,lit = data
+		else:
+			try: sstr,mstr,num,key,flow,ref,lit = self.tokenize.match(data).groups()
+			except AttributeError: raise RPLError("Syntax error in data: %s" % data)
+		#endif
+
+		add, error = None, None
+
+		if ref: add = ("reference", ref)
+		elif sstr: add = ("string", sstr)
+		elif mstr:
+			# Need to remove all `s
+			add = ("string", "".join(RPL.multilineStr.findall(mstr)))
+		elif num:
+			if not RPL.number.match(num):
+				error = "Invalid range formatting."
+			elif RPL.isRange.match(num):
+				# Range
+				numList = []
+				ranges = num.split(":")
+
+				for r in ranges:
+					bounds = r.split("-")
+					times = r.split("*")
+					if len(bounds) == 2:
+						l, r = int(bounds[0]), int(bounds[1])
+						numList += map(lambda(x): ("number",x), (
+							range(l, r+1) if l < r else range(l, r-1, -1)
+						))
+					elif len(times) == 2:
+						l, r = int(times[0]), int(times[1])
+						numList += map(lambda(x): ("number",x), [l] * r)
+					elif r in "abcdefghijklmnopqrstuvwxyz":
+						numList.append(("literal", r))
+					elif r[0] == "$": numList.append(("hexnum", int(r[1:], 16)))
+					else: numList.append(("number", int(r)))
+				#endfor
+
+				add = ("range", numList)
+			elif num[0] == "$":
+				# Hexnum
+				add = ("hexnum", int(num[1:], 16))
+			else:
+				# Number
+				add = ("number", int(num))
+			#endif
+		elif lit or (type(data) is str and data == ""):
+			if lit in self.static: add = self.static[lit]
+			else: add = ("literal", lit)
+		elif pp: raise RPLError("Invalid data.")
+		else: raise RPLError("Invalid data: %s" % data)
+
+		if add and pp: return add
+		elif add and type(add) is not tuple: return add
+		elif add: return self.parseCreate(add)
+		elif error: raise RPLError(error)
+		elif pp: raise RPLError("Error parsing data.")
+		else: raise RPLError("Error parsing data: %s" % data)
+	#endif
 
 	def addChild(self, sType, name):
 		"""
@@ -359,22 +401,30 @@ class RPL:
 		return None
 	#enddef
 
+	def wantPort(self, x, what):
+		return x and (not what or x.name() in what or wantPort(x.parent(), what))
+	#enddef
+
 	def importData(self, rom, folder, what=[]):
 		"""
 		Import data from folder into the given ROM according to what.
 		"""
+		rom = self.readFrom(rom)
+		lfolder = os.path.split(os.path.normpath(folder))
+		for x in self:
+			if wantPort(x, what) and x["import"]: x.importData(rom, lfolder)
+		#endfor
 	#enddef
 
 	def exportData(self, rom, folder, what=[]):
 		"""
 		Export data from rom into folder according to what.
 		"""
-	#enddef
-
-	def gfxTransform(image, info, direction):
-		"""
-		Transform a 2D image in typical ways
-		"""
+		rom = self.readFrom(rom)
+		lfolder = os.path.split(os.path.normpath(folder))
+		for x in self:
+			if wantPort(x, what) and x["export"]: x.exportData(rom, lfolder)
+		#endfor
 	#enddef
 
 	def wrap(self, typeName, value):
@@ -595,10 +645,7 @@ class RPLStruct(object):
 
 	def regKey(self, name, basic, default=None):
 		"""Register a key by name with type and default."""
-		if name not in self._keys:
-			self._keys[name] = [RPLTypeCheck(basic), default]
-			return True
-		else: return False
+		self._keys[name] = [RPLTypeCheck(basic), default]
 	#enddef
 
 	def regStruct(self, classRef):
@@ -628,21 +675,19 @@ class RPLStruct(object):
 
 	def __getitem__(self, key):
 		"""Return data for key"""
-		return self._data[key]
+		x = self
+		while x and key not in x._data: x = x.parent()
+		if x: return x._data[key]
+		else: raise RPLError('No key "%s"' % key)
 	#enddef
 
 	def __setitem__(self, key, value):
 		"""Set data for key, verifying and casting as necessary"""
 		if key in self._keys:
 			# Reference's types are lazily checked
-			if isinstance(value, RPLRef) self._data[key] = value
+			if isinstance(value, RPLRef): self._data[key] = value
 			else: self._data[key] = self._keys[key][0].verify(value)
 		else: raise RPLError('"%s" has no key "%s".' % (self.typeName, key))
-	#enddef
-
-	def fromBin(self, key, value):
-		"""Stub. Import data from binary representation instead."""
-		pass
 	#enddef
 
 	def name(self): return self._name
@@ -673,7 +718,18 @@ class Static(RPLStruct):
 	def __init__(self, rpl, name, parent=None):
 		"""Honestly, this is just an example."""
 		RPLStruct.__init__(self, rpl, name, parent)
-		self.regStruct(Static)
+	#enddef
+
+	def addChild(self, sType, name):
+		"""Overwrite this cause Static accepts all root children"""
+		if sType not in self._rpl.structs:
+			raise RPLError("%s isn't allowed as a substruct of %s." % (
+				sType, self.typeName
+			))
+		#endif
+		new = self._rpl.structs[sType](self._rpl, name, self)
+		self._children[name] = new
+		return new
 	#enddef
 
 	def verify(self):
@@ -684,6 +740,76 @@ class Static(RPLStruct):
 	def __setitem__(self, key, value):
 		"""Overwrite this cause Static accepts all keys"""
 		self._data[key] = value
+	#enddef
+#endclass
+
+class Serializable(RPLStruct):
+	"""Inherit this class for data that can be imported and/or exported"""
+
+	# NOTE: There is no typeName because this is not meant to be used directly.
+
+	def __init__(self, rpl, name, parent=None):
+		"""Register self"""
+		RPLStruct.__init__(self, rpl, name, parent)
+		self.regKey("base", "hexnum", "$000000")
+		self.regKey("file", "string", '""')
+		self.regKey("ext", "string", '""')
+		self.regKey("export", "number", "true")
+		self.regKey("import", "number", "true")
+	#enddef
+
+	def open(self, folder, ext="bin", retName=False):
+		"""Helper method for opening files"""
+		if type(folder) is not list: folder = os.path.split(os.path.normpath(folder))
+
+		# Function to return defined filename or struct's defined name
+		# If the filename starts with a / it is considered a subdir of parent
+		# structs.
+		def fn(x):
+			if "file" in x._data:
+				f = os.path.normpath(x._data["file"].get())
+				if f[0:len(os.sep)] == os.sep: return (True, os.path.split(f[len(os.sep):]))
+				else: return (False, os.path.split(f))
+			else: return (True, None if x._gennedName else [x.name()])
+		#enddef
+
+		# Create the filename with extension
+		cont, f = fn(self)
+		if os.extsep in f: path = f
+		else: path = f[0:-1] + ["%s%s%s" % (f[-1], os.extsep, self["ext"] or ext)]
+
+		# Traverse parents for directory structure while requested
+		x = self.parent()
+		while cont and x:
+			cont, name = fn(x)
+			if name: path = name + path
+			x = x.parent()
+		#endwhile
+
+		# Finalize path, make directories
+		path = os.path.normpath(os.path.join(*(folder + path)))
+		try: os.makedirs(os.path.dirname(path))
+		except os.error: pass
+
+		# Return requested thing (path or handle)
+		if retName: return path
+		return codecs.open(path, encoding="utf-8", mode=mode)
+	#enddef
+
+	def close(self, handle):
+		"""Helper method for closing files"""
+		try: handle.close()
+		except AttributeError: del handle
+	#enddef
+
+	def importData(self, rom, folder):
+		"""Stub. Fill this in to import appriately"""
+		pass
+	#enddef
+
+	def exportData(self, rom, folder):
+		"""Stub. Fill this in to export appriately"""
+		pass
 	#enddef
 #endclass
 
@@ -870,3 +996,4 @@ class Range(List):
 		return ":".join(ret)
 	#enddef
 #endclass
+
