@@ -34,7 +34,7 @@ class RPL:
 		) % {
 			"r1": r'(?:[0-9',
 			"r2": r']|(?<![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)',
-			"lit": r'{}\[\],\$"#\r\n',
+			"lit": r'{}\[\],\$@"#\r\n' r"'",
 			"key": r'[a-z]+[0-9]*'
 		}
 	, re.M | re.U)
@@ -820,7 +820,7 @@ class RPLRef:
 	"""Manages references to other fields"""
 
 	spec = re.compile(r'@?([^.]+)(?:\.([^\[]*))?((?:\[[0-9]+\])*)')
-	heir = re.compile(r'^(g*)parent$')
+	heir = re.compile(r'^(?=.)((w*)back_?)?((g*)parent)?$')
 
 	typeName = "reference"
 
@@ -842,15 +842,30 @@ class RPLRef:
 		return ret
 	#enddef
 
-	def get(self):
+	def get(self, callers=[]):
 		"""Return referenced value"""
-		# First check if we're referring to self or parents
-		parent = RPLRef.heir.match(self.__struct)
-		if self.__struct == "this" or parent:
-			ret = self.__container
-			if parent:
-				for g in parent.group(1): ret = ret.parent()
-			#endif
+		# When a reference is made, this function should know what struct made
+		#  the reference ("this", ie. self.__container) BUT also the chain of
+		#  references up to this point..
+		# First check if we're referring to self or referrer and/or parents
+		heir = RPLRef.heir.match(self.__struct)
+		if self.__struct == "this" or heir:
+			# Referrer history
+			if heir.group(1):
+				try: ret = callers[-1 - len(heir.group(2))]
+				except IndexError: raise RPLError("No %s." % self.__struct)
+			# "this" or parents only
+			else: ret = self.__container
+			# "parent"
+			if heir.group(3): ret = ret.parent()
+			# The gs (great/grand) in g*parent
+			for g in heir.group(4):
+				try: ret = ret.parent()
+				except Exception as x:
+					if ret is not None: raise x
+				#endtry
+				if ret is None: raise RPLError("No %s." % self.__struct)
+			#endfor
 		else: ret = self.__rpl.structsByName[self.__struct]
 
 		if not self.__key: return ret.basic()
@@ -858,7 +873,7 @@ class RPLRef:
 		for x in self.__idxs: ret = ret.get()[x]
 
 		# TODO: Verify type
-
+		# .get(callers + [self])
 		return ret.get()
 	#endif
 #endclass
