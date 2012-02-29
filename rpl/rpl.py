@@ -4,8 +4,8 @@ from sys import stderr
 import os
 
 # TODO:
-#  * Proper errors for RPLRef.get
-#  * Make RPLRef.get verify types (pass calling struct/key)
+#  * RPLRef issues:
+#    * @back
 #  * Compare to old one, make sure everything exists..
 
 def err(msg): stderr.write(unicode(msg) + u"\n")
@@ -21,7 +21,7 @@ class RPL:
 	# Constants
 	tokenize = re.compile(
 		(r'\s*(?:'                                # Whitespace
-		r'"([^"\r\n]*)"|'                         # String
+		r'"([^"\r\n]*)"|'r"'([^'\r\n]*)'|"         # String
 		# Have to remove `s in processing
 		r'((?:\s*`[^`]*`\s*(?:#.*)?)+)|'          # Multi-line String
 		# Number or range (verify syntactically correct range later)
@@ -136,7 +136,10 @@ class RPL:
 
 			# Premake these~
 			for x in self.static:
-				self.static[x] = self.parseData(self.static[x])
+				# Hrm...
+				if type(self.static[x]) is not tuple:
+					self.static[x] = self.parseData(self.static[x])
+				#endif
 			#endfor
 		#endif
 
@@ -150,8 +153,13 @@ class RPL:
 
 		for token in RPL.tokenize.finditer(raw):
 			groups = token.groups() # Used later
-			sstr,mstr,num,key,flow,ref,lit = groups
+			dstr,sstr,mstr,num,key,flow,ref,lit = groups
+			sstr = dstr or sstr # Double or single
 			add, error, skipSubInst = None, None, False
+
+			# Find the position (used for ref and errors)
+			pos = token.start()
+			line, char = raw.count("\n",0,pos) + 1, pos - raw.rfind("\n",0,pos) + 1
 
 			try:
 				if lit:
@@ -228,7 +236,8 @@ class RPL:
 					#endif
 
 					currentKey = key
-				elif sstr or mstr or num or ref: add = self.parseData(groups)
+				elif sstr or mstr or num or ref:
+					add = self.parseData(groups, currentStruct, currentKey, line, char)
 				# This is for whitespace, comments, etc. Things with no return.
 				else: continue
 			except RPLError as x: error = x.args[0]
@@ -237,12 +246,9 @@ class RPL:
 				error = "Literal with no purpose: %s" % lastLit
 			#endif
 
-			# Find the position (used for ref and errors)
-			pos = token.start()
-			line, char = raw.count("\n",0,pos) + 1, pos - raw.rfind("\n",0,pos) + 1
-
 			if add:
-				if type(add) is tuple: dtype, val = self.parseCreate(add, skipSubInst)
+				if type(add) is tuple:
+					dtype, val = self.parseCreate(add, currentStruct, currentKey, line, char, skipSubInst)
 				else: dtype, val = add.typeName, add # For statics
 
 				if adder:
@@ -264,13 +270,13 @@ class RPL:
 		#endfor
 	#enddef
 
-	def parseCreate(self, add, skipSubInst=False):
+	def parseCreate(self, add, currentStruct, currentKey, line, char, skipSubInst=False):
 		"""Instantiates data. Used by parse and parseData"""
 		dtype, val = add
 
 		# Special handler for references (cause they're so speeshul)
 		if dtype == "reference":
-			val = RPLRef(self, currentStruct, ref, line, char)
+			val = RPLRef(self, currentStruct, currentKey, val, line, char)
 		elif skipSubInst: val = self.wrap(*add)
 		else:
 			if type(val) is not list: nl, val = True, [add]
@@ -283,14 +289,15 @@ class RPL:
 		return (dtype, val)
 	#enddef
 
-	def parseData(self, data):
+	def parseData(self, data, currentStruct=None, currentKey=None, line=-1, char=-1):
 		"""Parse one value"""
 		pp = type(data) is tuple
-		if pp: sstr,mstr,num,key,flow,ref,lit = data
+		if pp: dstr,sstr,mstr,num,key,flow,ref,lit = data
 		else:
-			try: sstr,mstr,num,key,flow,ref,lit = self.tokenize.match(data).groups()
+			try: dstr,sstr,mstr,num,key,flow,ref,lit = self.tokenize.match(data).groups()
 			except AttributeError: raise RPLError("Syntax error in data: %s" % data)
 		#endif
+		sstr = dstr or sstr
 
 		add, error = None, None
 
@@ -334,13 +341,13 @@ class RPL:
 			#endif
 		elif lit or (type(data) is str and data == ""):
 			if lit in self.static: add = self.static[lit]
-			else: add = ("literal", lit)
+			else: add = ("literal", lit.strip())
 		elif pp: raise RPLError("Invalid data.")
 		else: raise RPLError("Invalid data: %s" % data)
 
 		if add and pp: return add
 		elif add and type(add) is not tuple: return add
-		elif add: return self.parseCreate(add)
+		elif add: return self.parseCreate(add, currentStruct, currentKey, line, char)
 		elif error: raise RPLError(error)
 		elif pp: raise RPLError("Error parsing data.")
 		else: raise RPLError("Error parsing data: %s" % data)
@@ -433,6 +440,7 @@ class RPL:
 		else: raise RPLError('No type "%s" defined' % typeName)
 	#enddef
 
+	def child(self, name): return self.root[name]
 	def __iter__(self): return self.root.itervalues()
 #endclass
 
@@ -695,7 +703,7 @@ class RPLStruct(object):
 
 	def basic(self):
 		"""Stub. Return basic data (name by default)"""
-		return self._name
+		return Literal(self._name)
 	#enddef
 
 	def __len__(self):
@@ -704,6 +712,7 @@ class RPLStruct(object):
 	#enddef
 
 	def __nonzero__(self): return True
+	def child(self, name): return self._children[name]
 	def __iter__(self): return self._children.itervalues()
 #endclass
 
@@ -824,9 +833,10 @@ class RPLRef:
 
 	typeName = "reference"
 
-	def __init__(self, rpl, container, ref, line, char):
+	def __init__(self, rpl, container, mykey, ref, line, char):
 		self.__rpl = rpl
 		self.__container = container
+		self.__mykey = mykey
 		self.__pos = (line, char)
 
 		self.__struct, self.__key, idxs = self.spec.match(ref).groups()
@@ -842,7 +852,7 @@ class RPLRef:
 		return ret
 	#enddef
 
-	def get(self, callers=[]):
+	def get(self, callers=[], retCl=False):
 		"""Return referenced value"""
 		# When a reference is made, this function should know what struct made
 		#  the reference ("this", ie. self.__container) BUT also the chain of
@@ -850,31 +860,52 @@ class RPLRef:
 		# First check if we're referring to self or referrer and/or parents
 		heir = RPLRef.heir.match(self.__struct)
 		if self.__struct == "this" or heir:
+			if self.__container is None or self.__mykey is None:
+				raise RPLError("Cannot use relative references in data form.")
+			#endif
 			# Referrer history
-			if heir.group(1):
+			if heir and heir.group(1):
 				try: ret = callers[-1 - len(heir.group(2))]
 				except IndexError: raise RPLError("No %s." % self.__struct)
 			# "this" or parents only
 			else: ret = self.__container
 			# "parent"
-			if heir.group(3): ret = ret.parent()
-			# The gs (great/grand) in g*parent
-			for g in heir.group(4):
-				try: ret = ret.parent()
-				except Exception as x:
-					if ret is not None: raise x
-				#endtry
-				if ret is None: raise RPLError("No %s." % self.__struct)
-			#endfor
+			if heir and heir.group(3):
+				ret = ret.parent()
+				# The gs (great/grand) in g*parent
+				for g in heir.group(4):
+					try: ret = ret.parent()
+					except Exception as x:
+						if ret is not None: raise x
+					#endtry
+					if ret is None: raise RPLError("No %s." % self.__struct)
+				#endfor
+			#endif
 		else: ret = self.__rpl.structsByName[self.__struct]
 
-		if not self.__key: return ret.basic()
-		ret = ret[self.__key]
-		for x in self.__idxs: ret = ret.get()[x]
+		if not self.__key: ret = ret.basic()
+		else: ret = ret[self.__key]
+		callersAndSelf = callers + [self]
+		for i,x in enumerate(self.__idxs):
+			try:
+				if isinstance(ret, RPLRef): ret = ret.get(callersAndSelf)[x]
+				else: ret = ret.get()[x]
+			except IndexError:
+				raise RPLError("List not deep enough. Failed on %ith index." % i)
+			#endtry
+		#endfor
 
-		# TODO: Verify type
-		# .get(callers + [self])
-		return ret.get()
+		if isinstance(ret, RPLRef): ret = ret.get(callersAndSelf, True)
+
+		# Verify type
+		if (self.__container is not None and self.__mykey is not None
+		and self.__mykey in self.__container._keys):
+			ret = self.__container._keys[self.__mykey][0].verify(data)
+		#endif
+
+		if retCl: return ret
+		else: return ret.get()
+		#endif
 	#endif
 #endclass
 

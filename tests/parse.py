@@ -16,6 +16,7 @@ def checklen(data, exLen):
 
 def subcheck(data, name, exType, exVal, typeOnly=False):
 	tName, val = data.typeName, data.get()
+	if tName == "reference": tName = data.get(retCl=True).typeName
 	if tName != exType:
 		return err('Unexpected datatype for "%s" (got "%s")' % (
 			name, tName
@@ -50,6 +51,7 @@ def subcomp(l1, l2, heir):
 
 def comp(data, key, exType, ex):
 	tName, val = data[key].typeName, data[key].get()
+	if tName == "reference": tName = data[key].get(retCl=True).typeName
 	if tName != exType:
 		return err('Unexpected datatype for "%s.%s" (got "%s")' % (
 			data.name(), key, tName
@@ -170,6 +172,32 @@ def main():
 	#log("# Test 3: write tests #")
 	# TODO: Allow parsing data files, then I can add this
 	#log("Test 3 end")
+
+	log("# Test 4: References #")
+	refers = rpl.RPL()
+	refers.parse(path.join("parse", "references.rpl"))
+	log("Loaded and parsed")
+	x = refers.child("tests")
+	if (not check(x, "test1", "number", 1)
+	or not comp(x, "test2", "list", [ ("literal", "+"), ("literal", "more"),
+		("literal", "voluptuous"), ("list", [ ("literal", "he"), ("literal", "he"),
+		("literal", "he") ]) ] )
+	or not check(x, "test3", "literal", "+")
+	or not check(x, "test4", "literal", "more")
+	or not check(x, "test5", "literal", "voluptuous")
+	or not comp(x, "test6", "list", [ ("literal", "he"), ("literal", "he"),
+		("literal", "he") ])
+	or not check(x, "test7", "literal", "he")
+	or not check(x, "test8", "number", 1330494503)
+	or not check(x, "test9", "number", 1)
+	or not check(x, "test10", "number", 1)
+	or not check(x, "test11", "number", 3)
+	): return 4
+	x = refers.child("ImaGParent").child("ImaParent").child("ImaToysRUsKid")
+	if (not check(x, "test1", "number", 3)
+	or not check(x, "test2", "number", 2)
+	): return 4
+	log("Test 4 end")
 
 	return 0
 #enddef

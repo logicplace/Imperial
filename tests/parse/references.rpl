@@ -1,0 +1,30 @@
+static RefMeBaby {
+	one: 1
+	more: [ +, more, voluptuous, [ he, he, he ], ]
+	time: 1330494503
+}
+
+static ImaGParent {
+	refme: 2
+	static ImaParent {
+		refme: 3
+		static ImaToysRUsKid {
+			test1: @parent.refme
+			test2: @gparent.refme
+		}
+	}
+}
+
+static tests {
+	test1:  @RefMeBaby.one
+	test2:  @RefMeBaby.more
+	test3:  @RefMeBaby.more[0]
+	test4:  @RefMeBaby.more[1]
+	test5:  @RefMeBaby.more[2]
+	test6:  @RefMeBaby.more[3]
+	test7:  @RefMeBaby.more[3][0]
+	test8:  @RefMeBaby.time
+	test9:  @tests.test1
+	test10: @this.test1
+	test11: @ImaToysRUsKid.test1
+}
