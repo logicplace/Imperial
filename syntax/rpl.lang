@@ -27,146 +27,171 @@
 	<default-regex-options case-sensitive="false"/>
 
 	<definitions>
-		<context id="escape-error" style-ref="error">
-			<match>\$([^\$]|.?[^0-9a-fA-F])</match>
-		</context>
+		<define-regex id="struct-name">[a-zA-Z_][a-zA-Z_\-0-9]*</define-regex>
+		<define-regex id="key-name">[a-z]+[0-9]*</define-regex>
 
 		<context id="escape" style-ref="escape">
 			<match>\$(\$|[0-9a-fA-F]{2})</match>
 		</context>
 
-		<context id="string" style-ref="string" end-at-line-end="true" class="string" class-disabled="no-spell-check">
-			<start>"</start>
-			<end>"</end>
+		<context id="escape-error" style-ref="error">
+			<match>\$(.?[^0-9a-fA-F]|[^$])</match>
+		</context>
+
+		<context id="string"><include>
+			<context id="string-dq" style-ref="string" end-at-line-end="true" class="string">
+				<start>"</start><end>"</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="string-sq" style-ref="string" end-at-line-end="true" class="string">
+				<start>'</start><end>'</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+		</include></context>
+
+		<context id="mstring" style-ref="string" end-at-line-end="true" class="string">
+			<start>`</start><end>`</end>
 			<include>
 				<context ref="escape"/>
 				<context ref="escape-error"/>
 			</include>
 		</context>
 
-		<context id="mstring" style-ref="string" end-at-line-end="true" class="string" class-disabled="no-spell-check">
-			<start>`</start>
-			<end>`</end>
-			<include>
-				<context ref="escape"/>
-				<context ref="escape-error"/>
-			</include>
+		<context id="keywords" style-ref="keyword">
+			<keyword>false</keyword>
+			<keyword>true</keyword>
+			<keyword>black</keyword>
+			<keyword>white</keyword>
+			<keyword>red</keyword>
+			<keyword>blue</keyword>
+			<keyword>green</keyword>
+			<keyword>yellow</keyword>
+			<keyword>magenta</keyword>
+			<keyword>pink</keyword>
+			<keyword>cyan</keyword>
+			<keyword>gray</keyword>
+			<keyword>byte</keyword>
+			<keyword>short</keyword>
+			<keyword>long</keyword>
+			<keyword>double</keyword>
+			<keyword>LRUD</keyword>
+			<keyword>LRDU</keyword>
+			<keyword>RLUD</keyword>
+			<keyword>RLDU</keyword>
+			<keyword>UDLR</keyword>
+			<keyword>UDRL</keyword>
+			<keyword>DULR</keyword>
+			<keyword>DURL</keyword>
+			<keyword>LU</keyword>
+			<keyword>LD</keyword>
+			<keyword>RU</keyword>
+			<keyword>RD</keyword>
+			<keyword>UL</keyword>
+			<keyword>UR</keyword>
+			<keyword>DL</keyword>
+			<keyword>DR</keyword>
+			<keyword>big</keyword>
+			<keyword>little</keyword>
 		</context>
 
-		<!--define-regex id="struct-type">(?:ROM|(?:tile|sprite)map|(?:tile|sprite)s?3?|data)</define-regex-->
-		<define-regex id="struct-name">[a-zA-Z_][a-zA-Z_\-0-9]*</define-regex>
+		<context id="number"><include>
+			<context id="number-ok" style-ref="number">
+				<match>(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=:))(?:(?:[\-*](?:[0-9]+|\$[0-9a-fA-F]+))?:(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=[: ]|$)))*(?:[\-*](?:[0-9]+|\$[0-9a-fA-F]+))?</match>
+			</context>
+			<context id="number-invalid" style-ref="error">
+				<match>(?:[0-9]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)(?:[0-9:\-*]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)*(?=[ ,]|$)</match>
+			</context>
+		</include></context>
 
-		<context id="struct-def">
-			<match>^[ \t]*([a-zA-Z_][a-zA-Z_0-9]*)( +\%{struct-name})?[ \t\r\n]*\{</match>
-			<include>
-				<context style-ref="struct" sub-pattern="1"/>
-				<context style-ref="name" sub-pattern="2"/>
-			</include>
+		<context id="hexnum" style-ref="hex">
+			<match>\$[0-9a-fA-F]+(?![0-9a-fA-F]*[\-:])</match>
 		</context>
 
-		<define-regex id="key-name">[a-z]+[0-9]*</define-regex>
-		<!--define-regex id="key-name" extended="true">(?:
-			  id
-			| name
-			| base
-			| file
-			| dimensions
-			| white
-			| black
-			| alpha
-			| setalpha
-			| invert
-			| inverta
-			| rotate
-			| mirror
-			| flip
-			| export
-			| import
-			| dir
-			| position
-			| index
-			| size
-			| map
-			| format
-			| times
-			| pretty
-			| endian
-			| pad
-			| padleft
-			| comment
-		)</define-regex-->
+		<context id="ref" style-ref="ref">
+			<match>@\%{struct-name}(?:\.\%{key-name})?(?:\[[0-9]+\])*</match>
+		</context>
 
-		<define-regex id="keywords" extended="true">(?:
-			  false
-			| true
-			| black
-			| white
-			| red
-			| blue
-			| green
-			| yellow
-			| magenta
-			| pink
-			| cyan
-			| gray
-			| byte
-			| short
-			| long
-			| double
-			| LRUD|LU
-			| LRDU|LD
-			| RLUD|RU
-			| RLDU|RD
-			| UDLR|UL
-			| UDRL|UR
-			| DULR|DL
-			| DURL|DR
-			| big
-			| little
-		)</define-regex>
+		<context id="literal" style-ref="string">
+			<match>[^,\["'}\] \t][^#,\]}]+</match>
+		</context>
 
-		<define-regex id="number">(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=:))(?:(?:[\-*](?:[0-9]+|\$[0-9a-fA-F]+))?:(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=[: ]|$)))*(?:[\-*](?:[0-9]+|\$[0-9a-fA-F]+))?</define-regex>
-		<define-regex id="number-invalid">(?:[0-9]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)(?:[0-9:\-*]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)*(?=[ ,]|$)</define-regex>
-		<define-regex id="hexnum">\$[0-9a-fA-F]+(?![0-9a-fA-F]*[\-:])</define-regex>
-
-		<define-regex id="ref">@\%{struct-name}(?:\.\%{key-name})?(?:\[[0-9]+\])*</define-regex>
-
-		<define-regex id="value">(\%{ref})|(\%{keywords})|(\%{hexnum})|(\%{number})|(\%{number-invalid})|([^,\["][^#,]*)</define-regex>
-
-		<context id="key-value">
-			<match>(?:^|,|(?&lt;={))[ \t]*(\%{key-name}): *(?&lt;!\[)(?:\%{value}|)</match>
+		<context id="key">
+			<match>(\%{key-name}):</match>
 			<include>
 				<context style-ref="key" sub-pattern="1"/>
-				<context style-ref="ref" sub-pattern="2"/>
-				<context style-ref="keyword" sub-pattern="3"/>
-				<context style-ref="hex" sub-pattern="4"/>
-				<context style-ref="number" sub-pattern="5"/>
-				<context style-ref="error" sub-pattern="6"/>
-				<context style-ref="string" sub-pattern="7"/>
 			</include>
 		</context>
 
-		<!-- TODO: Allow data on its own line, assuming it's in a list -->
 		<context id="list">
-			<match>(?&lt;=[\[,])[ \t]*\%{value}[ \t]*(?=[\],])</match>
-			<include>
-				<context style-ref="ref" sub-pattern="1"/>
-				<context style-ref="keyword" sub-pattern="2"/>
-				<context style-ref="hex" sub-pattern="3"/>
-				<context style-ref="number" sub-pattern="4"/>
-				<context style-ref="error" sub-pattern="5"/>
-				<context style-ref="string" sub-pattern="6"/>
-			</include>
-		</context>
-
-		<context id="rpl">
+			<start>\[</start><end>\]</end>
 			<include>
 				<context ref="def:shell-like-comment"/>
+				<context ref="list"/>
 				<context ref="string"/>
 				<context ref="mstring"/>
-				<context ref="struct-def"/>
-				<context ref="key-value"/>
+				<context ref="hexnum"/>
+				<context ref="number"/>
+				<context ref="hexnum"/>
+				<context ref="ref"/>
+				<context ref="literal"/>
+			</include>
+		</context>
+
+		<context id="struct">
+			<start>^[ \t]*([a-zA-Z_][a-zA-Z_0-9]*)( +\%{struct-name})?[ \t]*(?=$|\{)</start>
+			<include>
+				<context style-ref="struct" where="start" sub-pattern="1"/>
+				<context style-ref="name" where="start" sub-pattern="2"/>
+				<context end-parent="true">
+					<start>\{</start><end>\}</end>
+					<include>
+						<context ref="def:shell-like-comment"/>
+						<context ref="struct"/>
+						<context ref="key"/>
+						<context ref="list"/>
+						<context ref="string"/>
+						<context ref="mstring"/>
+						<context ref="hexnum"/>
+						<context ref="number"/>
+						<context ref="ref"/>
+						<context ref="literal"/>
+					</include>
+				</context>
+			</include>
+		</context>
+
+		<context id="rpl-data" end-parent="true" first-line-only="true">
+			<start>\%{def:always-match}</start>
+			<include>
+				<context ref="def:shell-like-comment"/>
 				<context ref="list"/>
+				<context ref="string"/>
+				<context ref="mstring"/>
+				<context ref="hexnum"/>
+				<context ref="number"/>
+				<context ref="ref"/>
+				<context ref="literal"/>
+			</include>
+		</context>
+
+		<context id="rpl-reg" end-parent="true" first-line-only="true">
+			<start>\%{def:always-match}</start>
+			<include>
+				<context ref="def:shell-like-comment"/>
+				<context ref="struct"/>
+			</include>
+		</context>
+
+		<context id="rpl" class="no-spell-check">
+			<include>
+				<context ref="rpl-reg"/>
+				<context ref="rpl-data"/>
 			</include>
 		</context>
 	</definitions>
