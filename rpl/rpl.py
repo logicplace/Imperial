@@ -6,7 +6,6 @@ import os
 # TODO:
 #  * RPLRef issues:
 #    * @back
-#  * Compare to old one, make sure everything exists..
 
 def err(msg): stderr.write(unicode(msg) + u"\n")
 
@@ -60,39 +59,50 @@ class RPL:
 	)
 	isRange = re.compile(r'.*[:\-*].*')
 
-	# Predefined
-	static = {
-		 "false":   "0"
-		,"true":    "1"
-		,"black":   "$000000"
-		,"white":   "$ffffff"
-		,"red":     "$ff0000"
-		,"blue":    "$00ff00"
-		,"green":   "$0000ff"
-		,"yellow":  "$ffff00"
-		,"magenta": "$ff00ff"
-		,"pink":    "$ff00ff"
-		,"cyan":    "$00ffff"
-		,"gray":    "$a5a5a5"
-		,"byte":    "1"
-		,"short":   "2"
-		,"long":    "4"
-		,"double":  "8"
-		,"LU":      "LRUD"
-		,"LD":      "LRDU"
-		,"RU":      "RLUD"
-		,"RD":      "RLDU"
-		,"UL":      "UDLR"
-		,"UR":      "UDRL"
-		,"DL":      "DULR"
-		,"DR":      "DURL"
-	}
+	def __init__(self):
+		"""Be sure to call this!"""
+		self.static = {}
+		self.types = {}
+		self.structs = {}
+		self.root = {}
+		self.structsByName = {}
 
-	types = {}
-	structs = {}
-	root = {}
-	structsByName = {}
-	didBase = False
+		# Registrations
+		self.regStruct(Static)
+		self.regType(String)
+		self.regType(Literal)
+		self.regType(Number)
+		self.regType(HexNum)
+		self.regType(List)
+		self.regType(Range)
+
+		for k,v in {
+			 "false":   "0"
+			,"true":    "1"
+			,"black":   "$000000"
+			,"white":   "$ffffff"
+			,"red":     "$ff0000"
+			,"blue":    "$00ff00"
+			,"green":   "$0000ff"
+			,"yellow":  "$ffff00"
+			,"magenta": "$ff00ff"
+			,"pink":    "$ff00ff"
+			,"cyan":    "$00ffff"
+			,"gray":    "$a5a5a5"
+			,"byte":    "1"
+			,"short":   "2"
+			,"long":    "4"
+			,"double":  "8"
+			,"LU":      "LRUD"
+			,"LD":      "LRDU"
+			,"RU":      "RLUD"
+			,"RD":      "RLDU"
+			,"UL":      "UDLR"
+			,"UR":      "UDRL"
+			,"DL":      "DULR"
+			,"DR":      "DURL"
+		}.iteritems(): self.regStatic(k, v)
+	#enddef
 
 	def readFrom(self, etc):
 		"""
@@ -122,27 +132,6 @@ class RPL:
 		"""
 		Read in a file and parse it.
 		"""
-
-		if not self.didBase:
-			# Register all the basic stuff
-			didBase = True
-			self.regStruct(Static)
-			self.regType(String)
-			self.regType(Literal)
-			self.regType(Number)
-			self.regType(HexNum)
-			self.regType(List)
-			self.regType(Range)
-
-			# Premake these~
-			for x in self.static:
-				# Hrm...
-				if type(self.static[x]) is not tuple:
-					self.static[x] = self.parseData(self.static[x])
-				#endif
-			#endfor
-		#endif
-
 		raw = self.readFrom(inFile)
 
 		lastLit = None
@@ -248,8 +237,8 @@ class RPL:
 
 			if add:
 				if type(add) is tuple:
-					dtype, val = self.parseCreate(add, currentStruct, currentKey, line, char, skipSubInst)
-				else: dtype, val = add.typeName, add # For statics
+					add = self.parseCreate(add, currentStruct, currentKey, line, char, skipSubInst)
+				dtype, val = add.typeName, add # For statics
 
 				if adder:
 					adder[-1].append(val)
@@ -286,7 +275,7 @@ class RPL:
 			else: val = self.wrap(dtype, val)
 		#endif
 
-		return (dtype, val)
+		return val
 	#enddef
 
 	def parseData(self, data, currentStruct=None, currentKey=None, line=-1, char=-1):
@@ -382,7 +371,7 @@ class RPL:
 		"""
 		Method to register a custom static variable. Use sparingly.
 		"""
-		self.static[name] = value
+		self.static[name] = self.parseData(value)
 	#enddef
 
 	def regStruct(self, classRef):
@@ -701,7 +690,7 @@ class RPLStruct(object):
 	def name(self): return self._name
 	def parent(self): return self._parent
 
-	def basic(self):
+	def basic(self, callers=[]):
 		"""Stub. Return basic data (name by default)"""
 		return Literal(self._name)
 	#enddef
@@ -767,42 +756,44 @@ class Serializable(RPLStruct):
 		self.regKey("import", "number", "true")
 	#enddef
 
-	def open(self, folder, ext="bin", retName=False):
+	def open(self, folder, ext="bin", retName=False, justOpen=False):
 		"""Helper method for opening files"""
-		if type(folder) is not list: folder = os.path.split(os.path.normpath(folder))
+		if not justOpen:
+			if type(folder) is not list: folder = os.path.split(os.path.normpath(folder))
 
-		# Function to return defined filename or struct's defined name
-		# If the filename starts with a / it is considered a subdir of parent
-		# structs.
-		def fn(x):
-			if "file" in x._data:
-				f = os.path.normpath(x._data["file"].get())
-				if f[0:len(os.sep)] == os.sep: return (True, os.path.split(f[len(os.sep):]))
-				else: return (False, os.path.split(f))
-			else: return (True, None if x._gennedName else [x.name()])
-		#enddef
+			# Function to return defined filename or struct's defined name
+			# If the filename starts with a / it is considered a subdir of parent
+			# structs.
+			def fn(x):
+				if "file" in x._data:
+					f = os.path.normpath(x._data["file"].get())
+					if f[0:len(os.sep)] == os.sep: return (True, os.path.split(f[len(os.sep):]))
+					else: return (False, os.path.split(f))
+				else: return (True, None if x._gennedName else [x.name()])
+			#enddef
 
-		# Create the filename with extension
-		cont, f = fn(self)
-		if os.extsep in f: path = f
-		else: path = f[0:-1] + ["%s%s%s" % (f[-1], os.extsep, self["ext"] or ext)]
+			# Create the filename with extension
+			cont, f = fn(self)
+			if os.extsep in f: path = f
+			else: path = f[0:-1] + ["%s%s%s" % (f[-1], os.extsep, self["ext"] or ext)]
 
-		# Traverse parents for directory structure while requested
-		x = self.parent()
-		while cont and x:
-			cont, name = fn(x)
-			if name: path = name + path
-			x = x.parent()
-		#endwhile
+			# Traverse parents for directory structure while requested
+			x = self.parent()
+			while cont and x:
+				cont, name = fn(x)
+				if name: path = name + path
+				x = x.parent()
+			#endwhile
 
-		# Finalize path, make directories
-		path = os.path.normpath(os.path.join(*(folder + path)))
-		try: os.makedirs(os.path.dirname(path))
-		except os.error: pass
+			# Finalize path, make directories
+			path = os.path.normpath(os.path.join(*(folder + path)))
+			try: os.makedirs(os.path.dirname(path))
+			except os.error: pass
 
-		# Return requested thing (path or handle)
-		if retName: return path
-		return codecs.open(path, encoding="utf-8", mode=mode)
+			# Return requested thing (path or handle)
+			if retName: return path
+		else: path = folder
+		return codecs.open(path, encoding="utf-8", mode="r+")
 	#enddef
 
 	def close(self, handle):
@@ -917,6 +908,21 @@ class RPLData(object):
 	def __init__(self, data): self.set(data)
 	def get(self): return self._data
 	def set(self, data): self._data = data
+	def __eq__(self, data):
+		"""Compare data contained in objects)"""
+		if not isinstance(data, RPLData): data = RPL.parseData(RPL(), data)
+		if isinstance(self, data.__class__) or isinstance(data, self.__class__):
+			d1, d2 = self.get(), data.get()
+			if type(d1) is list and type(d2) is list:
+				if len(d1) != len(d2): return False
+				for i,x in enumerate(d1):
+					if not RPLData.__eq__(x, d2[i]): return False
+				#endfor
+				return True
+			#endif
+			return d1 == d2
+		else: return False
+	#enddef
 #endclass
 
 class String(RPLData):
