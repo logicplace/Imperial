@@ -908,6 +908,11 @@ class RPLData(object):
 	def __init__(self, data): self.set(data)
 	def get(self): return self._data
 	def set(self, data): self._data = data
+
+	#def defaultSize(self)       # Returns default size for use by Data struct
+	#def serialize(self, **opts)         # Return binary form of own data.
+	#def unserialize(self, data, **opts) # Parse binary data and set to self.
+
 	def __eq__(self, data):
 		"""Compare data contained in objects)"""
 		if not isinstance(data, RPLData): data = RPL.parseData(RPL(), data)
@@ -943,6 +948,9 @@ class String(RPLData):
 		return '"' + String.binchr.sub(String.replOut, self._data) + '"'
 	#enddef
 
+	def serialize(self): return self._data.encode("utf8")
+	def unserialize(self, data): self._data = data.decode("utf8")
+
 	@staticmethod
 	def replIn(mo):
 		if mo.group(1) == "$": return "$"
@@ -977,6 +985,28 @@ class Number(RPLData):
 	#enddef
 
 	def __unicode__(self): return str(self._data)
+
+	def defaultSize(self): return 4
+	def serialize(self, **opts):
+		big, ander, ret = (opts["endian"] == "big"), 0xff, r''
+		for i in range(opts["size"]):
+			c = chr(self._data & ander >> ((i-1)*8))
+			if big: ret = c + ret
+			else: ret += c
+			ander <<= 8
+		#endfor
+		return ret
+	#enddef
+	def unserialize(self, data, **opts):
+		big = (opts["endian"] == "big")
+		size = len(data)
+		self._data = 0
+		for i,x in enumerate(data):
+			if big: shift = size-i+1
+			else: shift = i-1
+			self._data |= ord(x) << (shift*8)
+		#endfor
+	#enddef
 #endclass
 
 class HexNum(Number):
