@@ -85,7 +85,7 @@ def main():
 
 	log("# Test 1: rpl (basic) #")
 	basic = rpl.RPL()
-	basic.parse(path.join("parse", "rpl.rpl"))
+	basic.parse(path.join("rpls", "rpl.rpl"))
 	log("Loaded and parsed")
 	for x in basic:
 		if x.name() == "AndAnotherStatic":
@@ -170,6 +170,10 @@ def main():
 	or  not typeCheck("Repeat5Test3", "[number,string]!", RL(Num,Str), "list")
 	or  not typeCheck("Repeat5Test4", "[number,string]!", RL(Str,Num), None)
 	or  not typeCheck("Repeat5Test5", "[number,string]!", RL(Num,Str,Num,Str), None)
+	or  not typeCheck("Repeat6Test1", "[number]~", Num, "number")
+	or  not typeCheck("Repeat6Test2", "[number]~", RL(Num), "list")
+	or  not typeCheck("Repeat7Test1", "[number].", Num, "number")
+	or  not typeCheck("Repeat7Test2", "[number].", RL(Num), "list")
 	or  not typeCheck("ROTest1", "[number]*|string", Num, "list")
 	or  not typeCheck("ROTest2", "[number]*|string", RL(Num), "list")
 	or  not typeCheck("ROTest3", "[number]*|string", Str, "string")
@@ -184,7 +188,7 @@ def main():
 
 	log("# Test 4: References #")
 	refers = rpl.RPL()
-	refers.parse(path.join("parse", "references.rpl"))
+	refers.parse(path.join("rpls", "references.rpl"))
 	log("Loaded and parsed")
 	x = refers.child("tests")
 	if (not check(x, "test1", "number", 1)

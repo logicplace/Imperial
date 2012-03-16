@@ -450,9 +450,11 @@ class RPLTypeCheck:
 	 * []+ - Contents may be repeated indefinitely within the list.
 	 * []! - May be any one of the contents not in a list, or the whole list.
 	 *       ie. Like * but unable to repeat the list.
+	 * []~ - Nonnormalizing form of []*
+	 * []. - Nonnormalizing form of []!
 	"""
 
-	tokenize = re.compile(r'\s+|([\[\]*+!|,])|([^\s\[\]*+!|,]+)')
+	tokenize = re.compile(r'\s+|([\[\]*+!~.|,])|([^\s\[\]*+!~.|,]+)')
 
 	def __init__(self, rpl, name, syntax):
 		"""
@@ -489,7 +491,7 @@ class RPLTypeCheck:
 						if len(parents): parents[-1][1][-1] = remain
 					except IndexError: raise RPLError("] without [")
 					lastWasListEnd = True
-				elif flow and flow in "*+!":
+				elif flow and flow in "*+!~.":
 					if lastWasListEnd: remain.rep(flow)
 					else: raise RPLError("Repeater out of place.")
 					lastWasRep = True
@@ -575,13 +577,16 @@ class RPLTCList:
 	def verify(self, data):
 		# Make sure data is a list (unless repeat is * or !)
 		if not isinstance(data, List):
-			if self.__repeat in "*!":
+			if self.__repeat in "*!~.":
 				# This seems like strange form but it's the only logical form
 				# in my mind. This implies [A,B]* is A|B|[A,B]+ Using * on a
 				# multipart list is a little odd to begin with.
 				for x in self.__list:
 					tmp = x.verify(data)
-					if tmp is not None: return List([tmp])
+					if tmp is not None:
+						if self.__repeat in "*!": return List([tmp])
+						else: return tmp
+					#endif
 				#endfor
 			else: return None
 		#endif
