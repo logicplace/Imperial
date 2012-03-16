@@ -127,10 +127,10 @@ def main():
 	log("# Test 2: type checking #")
 	def typeCheck(key, syn, data, expect):
 		tmp = rpl.RPLTypeCheck(basic, key, syn).verify(data)
-		if (not expect and tmp is None) or (tmp.typeName == expect):
+		if ((expect is None and tmp is None) 
+		or (tmp is not None and tmp.typeName == expect)):
 			return True
 		#endif
-		print(tmp)
 		return err('Failed test: "%s"' % key, False)
 	#enddef
 
@@ -153,15 +153,24 @@ def main():
 	or  not typeCheck("OLTest1", "[number|[string],number]", RL(Num,Num), "list")
 	or  not typeCheck("OLTest1", "[number|[string],number]", RL(RL(Str),Num), "list")
 	or  not typeCheck("SSSSSLTest", "[[[[[string]]]]]", RL(RL(RL(RL(RL(Str))))), "list")
-	or  not typeCheck("Repeat1Test1", "[number]*", Num, "number")
+	or  not typeCheck("Repeat1Test1", "[number]*", Num, "list")
 	or  not typeCheck("Repeat1Test2", "[number]*", RL(Num), "list")
 	or  not typeCheck("Repeat1Test3", "[number]*", RL(Num,Num), "list")
 	or  not typeCheck("Repeat1Test4", "[number]*", Str, None)
 	or  not typeCheck("Repeat2Test1", "[number]+", Num, None)
 	or  not typeCheck("Repeat2Test2", "[number]+", RL(Num), "list")
 	or  not typeCheck("Repeat2Test3", "[number]+", RL(Num,Num), "list")
-	or  not typeCheck("Repeat2Test4", "[number|string|list]+", RL(Str), "list")
-	or  not typeCheck("ROTest1", "[number]*|string", Num, "number")
+	or  not typeCheck("Repeat3Test", "[number|string|list]+", RL(Str), "list")
+	or  not typeCheck("Repeat4Test1", "[number,string]*", Num, "list")
+	or  not typeCheck("Repeat4Test2", "[number,string]*", Str, "list")
+	or  not typeCheck("Repeat4Test3", "[number,string]*", RL(Num,Str), "list")
+	or  not typeCheck("Repeat4Test4", "[number,string]*", RL(Str,Num), None)
+	or  not typeCheck("Repeat5Test1", "[number,string]!", Num, "list")
+	or  not typeCheck("Repeat5Test2", "[number,string]!", Str, "list")
+	or  not typeCheck("Repeat5Test3", "[number,string]!", RL(Num,Str), "list")
+	or  not typeCheck("Repeat5Test4", "[number,string]!", RL(Str,Num), None)
+	or  not typeCheck("Repeat5Test5", "[number,string]!", RL(Num,Str,Num,Str), None)
+	or  not typeCheck("ROTest1", "[number]*|string", Num, "list")
 	or  not typeCheck("ROTest2", "[number]*|string", RL(Num), "list")
 	or  not typeCheck("ROTest3", "[number]*|string", Str, "string")
 	or  not typeCheck("HeirTest1", "range", rpl.Range([Num,Num]), "range")

@@ -6,6 +6,7 @@ import os
 # TODO:
 #  * RPLRef issues:
 #    * @back
+#  * Make TypeChecking standardize []*?
 
 def err(msg): stderr.write(unicode(msg) + u"\n")
 
@@ -445,11 +446,13 @@ class RPLTypeCheck:
 	 * [type, ...] - List containing specific types
 	 * | - Boolean or
 	 * []* - Can either be just the contents, or a list containing multiple
-	         of that content. NOTE: May only be a single type (no commas).
+	         of that content. Multipart lists treat commas like |
 	 * []+ - Contents may be repeated indefinitely within the list.
+	 * []! - May be any one of the contents not in a list, or the whole list.
+	 *       ie. Like * but unable to repeat the list.
 	"""
 
-	tokenize = re.compile(r'\s+|([\[\]*+|,])|([^\s\[\]*+|,]+)')
+	tokenize = re.compile(r'\s+|([\[\]*+!|,])|([^\s\[\]*+!|,]+)')
 
 	def __init__(self, rpl, name, syntax):
 		"""
@@ -486,7 +489,7 @@ class RPLTypeCheck:
 						if len(parents): parents[-1][1][-1] = remain
 					except IndexError: raise RPLError("] without [")
 					lastWasListEnd = True
-				elif flow and flow in "*+":
+				elif flow and flow in "*+!":
 					if lastWasListEnd: remain.rep(flow)
 					else: raise RPLError("Repeater out of place.")
 					lastWasRep = True
@@ -566,20 +569,28 @@ class RPLTCData:
 
 class RPLTCList:
 	"""Helper class for RPLTypeCheck, contains one list"""
-	def __init__(self, l, r=''): self.__list, self.__repeat = l,r
+	def __init__(self, l, r="]"): self.__list, self.__repeat = l,r
 	def rep(self, r): self.__repeat = r
 
 	def verify(self, data):
-		# Make sure data is a list (unless repeat is *)
+		# Make sure data is a list (unless repeat is * or !)
 		if not isinstance(data, List):
-			if self.__repeat == '*': return self.__list[0].verify(data)
+			if self.__repeat in "*!":
+				# This seems like strange form but it's the only logical form
+				# in my mind. This implies [A,B]* is A|B|[A,B]+ Using * on a
+				# multipart list is a little odd to begin with.
+				for x in self.__list:
+					tmp = x.verify(data)
+					if tmp is not None: return List([tmp])
+				#endfor
 			else: return None
 		#endif
 
 		# Check lengths
 		d = data.get()
-		if self.__repeat and len(d) % len(self.__list) != 0: return None
-		elif not self.__repeat and len(d) != len(self.__list): return None
+		if self.__repeat in "+*":
+			if len(d) % len(self.__list): return None
+		elif len(d) != len(self.__list): return None
 
 		# Loop through list contents to check them all
 		nd = []
