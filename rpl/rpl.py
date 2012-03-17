@@ -452,9 +452,10 @@ class RPLTypeCheck:
 	 *       ie. Like * but unable to repeat the list.
 	 * []~ - Nonnormalizing form of []*
 	 * []. - Nonnormalizing form of []!
+	 * ^   - Recurse parent list at this point
 	"""
 
-	tokenize = re.compile(r'\s+|([\[\]*+!~.|,])|([^\s\[\]*+!~.|,]+)')
+	tokenize = re.compile(r'\s+|([\[\]*+!~.|,])|([^\s\[\]*+!~.|,^]+|\^)')
 
 	def __init__(self, rpl, name, syntax):
 		"""
@@ -529,11 +530,11 @@ class RPLTypeCheck:
 						#endif
 					except IndexError:
 						raise RPLError("Comma only allowed in lists")
-					#edntry
+					#endtry
 				#endif
 
 				if flow != "]": lastWasListEnd = False
-				if not flow or flow not in "*+": lastWasRep = False
+				if not flow or flow not in "*+!~.": lastWasRep = False
 			except RPLError as x:
 				raise RPLError('Key "%s" Char %i: %s' % (
 					name, token.start(), x.args[0]
@@ -557,8 +558,12 @@ class RPLTCData:
 	def __init__(self, rpl, t): self.__rpl, self.__type = rpl, t
 
 	# Starting to feel like I'm overdoing this class stuff :3
-	def verify(self, data):
-		if (self.__type == "all"
+	def verify(self, data, parentList=None):
+		if self.__type == "^":
+			if parentList is not None:
+				return parentList.verify(data, parentList)
+			else: return None
+		elif (self.__type == "all"
 			or isinstance(data, self.__rpl.types[self.__type])
 		): return data
 		elif issubclass(self.__rpl.types[self.__type], data.__class__):
@@ -574,7 +579,7 @@ class RPLTCList:
 	def __init__(self, l, r="]"): self.__list, self.__repeat = l,r
 	def rep(self, r): self.__repeat = r
 
-	def verify(self, data):
+	def verify(self, data, parentList=None):
 		# Make sure data is a list (unless repeat is * or !)
 		if not isinstance(data, List):
 			if self.__repeat in "*!~.":
@@ -600,7 +605,8 @@ class RPLTCList:
 		# Loop through list contents to check them all
 		nd = []
 		for i,x in enumerate(self.__list):
-			nd.append(x.verify(d[i]))
+			# This conditional should prevent infinite recursion.
+			nd.append(x.verify(d[i], self if parentList != self else None))
 			if nd[-1] is None: return None
 		#endfor
 
@@ -613,9 +619,9 @@ class RPLTCOr:
 	"""Helper class for RPLTypeCheck, contains one OR set"""
 	def __init__(self, orSet): self.__or = orSet
 
-	def verify(self, data):
+	def verify(self, data, parentList=None):
 		for x in self.__or:
-			tmp = x.verify(data)
+			tmp = x.verify(data, parentList)
 			if tmp is not None: return tmp
 		#endfor
 		return None
