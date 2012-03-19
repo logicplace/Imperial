@@ -442,20 +442,25 @@ class RPLTypeCheck:
 	Checks a RPLData struct against a set of possibilities.
 	The passed syntax is as follows:
 	 * type - Type name
-	 * all - Any type allowed
+	 * all  - Any type allowed
 	 * [type, ...] - List containing specific types
-	 * | - Boolean or
-	 * []* - Can either be just the contents, or a list containing multiple
+	 * |    - Boolean or
+	 * []*  - Can either be just the contents, or a list containing multiple
 	         of that content. Multipart lists treat commas like |
-	 * []+ - Contents may be repeated indefinitely within the list.
-	 * []! - May be any one of the contents not in a list, or the whole list.
+	 * []*# - Where # is a number indicating the index to match for nonlist
+	          version, rather than matching any index.
+	 * []+  - Contents may be repeated indefinitely within the list.
+	 * []!  - May be any one of the contents not in a list, or the whole list.
 	 *       ie. Like * but unable to repeat the list.
-	 * []~ - Nonnormalizing form of []*
-	 * []. - Nonnormalizing form of []!
-	 * ^   - Recurse parent list at this point
+	 * []!# - See []*#
+	 * []~  - Nonnormalizing form of []*
+	 * []~# - See []*#
+	 * [].  - Nonnormalizing form of []!
+	 * [].# - See []*#
+	 * ^    - Recurse parent list at this point
 	"""
 
-	tokenize = re.compile(r'\s+|([\[\]*+!~.|,])|([^\s\[\]*+!~.|,^]+|\^)')
+	tokenize = re.compile(r'\s+|([\[\]*+!~.|,])(?:(?<=[*!~.])([0-9]+))?|([^\s\[\]*+!~.|,^]+|\^)')
 
 	def __init__(self, rpl, name, syntax):
 		"""
@@ -467,7 +472,8 @@ class RPLTypeCheck:
 		lastWasListEnd, lastWasRep = False, False
 		for token in RPLTypeCheck.tokenize.finditer(syntax):
 			try:
-				flow, tName = token.groups()
+				flow, num, tName = token.groups()
+				if num: num = int(num)
 
 				if tName: lastType = RPLTCData(rpl, tName)
 				elif flow == "[":
@@ -493,7 +499,7 @@ class RPLTypeCheck:
 					except IndexError: raise RPLError("] without [")
 					lastWasListEnd = True
 				elif flow and flow in "*+!~.":
-					if lastWasListEnd: remain.rep(flow)
+					if lastWasListEnd: remain.rep(flow, num)
 					else: raise RPLError("Repeater out of place.")
 					lastWasRep = True
 				elif flow == "|":
@@ -576,13 +582,25 @@ class RPLTCData:
 
 class RPLTCList:
 	"""Helper class for RPLTypeCheck, contains one list"""
-	def __init__(self, l, r="]"): self.__list, self.__repeat = l,r
-	def rep(self, r): self.__repeat = r
+	def __init__(self, l, r="]", num=None):
+		self.__list, self.__repeat, self.__num = l, r, num
+	def rep(self, r, num): self.__repeat, self.__num = r, num
 
 	def verify(self, data, parentList=None):
 		# Make sure data is a list (unless repeat is * or !)
 		if not isinstance(data, List):
 			if self.__repeat in "*!~.":
+				if self.__num is not None:
+					# Select only the given index to compare.
+					if self.__num >= len(self.__list):
+						raise RPLError("Index not in list.")
+					#endif
+					tmp = self.__list[self.__num].verify(data)
+					if tmp is None: return None
+					elif self.__repeat in "*!": return List([tmp])
+					else: return tmp
+				#endif
+
 				# This seems like strange form but it's the only logical form
 				# in my mind. This implies [A,B]* is A|B|[A,B]+ Using * on a
 				# multipart list is a little odd to begin with.
@@ -593,6 +611,7 @@ class RPLTCList:
 						else: return tmp
 					#endif
 				#endfor
+				return None
 			else: return None
 		#endif
 
@@ -927,7 +946,9 @@ class RPLRef:
 ################################################################################
 
 class RPLData(object):
-	def __init__(self, data): self.set(data)
+	def __init__(self, data=None):
+		if data is not None: self.set(data)
+	#enddef
 	def get(self): return self._data
 	def set(self, data): self._data = data
 
@@ -970,8 +991,8 @@ class String(RPLData):
 		return '"' + String.binchr.sub(String.replOut, self._data) + '"'
 	#enddef
 
-	def serialize(self): return self._data.encode("utf8")
-	def unserialize(self, data): self._data = data.decode("utf8")
+	def serialize(self, **opts): return self._data.encode("utf8")
+	def unserialize(self, data, **opts): self._data = data.decode("utf8")
 
 	@staticmethod
 	def replIn(mo):

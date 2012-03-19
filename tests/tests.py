@@ -177,6 +177,8 @@ def main():
 	or  not typeCheck("Repeat8Test1", "[number|^]", RL(RL(Num)), "list")
 	or  not typeCheck("Repeat8Test2", "[^|number]", RL(RL(Num)), "list")
 	or  not typeCheck("Repeat8Test3", "[^|number]", RL(RL(Str)), None)
+	or  not typeCheck("Repeat9Test1", "[string,number]!0", Str, "list")
+	or  not typeCheck("Repeat9Test2", "[string,number]!0", Num, None)
 	or  not typeCheck("ROTest1", "[number]*|string", Num, "list")
 	or  not typeCheck("ROTest2", "[number]*|string", RL(Num), "list")
 	or  not typeCheck("ROTest3", "[number]*|string", Str, "string")
