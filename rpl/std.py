@@ -104,7 +104,13 @@ class Sound(rpl.Serializable):
 #endclass
 
 class Data(rpl.Serializable):
-	"""Manages un/structured binary data."""
+	"""Manages un/structured binary data.
+	What I think this needs to support:
+	 * Self-referencing entries for length
+	 * Ability to use system's references
+	 * Integration with system datatypes
+	 * Describe type, size, endian, sign, and padding
+	"""
 	def __init__(self, rpl, name, parent=None):
 		RPLStruct.__init__(self, rpl, name, parent)
 		# String only uses default data size. Number only uses bin as type
@@ -176,6 +182,56 @@ class Data(rpl.Serializable):
 	#enddef
 
 	def exportData(self, rom, folder):
+	#enddef
+#endclass
+
+class Map(rpl.Serializable):
+	"""
+	Translates data
+	It seems silly that this is serializable, but it needs to know direction.
+	"""
+	def __init__(self, rpl, name, parent=None):
+		# Yes, it only wants RPLStruct's init, NOT Serializable's!!
+		RPLStruct.__init__(self, rpl, name, parent)
+		self.regKey("packed", "string|[number|string]+")
+		self.regKey("unpacked", "string|[number|string]+")
+		self.regKey("data", "[number|string]*")
+	#enddef
+
+	def xxData(self, p, u):
+		ls = self["data"].get()
+		st = isinstance(p, rpl.String) and isinstance(u, rpl.String)
+		if not st and (isinstance(p, rpl.String) or isinstance(u, rpl.String)):
+			raise RPLError("Packed and unpacked must be the same type.")
+		#endif
+		p, u = p.get(), u.get()
+		if len(p) != len(u):
+			raise RPLError("Packed and unpacked must be the same length.")
+		#endif
+
+		np = []
+		for x in p: np.append(x.get())
+		nu = []
+		for x in u: nu.append(x.get())
+
+		newstr = ""
+		for i,x in enumerate(ls):
+			try:
+				if st: newstr += np[nu.index(x)]
+				else: x.set(np[nu.index(x)])
+			except ValueError:
+				if st: newstr += x
+			#endtry
+		#endfor
+		if st: self["data"].set(newstr)
+	#enddef
+
+	def importData(self, rom, folder):
+		self.xxData(self["packed"], self["unpacked"])
+	#enddef
+
+	def exportData(self, rom, folder):
+		self.xxData(self["unpacked"], self["packed"])
 	#enddef
 #endclass
 
