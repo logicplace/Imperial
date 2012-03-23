@@ -5,8 +5,11 @@ import os
 
 # TODO:
 #  * RPLRef issues:
-#    * @back
-#  * Make TypeChecking standardize []*?
+#    * @back (maybe?)
+#  * Serializers that modify the same file need to compound.
+#    Therefore, make a system in which structs request the handler/data to
+#    modify, which will open the file and read it if it's the first, but
+#    otherwise return the already loaded/modified data to be further modified.
 
 def err(msg): stderr.write(unicode(msg) + u"\n")
 
@@ -66,6 +69,7 @@ class RPL:
 		self.types = {}
 		self.structs = {}
 		self.root = {}
+		self.orderedRoot = []
 		self.structsByName = {}
 
 		# Registrations
@@ -171,7 +175,6 @@ class RPL:
 							error = "Expects only type and name for struct declaration."
 						elif currentKey is not None:
 							error = 'Cannot have a struct in a key. (Did you mean "type %s {"?)' % currentKey
-						# TODO: "Cannot have a struct in a data file."
 						else:
 							# Extract type and name
 							structType = structHead[0]
@@ -352,6 +355,7 @@ class RPL:
 		#endif
 		new = self.structs[sType](self, name)
 		self.root[name] = new
+		self.orderedRoot.append(new)
 		return new
 	#enddef
 
@@ -431,7 +435,7 @@ class RPL:
 	#enddef
 
 	def child(self, name): return self.root[name]
-	def __iter__(self): return self.root.itervalues()
+	def __iter__(self): return iter(self.orderedRoot)
 #endclass
 
 ################################################################################
@@ -450,6 +454,7 @@ class RPLTypeCheck:
 	 * []*# - Where # is a number indicating the index to match for nonlist
 	          version, rather than matching any index.
 	 * []+  - Contents may be repeated indefinitely within the list.
+	 * []+# - Only repeat the last # elements, 0 or more times.
 	 * []!  - May be any one of the contents not in a list, or the whole list.
 	 *       ie. Like * but unable to repeat the list.
 	 * []!# - See []*#
@@ -460,7 +465,7 @@ class RPLTypeCheck:
 	 * ^    - Recurse parent list at this point
 	"""
 
-	tokenize = re.compile(r'\s+|([\[\]*+!~.|,])(?:(?<=[*!~.])([0-9]+))?|([^\s\[\]*+!~.|,^]+|\^)')
+	tokenize = re.compile(r'\s+|([\[\]*+!~.|,])(?:(?<=[*!~.+])([0-9]+))?|([^\s\[\]*+!~.|,^]+|\^)')
 
 	def __init__(self, rpl, name, syntax):
 		"""
@@ -587,7 +592,7 @@ class RPLTCList:
 	def rep(self, r, num): self.__repeat, self.__num = r, num
 
 	def verify(self, data, parentList=None):
-		# Make sure data is a list (unless repeat is * or !)
+		# Make sure data is a list (if it is 0 or more)
 		if not isinstance(data, List):
 			if self.__repeat in "*!~.":
 				if self.__num is not None:
@@ -618,14 +623,22 @@ class RPLTCList:
 		# Check lengths
 		d = data.get()
 		if self.__repeat in "+*":
-			if len(d) % len(self.__list): return None
-		elif len(d) != len(self.__list): return None
+			if self.__repeat == "+" and self.__num is not None:
+				# Number of non-repeating elements
+				diff = len(self.__list) - self.__num
+				if len(d) < diff or (len(d)-diff) % self.__num: return None
+				mod = (lambda(i): i if i < diff else ((i-diff) % self.__num) + diff)
+			elif (len(d) % len(self.__list)) == 0:
+				mod = (lambda(i): i % len(self.__list))
+			else: return None
+		elif len(d) == len(self.__list):
+			mod = (lambda(i): i)
+		else: return None
 
 		# Loop through list contents to check them all
 		nd = []
-		for i,x in enumerate(self.__list):
-			# This conditional should prevent infinite recursion.
-			nd.append(x.verify(d[i], self if parentList != self else None))
+		for i,x in enumerate(d):
+			nd.append(self.__list[mod(i)].verify(d[i], self))
 			if nd[-1] is None: return None
 		#endfor
 
@@ -662,8 +675,10 @@ class RPLStruct(object):
 		self._parent = parent
 		self._data = {}
 		self._keys = {}
+		self._orderedData = []
 		self._structs = {}
 		self._children = {}
+		self._orderedChildren = []
 
 		try: self.typeName
 		except AttributeError: self.typeName = self.__class__.__name__.lower()
@@ -678,6 +693,7 @@ class RPLStruct(object):
 		#endif
 		new = self._structs[sType](self._rpl, name, self)
 		self._children[name] = new
+		self._orderedChildren.append(new)
 		return new
 	#enddef
 
@@ -723,8 +739,10 @@ class RPLStruct(object):
 		"""Set data for key, verifying and casting as necessary"""
 		if key in self._keys:
 			# Reference's types are lazily checked
+			addToOrdered = key not in self._data
 			if isinstance(value, RPLRef): self._data[key] = value
 			else: self._data[key] = self._keys[key][0].verify(value)
+			if addToOrdered: self._orderedData.append(self._data[key])
 		else: raise RPLError('"%s" has no key "%s".' % (self.typeName, key))
 	#enddef
 
@@ -743,7 +761,7 @@ class RPLStruct(object):
 
 	def __nonzero__(self): return True
 	def child(self, name): return self._children[name]
-	def __iter__(self): return self._children.itervalues()
+	def __iter__(self): return iter(self._orderedChildren)
 #endclass
 
 class Static(RPLStruct):
@@ -768,6 +786,7 @@ class Static(RPLStruct):
 		#endif
 		new = self._rpl.structs[sType](self._rpl, name, self)
 		self._children[name] = new
+		self._orderedChildren.append(new)
 		return new
 	#enddef
 
@@ -779,6 +798,7 @@ class Static(RPLStruct):
 	def __setitem__(self, key, value):
 		"""Overwrite this cause Static accepts all keys"""
 		self._data[key] = value
+		self._orderedData.append(value)
 	#enddef
 #endclass
 
@@ -884,8 +904,7 @@ class RPLRef:
 		return ret
 	#enddef
 
-	def get(self, callers=[], retCl=False):
-		"""Return referenced value"""
+	def pointer(self, callers=[], retCl=False):
 		# When a reference is made, this function should know what struct made
 		#  the reference ("this", ie. self.__container) BUT also the chain of
 		#  references up to this point..
@@ -914,6 +933,12 @@ class RPLRef:
 				#endfor
 			#endif
 		else: ret = self.__rpl.structsByName[self.__struct]
+		return ret
+	#enddef
+
+	def get(self, callers=[], retCl=False):
+		"""Return referenced value"""
+		ret = self.pointer(callers, retCl)
 
 		if not self.__key: ret = ret.basic()
 		else: ret = ret[self.__key]
@@ -939,6 +964,42 @@ class RPLRef:
 		else: return ret.get()
 		#endif
 	#endif
+
+	def set(self, data, callers=[], retCl=False):
+		"""Set referenced value (these thigns are pointers, y'know"""
+		ret = self.pointer(callers, retCl)
+
+		if not self.__key:
+			try:
+				# This passes unwrapped data
+				ret.setBasic(data)
+				return True
+			except AttributeError: return False
+		elif not len(self.__idxs):
+			# Needs to wrap data, base it on type that's currently there?
+			ret[self.__key] = ret[self.__key].__class__(data)
+			return True
+		else:
+			k = self.__key
+			oret = None
+			callersAndSelf = callers + [self]
+			for i,x in enumerate(self.__idxs):
+				try:
+					oret = ret[k]
+					if isinstance(ret, RPLRef): ret = ret[k].get(callersAndSelf)
+					else: ret = ret[k].get()
+					ret[x] # Throw error if it doesn't exist
+					k = x
+				except IndexError:
+					raise RPLError("List not deep enough. Failed on %ith index." % (i-1))
+				#endtry
+			#endfor
+			# Needs to wrap data, base it on type that's currently there?
+			ret[k] = ret[k].__class__(data)
+			oret.set(ret)
+			return True
+		#endif
+	#enddef
 #endclass
 
 ################################################################################
