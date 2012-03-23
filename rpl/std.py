@@ -114,71 +114,49 @@ class Data(rpl.Serializable):
 	def __init__(self, rpl, name, parent=None):
 		RPLStruct.__init__(self, rpl, name, parent)
 		# String only uses default data size. Number only uses bin as type
-		self.regKey("format", "number|[[string|^,number]!0]*")
+		self.regKey("format", "string", "")
 		self.regKey("times", "number", 1)
 		self.regKey("endian", "string", "little")
 		self.regKey("pad", "string", "\x00")
-		self.regKey("padleft", "number", "false")
+		self.regKey("padside", "string", "left")
 		self.regKey("pretty", "number", "false")
 		self.regKey("comment", "string", "")
+		self.regKey("x", "string|[string, number, string|number]+1", "")
 	#enddef
 
-	def importData(self, rom, folder):
-		tmp = self["format"].get()
-		tmp0 = tmp[0].get()
-		fn = self.open(folder,
-			(("bin" if len(tmp0) == 1 and isinstance(tmp0[0], rpl.Number) else
-			("txt" if tmp0[0].get() == "string" else "rpl"
-			)) if len(tmp) == 1 else "rpl"),
-			True # Have to check ext, so just ask for the name
-		)
-		# Or does it always return a period? Seems odd if it does..
-		ext = os.path.splitext(fn)[1][len(os.extsep):]
-		if ext not in ["bin", "rpl", "txt"]:
-			raise rpl.RPLError("Expecting file format bin, rpl, or txt.")
+	def __setitem__(self, key, value):
+		rpl.Serializable.__setitem__(self, key, value)
+		# Special handling for keys starting with x
+		if key[0] == "x":
+			self._data[key] = self._data["x"]
+			del self._data["x"]
 		#endif
+	#enddef
 
-		data = self._data = self._rpl.parseDataFile(fn)
-		# Standard format is a list of Numbers, Strings, or lists
-		# containing [String, Number]
-		towrite = r''
-		def recurse(fmt, dta):
-			for i,x in enumerate(fmt):
-				y = dta[i]
-				if isinstance(x, rpl.List):
-					tmp = x.get()
-					if len(tmp) == 2 and isinstance(tmp[1], rpl.Number):
-						dtype, dsize = tuple(x.get())
-				if isinstance(x, rpl.String):
-					try:
-						dtype, dsize = x, self._rpl.types[x.get()].defaultSize()
-					except KeyError, AttributeError:
-						dtype, dsize = x, rpl.Number(1)
-					#endtry
-				#endif
-
-				# Verify type and recast
-				if (dtype == "all"
-					or isinstance(y, self.__rpl.types[dtype])
-				): pass
-				elif issubclass(self.__rpl.types[dtype], y.__class__):
-					# Attempt to recast to subclass
-					try: y = self.__rpl.types[dtype](y.get())
-					except RPLError:
-						raise rpl.RPLError("Cannot recast %s to desired type %s." % (y.typeName, dtype))
-					#endtry
-				else:
-					raise rpl.RPLError("Expected type %s got %s." % (dtype, y.typeName))
-				#endif
-
-				# Actual importing
-				towrite += y.serialize(**{
-					"size": dsize,
-					"endian": self["endian"]
-				})
-			#endfor
-		#enddef
-		recurse(self["format"], data)
+	# TODO: Redo as:
+	# data {
+	# 	endian: etc
+	#
+	# 	xlen: [number, 1] # [number, 1, little, signed]
+	# 	xstr: [string, @this.xlen]
+	# }
+	def importData(self, rom, folder):
+		"""
+		Represents the format of packed data.
+		To describe the format, one must add keys prefixed with "x"
+		Order is important, of course. The format for a field's description is:
+		[type, size, offset?, endian?, sign?, pad char?, pad side?]
+		All entries with a ? are optional, and order of them doesn't matter.
+		Type: Datatype by name, for example: string, number
+		Size: Size of the field in bytes
+		Offset: Offset from base to where this entry is. By default this is
+		        calculated from the sizes, but there are times it may be
+		        necessary to supply it (dynamic sizing in the middle).
+		Endian: Only relevant to numbers, can be "little" or "big"
+		Sign: Only relevant to numbers, can be "signed" or "unsigned"
+		Pad char: Only relevant to strings, it's the char to pad with.
+		Pad side: Only relevant to strings, can be "left", "right", or "center"
+		"""
 	#enddef
 
 	def exportData(self, rom, folder):
