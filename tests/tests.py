@@ -177,8 +177,20 @@ def main():
 	or  not typeCheck("Repeat8Test1", "[number|^]", RL(RL(Num)), "list")
 	or  not typeCheck("Repeat8Test2", "[^|number]", RL(RL(Num)), "list")
 	or  not typeCheck("Repeat8Test3", "[^|number]", RL(RL(Str)), None)
+	or  not typeCheck("Repeat8Test4", "[number|^]", RL(RL(RL(Num))), "list")
+	# Make sure it doesn't infinitely recurse or anything here
+	or  not typeCheck("Repeat8Test5", "[number|^]", RL(RL(RL(Str))), None)
+	or  not typeCheck("Repeat8Test6", "[number|^]", RL(RL(RL(RL(RL(RL()))))), None)
 	or  not typeCheck("Repeat9Test1", "[string,number]!0", Str, "list")
 	or  not typeCheck("Repeat9Test2", "[string,number]!0", Num, None)
+	or  not typeCheck("Repeat10Test1", "[string,number]+", RL(Str,Num), "list")
+	or  not typeCheck("Repeat10Test2", "[string,number]+", RL(Str,Num,Str,Num), "list")
+	or  not typeCheck("Repeat10Test3", "[string,number]+", RL(Str,Num,Str), None)
+	or  not typeCheck("Repeat11Test1", "[string,number]+1", RL(Str), "list")
+	or  not typeCheck("Repeat11Test2", "[string,number]+1", RL(Str,Num), "list")
+	or  not typeCheck("Repeat11Test3", "[string,number]+1", RL(Str,Num,Str,Num), None)
+	or  not typeCheck("Repeat11Test4", "[string,number]+1", RL(Str,Num,Num), "list")
+	or  not typeCheck("Repeat11Test5", "[string,number]+1", RL(Num), None)
 	or  not typeCheck("ROTest1", "[number]*|string", Num, "list")
 	or  not typeCheck("ROTest2", "[number]*|string", RL(Num), "list")
 	or  not typeCheck("ROTest3", "[number]*|string", Str, "string")
@@ -218,5 +230,8 @@ def main():
 	log("Test 4 end")
 
 	return 0
+
+	#log("# Test 5: Data #")
+	#log("Test 5 end")
 #enddef
 sys.exit(main())
