@@ -1,25 +1,39 @@
-import rpl
+import rpl as RPL
+from rpl import RPLError
 import Image
 import os
 import re
 
-class Standard(rpl.RPL):
+# TODO: Redo parseDataFile as its own class or something that can be used with
+#  RPL.share. Or leave it where it is and make a wrapper class for that. Idk
+
+class Standard(RPL.RPL):
 	def __init__(self):
-		rpl.RPL.__init__(self)
+		RPL.RPL.__init__(self)
 		self.regStruct(Data)
+		self.regStruct(Format)
+	#enddef
+#endclass
+
+class DataFile:
+	def __init__(self, inFile=None):
+		self._base = []
+		self.comment = ""
+		if inFile is not None: self.read(inFile)
 	#enddef
 
-	def parseDataFile(self, inFile):
-		#try: self.dataFiles
-		#except AttributeError: self.dataFiles = []
+	def setup(self, rpl, path): self._rpl, self._path = rpl, path
 
-		raw = self.readFrom(inFile)
+	def read(self):
+		"""Read from .rpl data file."""
+		rpl = self._rpl
+		raw = rpl.readFrom(self._path)
 
 		base = []
 		adder = []
-		for token in RPL.tokenize.finditer(raw):
+		for token in rpl.tokenize.finditer(raw):
 			groups = token.groups() # Used later
-			dstr,sstr,mstr,num,key,flow,ref,lit = groups
+			dstr,sstr,mstr,num,key,afterkey,flow,ref,lit = groups
 			sstr = dstr or sstr # Double or single
 
 			# Find the position (used for ref and errors)
@@ -29,7 +43,7 @@ class Standard(rpl.RPL):
 			add, skipSubInst = None, None
 
 			try:
-				if flow in "{}": raise RPLError("Structs not allowed in data files")
+				if flow and flow in "{}": raise RPLError("Structs not allowed in data files")
 				elif flow == "[":
 					# Begins list
 					adder.append([])
@@ -40,11 +54,11 @@ class Standard(rpl.RPL):
 						skipSubInst = True
 					else: raise RPLError("] without a [.")
 				elif sstr or mstr or num or ref or lit:
-					add = self.parseData(groups, line=line, char=char)
+					add = rpl.parseData(groups, line=line, char=char)
 				else: continue
 
 				if add:
-					dtype, val = self.parseCreate(add, line=line, char=char, skipSubInst=skipSubInst)
+					val = rpl.parseCreate(add, None, None, line, char, skipSubInst)
 
 					if adder: adder[-1].append(val)
 					else: base.append(val)
@@ -52,12 +66,43 @@ class Standard(rpl.RPL):
 			except RPLError as err:
 				rpl.err("Error in line %i char %i: %s" % (
 					line, char, err.args[0]
-				)
+				))
 			#endtry
 		#endfor
 
-		#self.dataFiles.append(base)
-		return base
+		self._base = base
+	#enddef
+
+	def write(self):
+		"""Write data to a given file."""
+		# TODO: Prettyprinting
+		comment = "# " + self.comment if self.comment else ""
+		self._rpl.writeTo(self._path, comment + os.linesep.join(map(unicode, self._base)))
+	#enddef
+
+	def add(self, item):
+		"""Add item to data. Must be RPLData type"""
+		if not isinstance(item, RPL.RPLData):
+			raise RPLError("Tried to add non-data to rpl data file.")
+		#endif
+		self._base.append(item)
+	#enddef
+
+	def __getitem__(self, key): return self._base[key]
+	def __len__(self): return len(self._base)
+
+	def __iter__(self):
+		try: self._iter
+		except AttributeError: self._iter = -1
+		return self
+	#enddef
+
+	# Atypical implementation of next I think, but it makes the code look nicer.
+	def next(self):
+		try: self._iter += 1
+		except AttributeError: self._iter = 0
+		try: return self[self._iter]
+		except IndexError: raise StopIteration
 	#enddef
 #endclass
 
@@ -65,7 +110,7 @@ class Standard(rpl.RPL):
 #################################### Structs ###################################
 ################################################################################
 
-class Graphic(rpl.Serializable):
+class Graphic(RPL.Serializable):
 	"""Structs that handle images should inherit this."""
 
 	def __init__(self, rpl, name, parent=None):
@@ -98,12 +143,251 @@ class Graphic(rpl.Serializable):
 	#enddef
 #endclass
 
-class Sound(rpl.Serializable):
+class Sound(RPL.Serializable):
 	"""Structs that handle sound should inherit this."""
 	pass
 #endclass
 
-class Data(rpl.Serializable):
+class DataFormat:
+	"""The mutual parent for Data and Format"""
+	def __init__(self):
+		# String only uses default data size. Number only uses bin as type
+		self.regKey("format", "string", "")
+		self.regKey("endian", "string", "little")
+		self.regKey("pad", "string", "\x00")
+		self.regKey("padside", "string", "left")
+		self.regKey("sign", "string", "unsigned")
+		self.regKey("pretty", "number", "false")
+		self.regKey("comment", "string", "")
+		self.regKey("x", "string|[string, number, string|number]+1", "")
+
+		self._parentClass = RPL.Cloneable if isinstance(self, RPL.Cloneable) else RPL.Serializable
+		self._format = {}
+		self._len = None
+		self._count = None
+	#enddef
+
+	def __parseFormat(self, key):
+		fmt = self._format[key]
+		if isinstance(fmt, RPL.List):
+			fmt = fmt.get()
+			# Let's parse and cache this
+			tmp = {
+				"type": fmt[0],
+				"size": fmt[1],
+				"offset": None,
+				"command": None,
+			}
+			for x in fmt[2:]:
+				val = x.get()
+				if type(val) in [int, long]:
+					if tmp["offset"] is None: tmp["offset"] = val
+					else: tmp["offset"] += val
+				# We can assume it's str, otherwise
+				elif val in ["little", "le"]: tmp["endian"] = "little"
+				elif val in ["big", "be"]: tmp["endian"] = "big"
+				elif val in ["signed", "unsigned"]: tmp["sign"] = val
+				elif val in ["left", "right", "center", "rcenter"]: tmp["padside"] = val
+				elif val.find(":") != -1:
+					pos = val.find(":")
+					tmp["command"] = [val[0:pos], val[pos+1:]]
+				elif len(val) == 1: tmp["padchar"] = val
+			#endfor
+			if "endian" not in tmp: tmp["endian"] = self["endian"].get()
+			if "sign" not in tmp: tmp["sign"] = self["sign"].get()
+			if "padside" not in tmp: tmp["padside"] = self["padside"].get()
+			if "padchar" not in tmp: tmp["padchar"] = self["pad"].get()
+			# If an offset wasn't specified, calculate it from the previous
+			# offset plus the previous size. (If it scales from the bottom
+			# it must be specified!)
+			if tmp["offset"] is None:
+				lastId = -1
+				for i in range(self._orderedKeys.index(key)):
+					if self._orderedKeys[i][0] == "x": lastId = i
+				#endfor
+				if lastId >= 0:
+					lastFmt = self.__parseFormat(self._orderedKeys[lastId])
+					tmp["offset"] = lastFmt["offset"] + self.get(lastFmt["size"])
+				else: tmp["offset"] = 0
+			#endif
+			if tmp["offset"] is None:
+				raise RPLError("Unable to calculate position of %s. Please add an offset!" % key)
+			#endif
+			fmt = self._format[key] = tmp
+		#endif
+		return fmt
+	#enddef
+
+	def prepOpts(self, opts):
+		tmp = {}
+		for x in opts: tmp[x] = opts[x]
+		for x in ["type", "size"]: tmp[x] = self.get(tmp[x])
+		return tmp
+	#endif
+
+	def __getitem__(self, key):
+		try: return self._parentClass.__getitem__(self, key)
+		except RPLError:
+			if key[0] == "x":
+				# If the key doesn't exist yet, we should attempt to retrieve it
+				fmt = self.__parseFormat(key)
+				if self._rpl.exporting:
+					address = self["base"].get() + fmt["offset"]
+					self._rpl.rom.seek(address, 0)
+					typeName = self.get(fmt["type"])
+					if typeName[0:7] == "Format:":
+						tmp = []
+						ref = self._rpl.child(typeName[7:])
+						for i in range(self.get(fmt["size"])):
+							t = ref.clone()
+							t._base = RPL.Number(address)
+							tmp.append(t)
+							address += t.len()
+						#endfor
+						self._data[key] = tmp
+					else:
+						self._data[key] = self._rpl.wrap(typeName)
+						self._data[key].unserialize(
+							self._rpl.rom.read(self.get(fmt["size"])),
+							**self.prepOpts(fmt)
+						)
+					#endif
+					return self._data[key]
+				else: raise RPLError("Somehow have not read data from file.")
+				#endif
+			else: raise
+			#endif
+		#endtry
+	#enddef
+
+	def __setitem__(self, key, value):
+		# Special handling for keys starting with x
+		# Note: What you set here is NOT the data, so it CANNOT be referenced
+		if key[0] == "x":
+			if key not in self._format:
+				self._parentClass.__setitem__(self, "x", value)
+				# We don't want "x" in here
+				self._orderedKeys[-1] = key
+				tmp = self._data["x"]
+				if isinstance(tmp, RPL.String):
+					self._format[key] = RPL.List(
+						map((lambda(x): self._rpl.parseData(x)), tmp.get().split())
+					)
+				else: self._format[key] = tmp
+				del self._data["x"]
+			else: self._data[key] = value
+		else:
+			self._parentClass.__setitem__(self, key, value)
+		#endif
+	#enddef
+
+	def importPrepare(self, folder, data=None):
+		filename = self.open(folder, "rpl", True)
+		data = data or self._rpl.share(filename, DataFile)
+		for k in self.iterkeys():
+			if k[0] != "x": continue
+			if self._format[k]["command"]: continue
+			typeName = self.get(self._format[k]["type"])
+			if type(data) is list: self[k] = data.pop(0)
+			else: self[k] = data.next()
+			if typeName[0:7] == "Format:":
+				# Referencing this wouldn't end well. I'm not sure how to handle
+				# it either..
+				tmp = []
+				address = self["base"].get() + self._format[k]["offset"]
+				ref = self._rpl.child(typeName[7:])
+				one = ref.countExported()
+				for x in self[k]:
+					t = ref.clone()
+					t._base = address
+					if one: x = [x]
+					else: x = x.get()
+					t.importPrepare(folder, x)
+					tmp.append(t)
+					address += t.len()
+				#endfor
+				self[k] = tmp
+			#endif
+		#endfor
+	#enddef
+
+	def exportDataLoop(self, datafile=None):
+		ret = []
+		for k in self.iterkeys():
+			if k[0] != "x": continue
+			# We need to do it like this to ensure it had been read from the file...
+			data = self[k]
+			typeName = self.get(self._format[k]["type"])
+			if typeName[0:7] == "Format:":
+				ls = []
+				for x in data: ls.append(x.exportDataLoop())
+				data = RPL.List(ls)
+			#endif
+			# A command implies this data is inferred from the data that's
+			# being exported, so it shouldn't be exported itself.
+			if not self._format[k]["command"]:
+				if datafile is None: ret.append(data)
+				else: datafile.add(data)
+			#endif
+		#endfor
+		if ret:
+			if self.countExported() > 1: return RPL.List(ret)
+			else: return ret[0]
+		#endif
+	#enddef
+
+	def len(self):
+		if self._len is not None: return self._len
+		size = 0
+		count = 0
+		for k in self.iterkeys():
+			if k[0] != "x": continue
+			fmt = self.__parseFormat(k)
+			if self.get(fmt["type"])[0:7] == "Format:":
+				for x in self[k]: size += x.len()
+			else: size += self.get(fmt["size"])
+			if not fmt["command"]: count += 1
+		#endfor
+		self._len = size
+		self._count = count
+		return size
+	#enddef
+
+	def countExported(self):
+		if self._count is not None: return self._count
+		else:
+			self.len()
+			return self._count
+		#endif
+	#enddef
+#endclass
+
+class Format(DataFormat, RPL.Cloneable):
+	typeName = "format"
+
+	def __init__(self, rpl, name, parent=None):
+		RPL.Cloneable.__init__(self, rpl, name, parent)
+		DataFormat.__init__(self)
+		self.alsoClone("_format")
+		self._base = None
+	#enddef
+
+	def basic(self, callers=[]):
+		"""
+		Returns the name with a prefix, used for referencing this as a type.
+		"""
+		return RPL.Literal("Format:" + self._name)
+	#enddef
+
+	def __getitem__(self, key):
+		if key == "base":
+			return self._base
+		else: return DataFormat.__getitem__(self, key)
+	#enddef
+#endclass
+
+# TODO: Support txt and bin exports
+class Data(DataFormat, RPL.Serializable):
 	"""Manages un/structured binary data.
 	What I think this needs to support:
 	 * Self-referencing entries for length
@@ -111,36 +395,15 @@ class Data(rpl.Serializable):
 	 * Integration with system datatypes
 	 * Describe type, size, endian, sign, and padding
 	"""
+
+	typeName = "data"
+
 	def __init__(self, rpl, name, parent=None):
-		RPLStruct.__init__(self, rpl, name, parent)
-		# String only uses default data size. Number only uses bin as type
-		self.regKey("format", "string", "")
-		self.regKey("times", "number", 1)
-		self.regKey("endian", "string", "little")
-		self.regKey("pad", "string", "\x00")
-		self.regKey("padside", "string", "left")
-		self.regKey("pretty", "number", "false")
-		self.regKey("comment", "string", "")
-		self.regKey("x", "string|[string, number, string|number]+1", "")
+		RPL.Serializable.__init__(self, rpl, name, parent)
+		DataFormat.__init__(self)
 	#enddef
 
-	def __setitem__(self, key, value):
-		rpl.Serializable.__setitem__(self, key, value)
-		# Special handling for keys starting with x
-		if key[0] == "x":
-			self._data[key] = self._data["x"]
-			del self._data["x"]
-		#endif
-	#enddef
-
-	# TODO: Redo as:
-	# data {
-	# 	endian: etc
-	#
-	# 	xlen: [number, 1] # [number, 1, little, signed]
-	# 	xstr: [string, @this.xlen]
-	# }
-	def importData(self, rom, folder):
+	def importData(self, rom):
 		"""
 		Represents the format of packed data.
 		To describe the format, one must add keys prefixed with "x"
@@ -157,29 +420,57 @@ class Data(rpl.Serializable):
 		Pad char: Only relevant to strings, it's the char to pad with.
 		Pad side: Only relevant to strings, can be "left", "right", or "center"
 		"""
+		base = self["base"]
+		for k in self.iterkeys():
+			if k[0] != "x": continue
+			fmt = self._format[k]
+			com = self._format[k]["command"]
+			if not com: pass
+			elif com[0] == "len":
+				# TODO: Grab size of serialized data for Format types
+				self[k] = RPL.Number(len(
+					self[com[1]].serialize(self._format[com[1]])
+				))
+			elif com[0] == "count":
+				if type(self[com[1]]) is list: self[k] = len(self[com[1]])
+				else: raise RPLError("Tried to count non-Format type.")
+			elif com[0] == "offset":
+				self[k] = RPL.Number(self._format[com[1]]["offset"])
+			#endif
+			rom.seek(base + fmt["offset"], 0)
+			data = self[k].serialize(**prepOpts(fmt))
+			if len(data) != self.get(fmt["size"]):
+				raise RPLError("Expected size %i but size %i returned." % (
+					self.get(fmt["size"]), len(data)
+				))
+			#endif
+			rom.write(data)
+		#endfor
 	#enddef
 
 	def exportData(self, rom, folder):
+		filename = self.open(folder, "rpl", True)
+		datafile = self._rpl.share(filename, DataFile)
+		datafile.comment = self["comment"].get()
+		self.exportDataLoop(datafile)
 	#enddef
 #endclass
 
-class Map(rpl.Serializable):
+class Map(RPL.Executable):
 	"""
 	Translates data
-	It seems silly that this is serializable, but it needs to know direction.
 	"""
 	def __init__(self, rpl, name, parent=None):
 		# Yes, it only wants RPLStruct's init, NOT Serializable's!!
-		RPLStruct.__init__(self, rpl, name, parent)
+		RPL.Executable.__init__(self, rpl, name, parent)
 		self.regKey("packed", "string|[number|string]+")
 		self.regKey("unpacked", "string|[number|string]+")
 		self.regKey("data", "[number|string]*")
 	#enddef
 
-	def xxData(self, p, u):
-		ls = self["data"].get()
-		st = isinstance(p, rpl.String) and isinstance(u, rpl.String)
-		if not st and (isinstance(p, rpl.String) or isinstance(u, rpl.String)):
+	def xxProcessing(self, p, u):
+		st = isinstance(p, RPL.String) and isinstance(u, RPL.String)
+		if not st and (isinstance(p, RPL.String) or isinstance(u, RPL.String)):
 			raise RPLError("Packed and unpacked must be the same type.")
 		#endif
 		p, u = p.get(), u.get()
@@ -192,35 +483,39 @@ class Map(rpl.Serializable):
 		nu = []
 		for x in u: nu.append(x.get())
 
-		newstr = ""
-		for i,x in enumerate(ls):
-			try:
-				if st: newstr += np[nu.index(x)]
-				else: x.set(np[nu.index(x)])
-			except ValueError:
-				if st: newstr += x
-			#endtry
-		#endfor
-		if st: self["data"].set(newstr)
+		def proc(ls):
+			newstr = ""
+			for i,x in enumerate(ls):
+				try:
+					if st: newstr += np[nu.index(x)]
+					else: x.set(np[nu.index(x)])
+				except ValueError:
+					if st: newstr += x
+				#endtry
+			#endfor
+			if st: self["data"].set(newstr)
+		#enddef
+
+		self["data"].proc(proc)
 	#enddef
 
-	def importData(self, rom, folder):
-		self.xxData(self["packed"], self["unpacked"])
+	def importProcessing(self, rom, folder):
+		self.xxProcessing(self["packed"], self["unpacked"])
 	#enddef
 
-	def exportData(self, rom, folder):
-		self.xxData(self["unpacked"], self["packed"])
+	def exportProcessing(self, rom, folder):
+		self.xxProcessing(self["unpacked"], self["packed"])
 	#enddef
 #endclass
 
 ################################################################################
 ##################################### Types ####################################
 ################################################################################
-class Bin(rpl.String):
+class Bin(RPL.String):
 	typeName = "bin"
 
 	def set(self, data):
-		rpl.String.__init__(self, data)
+		RPL.String.__init__(self, data)
 		data = re.sub(r'\s', "", self._data)
 		self._data = u""
 		for i in xrange(0, len(data), 2):
@@ -235,8 +530,8 @@ class Bin(rpl.String):
 			l1, l2 = tmp[0:8], tmp[8:]
 			ret += "`%s %s` # %s %s%s" % (
 				Bin.line2esc(l1), Bin.line2esc(l2)[0:-1],
-				rpl.String.binchr.sub(".", l1),
-				rpl.String.binchr.sub(".", l2), os.linesep
+				RPL.String.binchr.sub(".", l1),
+				RPL.String.binchr.sub(".", l2), os.linesep
 			)
 		#endwhile
 	#enddef
