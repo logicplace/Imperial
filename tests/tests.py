@@ -74,9 +74,9 @@ def err(msg, errnum=None):
 #enddef
 
 start = time()
-rpl = None
+rpl, std = None, None
 def main():
-	global rpl
+	global rpl, std
 	# Load crap
 	rpldir = path.join("..", "rpl")
 	log("Beginning parse tests...")
@@ -200,7 +200,7 @@ def main():
 	log("Test 2 end")
 
 	#log("# Test 3: write tests #")
-	# TODO: Allow parsing data files, then I can add this
+	# TODO: Make this..
 	#log("Test 3 end")
 
 	log("# Test 4: References #")
@@ -229,9 +229,23 @@ def main():
 	): return 4
 	log("Test 4 end")
 
-	return 0
+	log("Beginning meatier tests...")
+	std = loadmod("std", rpldir)
+	log("Loaded rpl.std")
+	log("# Test 10: Data #")
+	astd = std.Standard()
+	astd.parse(path.join("rpls", "data.rpl"))
+	folder = path.join("rpls", "data")
+	astd.Def("file", "test.rpl")
+	astd.exportData(path.join(folder, "data.bin"), folder)
+	# TODO: Compare test.rpl with data.rpl
+	log("Export successful")
+	astd.Def("file", "data.rpl")
+	astd.importData(path.join(folder, "test.bin"), folder)
+	# TODO: Compare test.bin with data.bin
+	log("Import successful")
+	log("Test 10 end")
 
-	#log("# Test 5: Data #")
-	#log("Test 5 end")
+	return 0
 #enddef
 sys.exit(main())
