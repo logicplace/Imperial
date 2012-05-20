@@ -73,26 +73,26 @@ class TestParse(RPLTestCase):
 	#enddef
 
 	def test_static0(self):
-		x = TestParse.basic.root["static0"]
-		self.checkLen(x, 8)
-		self.check(x, "string", "string", "hi")
-		self.check(x, "literal", "literal", "bye")
-		self.check(x, "number", "number", 1)
-		self.check(x, "hexnum", "hexnum", 0x2222)
-		self.check(x, "multi", "string", "abcdefghijklmnopqrstuvwxyz")
+		static0 = TestParse.basic.root["static0"]
+		self.checkLen(static0, 8)
+		self.check(static0, "string", "string", "hi")
+		self.check(static0, "literal", "literal", "bye")
+		self.check(static0, "number", "number", 1)
+		self.check(static0, "hexnum", "hexnum", 0x2222)
+		self.check(static0, "multi", "string", "abcdefghijklmnopqrstuvwxyz")
 
-		self.comp(x, "range", "range", map(
+		self.comp(static0, "range", "range", map(
 			lambda(x): ("number", x),
 			[1, 2, 3, 4, 5, 2, 2, 2, 2, 5, 4, 3]
 		) + [("literal", "x"), ("number", 1), ("hexnum", 0xa)])
 
-		self.comp(x, "list", "list", [
+		self.comp(static0, "list", "list", [
 			("string", "str"), ("literal", "lit"), ("number", 1),
 			("hexnum", 0xbabe), ("range", map(lambda(x): ("number", x),
 			[1, 2, 3]))
 		])
 
-		for y in x:
+		for y in static0:
 			self.assertEqual(y.name(), "sub", 'Unexpected sub "%s"' % y.name())
 			self.checkLen(y, 1)
 			self.check(y, "lit", "literal", ":D")
@@ -188,14 +188,14 @@ def injectTypeCheckTests(cls):
 	class has a method typeCheck which takes the test case parameters.
 	"""
 	import new
-	def create_test_method(test):
-		def test_fn(self):
+	def createTestMethod(test):
+		def testFn(self):
 			self.typeCheck(test.key, test.syn, test.data, test.expect)
-		m = new.instancemethod(test_fn, None, cls)
+		m = new.instancemethod(testFn, None, cls)
 		setattr(cls, 'test_%s' % test.key, m)
 
 	for test in TYPE_CHECK_TEST_CASES:
-		create_test_method(test)
+		createTestMethod(test)
 
 	return cls
 #enddef
