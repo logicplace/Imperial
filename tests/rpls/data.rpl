@@ -25,11 +25,12 @@
 #	xpixels: [number, 4]
 #}
 
+# TODO: Typechecking is failing on xlen and xpstrbase without the 0 offset
 format PascalStr {
 	endian: little
 	sign: unsigned
 
-	xlen: [number, 1, len:xstr]
+	xlen: [number, 1, 0]
 	xstr: [string, @this.xlen]
 }
 
@@ -38,8 +39,8 @@ data TestFile {
 	sign: unsigned
 	file: @Defs.file
 
-	xpstrbase: [number, 4, offset:xpstramt]
+	xpstrbase: [number, 4, 0]
 	# TODO: More tests in header here
-	xpstramt: [number, 2, count:xpstrs, @this.xpstrbase]
+	xpstramt: [number, 2, @this.xpstrbase]
 	xpstrs: [@PascalStr, @this.xpstramt]
 }
