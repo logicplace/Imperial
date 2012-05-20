@@ -36,10 +36,9 @@ class RPLTestCase(unittest.TestCase):
 	#enddef
 
 	def check(self, data, key, exType, exVal):
-		return self.subCheck(data[key], "%s.%s" % (data.name(),key), exType, exVal)
+		return self.subCheck(data[key], "%s.%s" % (data.name(), key), exType, exVal)
 
 	def subComp(self, l1, l2, heir):
-		global rpl
 		self.assertEqual(len(l1), len(l2),
 			'Incompatible lengths in "%s" (%i vs %i)' % (heir, len(l1), len(l2)))
 		for i, x in enumerate(l1):
@@ -56,19 +55,22 @@ class RPLTestCase(unittest.TestCase):
 		if tName == "reference": tName = data[key].get(retCl=True).typeName
 		self.assertEqual(tName, exType,
 			'Unexpected datatype for "%s.%s" (got "%s")' % (data.name(), key, tName))
-		self.subComp(val, ex, "%s.%s" % (data.name(),key))
+		self.subComp(val, ex, "%s.%s" % (data.name(), key))
 	#enddef
+#endclass
 
 class TestParse(RPLTestCase):
 	@classmethod
 	def setUpClass(cls):
 		cls.basic = rpl.RPL()
 		cls.basic.parse(os.path.join("tests", "rpls", "rpl.rpl"))
+	#enddef
 
 	def test_AndAnotherStatic(self):
 		AndAnotherStatic = TestParse.basic.root["AndAnotherStatic"]
 		self.checkLen(AndAnotherStatic, 1)
 		self.check(AndAnotherStatic, "just", "literal", "because")
+	#enddef
 
 	def test_static0(self):
 		x = TestParse.basic.root["static0"]
@@ -80,22 +82,25 @@ class TestParse(RPLTestCase):
 		self.check(x, "multi", "string", "abcdefghijklmnopqrstuvwxyz")
 
 		self.comp(x, "range", "range", map(
-			lambda(x): ("number",x),
-			[1,2,3,4,5,2,2,2,2,5,4,3]
-		) + [("literal","x"), ("number", 1), ("hexnum", 0xa)])
+			lambda(x): ("number", x),
+			[1, 2, 3, 4, 5, 2, 2, 2, 2, 5, 4, 3]
+		) + [("literal", "x"), ("number", 1), ("hexnum", 0xa)])
 
 		self.comp(x, "list", "list", [
 			("string", "str"), ("literal", "lit"), ("number", 1),
-			("hexnum", 0xbabe), ("range",map(lambda(x): ("number",x),
-			[1,2,3]))
+			("hexnum", 0xbabe), ("range", map(lambda(x): ("number", x),
+			[1, 2, 3]))
 		])
 
 		for y in x:
 			self.assertEqual(y.name(), "sub", 'Unexpected sub "%s"' % y.name())
 			self.checkLen(y, 1)
 			self.check(y, "lit", "literal", ":D")
+		#endfor
+	#enddef
+#endclass
 
-def RL(*x): return rpl.List(list(x))
+def RL(*args): return rpl.List(list(args))
 
 STR = rpl.String("hi")
 LIT = rpl.Literal("hi")
@@ -107,6 +112,8 @@ class TypeCheckTestCase(object):
 		self.syn = syn
 		self.data = data
 		self.expect = expect
+	#enddef
+#endclass
 
 TYPE_CHECK_TEST_CASES = [
 	TypeCheckTestCase("StrStr", "string", STR, "string"),
@@ -118,13 +125,13 @@ TYPE_CHECK_TEST_CASES = [
 	TypeCheckTestCase("ListBadList", "[number]", RL(STR), None),
 	TypeCheckTestCase("LONum", "[string|number]", NUM, None),
 	TypeCheckTestCase("LOList", "[string|number]", RL(NUM), "list"),
-	TypeCheckTestCase("Sublist", "[number,[number],number]", RL(NUM,RL(NUM),NUM), "list"),
-	TypeCheckTestCase("SublistBad", "[number,[number],number]", RL(NUM,RL(STR),NUM), None),
+	TypeCheckTestCase("Sublist", "[number,[number],number]", RL(NUM, RL(NUM), NUM), "list"),
+	TypeCheckTestCase("SublistBad", "[number,[number],number]", RL(NUM, RL(STR), NUM), None),
 	TypeCheckTestCase("OL_1", "string|[number]", STR, "string"),
 	TypeCheckTestCase("OL_2", "string|[number]", RL(NUM), "list"),
 	TypeCheckTestCase("OLBad", "string|[number]", NUM, None),
 	TypeCheckTestCase("OL_3", "[number|[string],number]", RL(NUM, NUM), "list"),
-	TypeCheckTestCase("OL_4", "[number|[string],number]", RL(RL(STR),NUM), "list"),
+	TypeCheckTestCase("OL_4", "[number|[string],number]", RL(RL(STR), NUM), "list"),
 	TypeCheckTestCase("SSSSSL", "[[[[[string]]]]]", RL(RL(RL(RL(RL(STR))))), "list"),
 	TypeCheckTestCase("Repeat1_1", "[number]*", NUM, "list"),
 	TypeCheckTestCase("Repeat1_2", "[number]*", RL(NUM), "list"),
@@ -141,7 +148,7 @@ TYPE_CHECK_TEST_CASES = [
 	TypeCheckTestCase("Repeat5_1", "[number,string]!", NUM, "list"),
 	TypeCheckTestCase("Repeat5_2", "[number,string]!", STR, "list"),
 	TypeCheckTestCase("Repeat5_3", "[number,string]!", RL(NUM, STR), "list"),
-	TypeCheckTestCase("Repeat5_4", "[number,string]!", RL(STR,NUM), None),
+	TypeCheckTestCase("Repeat5_4", "[number,string]!", RL(STR, NUM), None),
 	TypeCheckTestCase("Repeat5_5", "[number,string]!", RL(NUM, STR, NUM, STR), None),
 	TypeCheckTestCase("Repeat6_1", "[number]~", NUM, "number"),
 	TypeCheckTestCase("Repeat6_2", "[number]~", RL(NUM), "list"),
@@ -171,11 +178,11 @@ TYPE_CHECK_TEST_CASES = [
 	TypeCheckTestCase("Heir_2", "range", RL(NUM, NUM), "range"),
 ]
 
-def inject_type_check_tests(cls):
+def injectTypeCheckTests(cls):
 	"""
 	Dynamically add the type check tests in TYPE_CHECK_TEST_CASES to a class.
 
-	For use as a decorator, simply add @inject_type_check_tests to the class.
+	For use as a decorator, simply add @injectTypeCheckTests to the class.
 	For every test in the test case list, it creates a method named test_foo,
 	where foo is the key field of the test case object. Assumes that the given
 	class has a method typeCheck which takes the test case parameters.
@@ -191,13 +198,15 @@ def inject_type_check_tests(cls):
 		create_test_method(test)
 
 	return cls
+#enddef
 
-@inject_type_check_tests
+@injectTypeCheckTests
 class TestTypeCheck(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls):
 		cls.basic = rpl.RPL()
 		cls.basic.parse(os.path.join("tests", "rpls", "rpl.rpl"))
+	#enddef
 
 	def setUp(self):
 		self.Str = rpl.String("hi")
@@ -210,12 +219,14 @@ class TestTypeCheck(unittest.TestCase):
 		self.assertTrue((expect is None and result is None)
 			or (result is not None and result.typeName == expect))
 	#enddef
+#endclass
 
 class TestReferences(RPLTestCase):
 	@classmethod
 	def setUpClass(cls):
 		cls.refers = rpl.RPL()
 		cls.refers.parse(os.path.join("tests", "rpls", "references.rpl"))
+	#enddef
 
 	def test_stuff(self):
 		x = TestReferences.refers.child("tests")
@@ -237,7 +248,8 @@ class TestReferences(RPLTestCase):
 		x = TestReferences.refers.child("ImaGParent").child("ImaParent").child("ImaToysRUsKid")
 		self.check(x, "test1", "number", 3)
 		self.check(x, "test2", "number", 2)
-
+	#enddef
+#endclass
 
 if __name__ == '__main__':
 	unittest.main()
