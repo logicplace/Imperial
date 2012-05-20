@@ -75,6 +75,7 @@ class RPL:
 		self.orderedRoot = []
 		self.structsByName = {}
 		self.sharedDataHandlers = {}
+		self.importing = None
 
 		# Registrations
 		self.regStruct(Static)
@@ -442,9 +443,8 @@ class RPL:
 		"""
 		Import data from folder into the given ROM according to what.
 		"""
-		self.importing = True
-		self.exporting = False
 		self.rom = rom = self.stream(rom)
+		self.importing = True
 		lfolder = list(os.path.split(os.path.normpath(folder)))
 
 		# Doing this in a three step process ensures proper ordering when
@@ -462,18 +462,21 @@ class RPL:
 			#endif
 		#endfor
 		# Process
-		for x in toproc: x.importProcessing()
+		# We have to process this in reverse, because we process forward
+		# when exporting. eg. calc x*2 -> map 2->'b' -> writes b, we need
+		# to unmap 'b'->2 first then x/2 to have the packed value.
+		for x in reversed(toproc): x.importProcessing()
 		# Commit imports
 		for x in toimp: x.importData(rom)
+		self.importing = None
 	#enddef
 
 	def exportData(self, rom, folder, what=[]):
 		"""
 		Export data from rom into folder according to what.
 		"""
-		self.importing = False
-		self.exporting = True
 		self.rom = rom = self.stream(rom)
+		self.importing = False
 		lfolder = list(os.path.split(os.path.normpath(folder)))
 
 		# Exports are lazily drawn from the ROM, as there is no ordering
@@ -492,6 +495,7 @@ class RPL:
 		# Write exports
 		for x in toexp: x.exportData(rom, lfolder)
 		for x in self.sharedDataHandlers.itervalues(): x.write()
+		self.importing = None
 	#enddef
 
 	def wrap(self, typeName, value=None):
@@ -1058,6 +1062,8 @@ class RPLRef:
 		return ret
 	#enddef
 
+	def parts(self): return self.__struct, self.__key, self.__idxs
+
 	def pointer(self, callers=[], retCl=False, this=None):
 		# When a reference is made, this function should know what struct made
 		#  the reference ("this", ie. self.__container) BUT also the chain of
@@ -1231,7 +1237,7 @@ class String(RPLData):
 
 	def serialize(self, **opts):
 		rstr = self._data.encode("utf8")
-		if not opts["size"]: return rstr
+		if "size" not in opts or not opts["size"]: return rstr
 		# TODO: This can split a utf8 sequence at the end. Need to fix..
 		rstr = rstr[0:min(opts["size"], len(rstr))]
 		rpad = opts["padchar"] * (opts["size"] - len(rstr))
@@ -1286,7 +1292,7 @@ class Number(RPLData):
 	def serialize(self, **opts):
 		big, ander, ret = (opts["endian"] == "big"), 0xff, r''
 		for i in range(opts["size"]):
-			c = chr(self._data & ander >> ((i-1)*8))
+			c = chr((self._data & ander) >> (i*8))
 			if big: ret = c + ret
 			else: ret += c
 			ander <<= 8
