@@ -4,9 +4,6 @@ import Image
 import os
 import re
 
-# TODO: Redo parseDataFile as its own class or something that can be used with
-#  RPL.share. Or leave it where it is and make a wrapper class for that. Idk
-
 class Standard(RPL.RPL):
 	def __init__(self):
 		RPL.RPL.__init__(self)
@@ -152,19 +149,18 @@ class DataFormat:
 	"""The mutual parent for Data and Format"""
 	def __init__(self):
 		# String only uses default data size. Number only uses bin as type
-		self.regKey("format", "string", "")
 		self.regKey("endian", "string", "little")
 		self.regKey("pad", "string", "\x00")
 		self.regKey("padside", "string", "left")
 		self.regKey("sign", "string", "unsigned")
-		self.regKey("pretty", "number", "false")
-		self.regKey("comment", "string", "")
 		self.regKey("x", "string|[string, number, string|number]+1", "")
 
 		self._parentClass = RPL.Cloneable if isinstance(self, RPL.Cloneable) else RPL.Serializable
 		self._format = {}
+		self._command = {}
 		self._len = None
 		self._count = None
+		self.importing = False
 	#enddef
 
 	def __parseFormat(self, key):
@@ -176,11 +172,31 @@ class DataFormat:
 				"type": fmt[0],
 				"size": fmt[1],
 				"offset": None,
-				"command": None,
+				"offsetRefs": [],
 			}
+			if isinstance(fmt[1], RPL.RPLRef):
+				refKey = self.refersToSelf(fmt[1])
+				if refKey:
+					if self.get(tmp["type"])[0:7] == "Format:":
+						self._command[refKey] = ["count", key]
+					else: self._command[refKey] = ["len", key]
+				#endif
+			#endif
 			for x in fmt[2:]:
+				if isinstance(x, RPL.RPLRef):
+					refKey = self.refersToSelf(x)
+					if refKey and self.importing:
+						try: self.get(x)
+						except RPLError:
+							self._command[refKey] = ["offset", key]
+							tmp["offsetRefs"].push(x)
+							continue
+						#endtry
+					#endif
+				#endif
 				val = x.get()
 				if type(val) in [int, long]:
+					if refKey: self._command[refKey] = ["offset", key]
 					if tmp["offset"] is None: tmp["offset"] = val
 					else: tmp["offset"] += val
 				# We can assume it's str, otherwise
@@ -188,9 +204,9 @@ class DataFormat:
 				elif val in ["big", "be"]: tmp["endian"] = "big"
 				elif val in ["signed", "unsigned"]: tmp["sign"] = val
 				elif val in ["left", "right", "center", "rcenter"]: tmp["padside"] = val
-				elif val.find(":") != -1:
-					pos = val.find(":")
-					tmp["command"] = [val[0:pos], val[pos+1:]]
+				#elif val.find(":") != -1:
+				#	pos = val.find(":")
+				#	tmp["command"] = [val[0:pos], val[pos+1:]]
 				elif len(val) == 1: tmp["padchar"] = val
 			#endfor
 			if "endian" not in tmp: tmp["endian"] = self["endian"].get()
@@ -201,29 +217,51 @@ class DataFormat:
 			# offset plus the previous size. (If it scales from the bottom
 			# it must be specified!)
 			if tmp["offset"] is None:
-				lastId = -1
+				first = True
 				for i in range(self._orderedKeys.index(key)):
-					if self._orderedKeys[i][0] == "x": lastId = i
+					if self._orderedKeys[i][0] == "x":
+						first = False
+						break
+					#endif
 				#endfor
-				if lastId >= 0:
-					lastFmt = self.__parseFormat(self._orderedKeys[lastId])
-					tmp["offset"] = lastFmt["offset"] + self.get(lastFmt["size"])
-				else: tmp["offset"] = 0
-			#endif
-			if tmp["offset"] is None:
-				raise RPLError("Unable to calculate position of %s. Please add an offset!" % key)
+				if first: tmp["offset"] = 0
 			#endif
 			fmt = self._format[key] = tmp
 		#endif
 		return fmt
 	#enddef
 
-	def prepOpts(self, opts):
-		tmp = {}
-		for x in opts: tmp[x] = opts[x]
-		for x in ["type", "size"]: tmp[x] = self.get(tmp[x])
+	def refersToSelf(self, ref):
+		# TODO: Should this also be true if the struct name is its own name?
+		struct, key, idxs = ref.parts()
+		return key if struct == "this" and key[0] == "x" else None
+	#enddef
+
+	def prepOpts(self, opts, size=True):
+		tmp = dict(opts)
+		tmp["type"] = self.get(tmp["type"])
+		if size: tmp["size"] = self.get(tmp["size"])
+		else: del tmp["size"]
 		return tmp
 	#endif
+
+	def offsetOf(self, key):
+		fmt = self._format[key]
+		if fmt["offset"] is not None: return fmt["offset"]
+		for i in range(self._orderedKeys.index(key)-1, -1, -1):
+			if self._orderedKeys[i][0] == "x":
+				lastKey = self._orderedKeys[i]
+				lastFmt = self._format[lastKey]
+				lastType = self.get(lastFmt["type"])
+				if lastType[0:7] == "Format:":
+					size = 0
+					for x in self[lastKey]: size += x.len()
+				else: size = self.get(lastFmt["size"])
+				fmt["offset"] = self.offsetOf(lastKey) + size
+				return fmt["offset"]
+			#endif
+		#endfor
+	#enddef
 
 	def __getitem__(self, key):
 		try: return self._parentClass.__getitem__(self, key)
@@ -231,8 +269,32 @@ class DataFormat:
 			if key[0] == "x":
 				# If the key doesn't exist yet, we should attempt to retrieve it
 				fmt = self.__parseFormat(key)
-				if self._rpl.exporting:
-					address = self["base"].get() + fmt["offset"]
+				if self.importing:
+					if key in self._command:
+						com = self._command[key]
+						if com[0] == "len":
+							# TODO: Grab size of serialized data for Format types
+							self._data[key] = RPL.Number(len(
+								self[com[1]].serialize(**self.prepOpts(
+									self._format[com[1]], size=False
+								))
+							))
+						elif com[0] == "count":
+							if type(self[com[1]]) is list:
+								self._data[key] = RPL.Number(len(self[com[1]]))
+							else: raise RPLError("Tried to count non-Format type.")
+						elif com[0] == "offset":
+							return None
+							#offset = self._format[com[1]]["offset"]
+							#if offset is None: return None
+							#self._data[key] = RPL.Number(offset)
+						#endif
+						return self._data[key]
+					#endif
+					raise RPLError("Somehow have not read data for %s." % key)
+				else:
+					offset = self.offsetOf(key)
+					address = self["base"].get() + offset
 					self._rpl.rom.seek(address, 0)
 					typeName = self.get(fmt["type"])
 					if typeName[0:7] == "Format:":
@@ -253,10 +315,8 @@ class DataFormat:
 						)
 					#endif
 					return self._data[key]
-				else: raise RPLError("Somehow have not read data from file.")
 				#endif
 			else: raise
-			#endif
 		#endtry
 	#enddef
 
@@ -281,30 +341,32 @@ class DataFormat:
 		#endif
 	#enddef
 
-	def importPrepare(self, folder, data=None):
-		filename = self.open(folder, "rpl", True)
+	def importPrepare(self, folder, filename=None, data=None):
+		self.importing = True
+		filename = filename or self.open(folder, "rpl", True)
 		data = data or self._rpl.share(filename, DataFile)
 		for k in self.iterkeys():
 			if k[0] != "x": continue
-			if self._format[k]["command"]: continue
+			self.__parseFormat(k)
+		#endfor
+		for k in self.iterkeys():
+			if k[0] != "x": continue
+			if k in self._command: continue
 			typeName = self.get(self._format[k]["type"])
 			if type(data) is list: self[k] = data.pop(0)
 			else: self[k] = data.next()
 			if typeName[0:7] == "Format:":
-				# Referencing this wouldn't end well. I'm not sure how to handle
-				# it either..
+				# Referencing this wouldn't end well. I'm not sure how to
+				# handle it either..
 				tmp = []
-				address = self["base"].get() + self._format[k]["offset"]
 				ref = self._rpl.child(typeName[7:])
 				one = ref.countExported()
-				for x in self[k]:
+				for x in self[k].get():
 					t = ref.clone()
-					t._base = address
 					if one: x = [x]
 					else: x = x.get()
-					t.importPrepare(folder, x)
+					t.importPrepare(folder, filename, x)
 					tmp.append(t)
-					address += t.len()
 				#endfor
 				self[k] = tmp
 			#endif
@@ -313,6 +375,9 @@ class DataFormat:
 
 	def exportDataLoop(self, datafile=None):
 		ret = []
+		# Ensures everything is loaded and tagged with commands, so nothing
+		# is accidentally exported.. Not optimal I don't think?
+		for k in self.iterkeys(): self[k]
 		for k in self.iterkeys():
 			if k[0] != "x": continue
 			# We need to do it like this to ensure it had been read from the file...
@@ -325,7 +390,7 @@ class DataFormat:
 			#endif
 			# A command implies this data is inferred from the data that's
 			# being exported, so it shouldn't be exported itself.
-			if not self._format[k]["command"]:
+			if k not in self._command:
 				if datafile is None: ret.append(data)
 				else: datafile.add(data)
 			#endif
@@ -336,39 +401,97 @@ class DataFormat:
 		#endif
 	#enddef
 
+	def importDataLoop(self, rom):
+		base = self["base"].get()
+		for k in self.iterkeys():
+			if k[0] != "x": continue
+			fmt = self._format[k]
+			data = self[k]
+			if type(data) == list:
+				for x in data: x.importDataLoop(rom)
+			else:
+				data = data.serialize(**self.prepOpts(fmt))
+				size = self.get(fmt["size"])
+				if len(data) != size:
+					raise RPLError("Expected size %i but size %i returned." % (
+						size, len(data)
+					))
+				#endif
+				rom.seek(base + fmt["offset"], 0)
+				rom.write(data)
+			#endif
+		#endfor
+	#enddef
+
+	def calculateOffsets(self):
+		calcedOffset=0
+		for k in self.iterkeys():
+			if k[0] != "x": continue
+			fmt = self._format[k]
+			# Get real offset
+			offset = calcedOffset
+			if fmt["offset"] is not None and fmt["offsetRefs"]:
+				# Remove sum of static offsets
+				offset -= fmt["offset"]
+				# TODO: Gonna be difficult if not impossible to properly split
+				# these in case of multiple refs..
+				if len(fmt["offsetRefs"]) > 1:
+					raise RPLError("Cannot import fields that use multiple "
+						"references for the offset at the moment."
+					)
+				#endif
+				fmt["offsetRefs"][0].set(offset)
+			#endif
+			data = self[k]
+			fmt["offset"] = calcedOffset
+			if type(data) == list:
+				for x in data:
+					x._base = RPL.Number(calcedOffset)
+					calcedOffset += x.calculateOffsets()
+				#endfor
+			else: calcedOffset += self.get(fmt["size"])
+		#endfor
+		return calcedOffset
+	#enddef
+
 	def len(self):
 		if self._len is not None: return self._len
 		size = 0
-		count = 0
 		for k in self.iterkeys():
 			if k[0] != "x": continue
 			fmt = self.__parseFormat(k)
 			if self.get(fmt["type"])[0:7] == "Format:":
 				for x in self[k]: size += x.len()
 			else: size += self.get(fmt["size"])
-			if not fmt["command"]: count += 1
 		#endfor
 		self._len = size
-		self._count = count
 		return size
 	#enddef
 
 	def countExported(self):
 		if self._count is not None: return self._count
-		else:
-			self.len()
-			return self._count
-		#endif
+		count = 0
+		for k in self.iterkeys():
+			if k[0] != "x": continue
+			self.__parseFormat(k)
+			if k not in self._command: count += 1
+		#endfor
+		self._count = count
+		return count
 	#enddef
 #endclass
 
 class Format(DataFormat, RPL.Cloneable):
+	"""
+	Represents the format of packed data.
+	See Data for specifics
+	"""
 	typeName = "format"
 
 	def __init__(self, rpl, name, parent=None):
 		RPL.Cloneable.__init__(self, rpl, name, parent)
 		DataFormat.__init__(self)
-		self.alsoClone("_format")
+		self.alsoClone("_format","_command")
 		self._base = None
 	#enddef
 
@@ -388,12 +511,21 @@ class Format(DataFormat, RPL.Cloneable):
 
 # TODO: Support txt and bin exports
 class Data(DataFormat, RPL.Serializable):
-	"""Manages un/structured binary data.
-	What I think this needs to support:
-	 * Self-referencing entries for length
-	 * Ability to use system's references
-	 * Integration with system datatypes
-	 * Describe type, size, endian, sign, and padding
+	"""
+	Manages un/structured binary data.
+	To describe the format, one must add keys prefixed with "x"
+	Order is important, of course. The format for a field's description is:
+	[type, size, offset?, endian?, sign?, pad char?, pad side?]
+	All entries with a ? are optional, and order of them doesn't matter.
+	Type: Datatype by name, for example: string, number
+	Size: Size of the field in bytes
+	Offset: Offset from base to where this entry is. By default this is
+	        calculated from the sizes, but there are times it may be
+	        necessary to supply it (dynamic sizing in the middle).
+	Endian: Only relevant to numbers, can be "little" or "big"
+	Sign: Only relevant to numbers, can be "signed" or "unsigned"
+	Pad char: Only relevant to strings, it's the char to pad with.
+	Pad side: Only relevant to strings, can be "left", "right", or "center"
 	"""
 
 	typeName = "data"
@@ -401,51 +533,13 @@ class Data(DataFormat, RPL.Serializable):
 	def __init__(self, rpl, name, parent=None):
 		RPL.Serializable.__init__(self, rpl, name, parent)
 		DataFormat.__init__(self)
+		self.regKey("pretty", "number", "false")
+		self.regKey("comment", "string", "")
 	#enddef
 
 	def importData(self, rom):
-		"""
-		Represents the format of packed data.
-		To describe the format, one must add keys prefixed with "x"
-		Order is important, of course. The format for a field's description is:
-		[type, size, offset?, endian?, sign?, pad char?, pad side?]
-		All entries with a ? are optional, and order of them doesn't matter.
-		Type: Datatype by name, for example: string, number
-		Size: Size of the field in bytes
-		Offset: Offset from base to where this entry is. By default this is
-		        calculated from the sizes, but there are times it may be
-		        necessary to supply it (dynamic sizing in the middle).
-		Endian: Only relevant to numbers, can be "little" or "big"
-		Sign: Only relevant to numbers, can be "signed" or "unsigned"
-		Pad char: Only relevant to strings, it's the char to pad with.
-		Pad side: Only relevant to strings, can be "left", "right", or "center"
-		"""
-		base = self["base"]
-		for k in self.iterkeys():
-			if k[0] != "x": continue
-			fmt = self._format[k]
-			com = self._format[k]["command"]
-			if not com: pass
-			elif com[0] == "len":
-				# TODO: Grab size of serialized data for Format types
-				self[k] = RPL.Number(len(
-					self[com[1]].serialize(self._format[com[1]])
-				))
-			elif com[0] == "count":
-				if type(self[com[1]]) is list: self[k] = len(self[com[1]])
-				else: raise RPLError("Tried to count non-Format type.")
-			elif com[0] == "offset":
-				self[k] = RPL.Number(self._format[com[1]]["offset"])
-			#endif
-			rom.seek(base + fmt["offset"], 0)
-			data = self[k].serialize(**prepOpts(fmt))
-			if len(data) != self.get(fmt["size"]):
-				raise RPLError("Expected size %i but size %i returned." % (
-					self.get(fmt["size"]), len(data)
-				))
-			#endif
-			rom.write(data)
-		#endfor
+		self.calculateOffsets()
+		self.importDataLoop(rom)
 	#enddef
 
 	def exportData(self, rom, folder):
