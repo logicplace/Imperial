@@ -97,6 +97,102 @@ class TestParse(RPLTestCase):
 
 def RL(*x): return rpl.List(list(x))
 
+STR = rpl.String("hi")
+LIT = rpl.Literal("hi")
+NUM = rpl.Number(1)
+
+class TypeCheckTestCase(object):
+	def __init__(self, key, syn, data, expect):
+		self.key = key
+		self.syn = syn
+		self.data = data
+		self.expect = expect
+
+TYPE_CHECK_TEST_CASES = [
+	TypeCheckTestCase("StrStr", "string", STR, "string"),
+	TypeCheckTestCase("StrLit", "string", LIT, "literal"),
+	TypeCheckTestCase("StrNum", "string", NUM, None),
+	TypeCheckTestCase("OrNum", "string|number", NUM, "number"),
+	TypeCheckTestCase("ListNum", "[number]", NUM, None),
+	TypeCheckTestCase("ListList", "[number]", RL(NUM), "list"),
+	TypeCheckTestCase("ListBadList", "[number]", RL(STR), None),
+	TypeCheckTestCase("LONum", "[string|number]", NUM, None),
+	TypeCheckTestCase("LOList", "[string|number]", RL(NUM), "list"),
+	TypeCheckTestCase("Sublist", "[number,[number],number]", RL(NUM,RL(NUM),NUM), "list"),
+	TypeCheckTestCase("SublistBad", "[number,[number],number]", RL(NUM,RL(STR),NUM), None),
+	TypeCheckTestCase("OL_1", "string|[number]", STR, "string"),
+	TypeCheckTestCase("OL_2", "string|[number]", RL(NUM), "list"),
+	TypeCheckTestCase("OLBad", "string|[number]", NUM, None),
+	TypeCheckTestCase("OL_3", "[number|[string],number]", RL(NUM, NUM), "list"),
+	TypeCheckTestCase("OL_4", "[number|[string],number]", RL(RL(STR),NUM), "list"),
+	TypeCheckTestCase("SSSSSL", "[[[[[string]]]]]", RL(RL(RL(RL(RL(STR))))), "list"),
+	TypeCheckTestCase("Repeat1_1", "[number]*", NUM, "list"),
+	TypeCheckTestCase("Repeat1_2", "[number]*", RL(NUM), "list"),
+	TypeCheckTestCase("Repeat1_3", "[number]*", RL(NUM, NUM), "list"),
+	TypeCheckTestCase("Repeat1_4", "[number]*", STR, None),
+	TypeCheckTestCase("Repeat2_1", "[number]+", NUM, None),
+	TypeCheckTestCase("Repeat2_2", "[number]+", RL(NUM), "list"),
+	TypeCheckTestCase("Repeat2_3", "[number]+", RL(NUM, NUM), "list"),
+	TypeCheckTestCase("Repeat3", "[number|string|list]+", RL(STR), "list"),
+	TypeCheckTestCase("Repeat4_1", "[number,string]*", NUM, "list"),
+	TypeCheckTestCase("Repeat4_2", "[number,string]*", STR, "list"),
+	TypeCheckTestCase("Repeat4_3", "[number,string]*", RL(NUM, STR), "list"),
+	TypeCheckTestCase("Repeat4_4", "[number,string]*", RL(STR, NUM), None),
+	TypeCheckTestCase("Repeat5_1", "[number,string]!", NUM, "list"),
+	TypeCheckTestCase("Repeat5_2", "[number,string]!", STR, "list"),
+	TypeCheckTestCase("Repeat5_3", "[number,string]!", RL(NUM, STR), "list"),
+	TypeCheckTestCase("Repeat5_4", "[number,string]!", RL(STR,NUM), None),
+	TypeCheckTestCase("Repeat5_5", "[number,string]!", RL(NUM, STR, NUM, STR), None),
+	TypeCheckTestCase("Repeat6_1", "[number]~", NUM, "number"),
+	TypeCheckTestCase("Repeat6_2", "[number]~", RL(NUM), "list"),
+	TypeCheckTestCase("Repeat7_1", "[number].", NUM, "number"),
+	TypeCheckTestCase("Repeat7_2", "[number].", RL(NUM), "list"),
+	TypeCheckTestCase("Repeat8_1", "[number|^]", RL(RL(NUM)), "list"),
+	TypeCheckTestCase("Repeat8_2", "[^|number]", RL(RL(NUM)), "list"),
+	TypeCheckTestCase("Repeat8_3", "[^|number]", RL(RL(STR)), None),
+	TypeCheckTestCase("Repeat8_4", "[number|^]", RL(RL(RL(NUM))), "list"),
+	# Matest_ke sure_doesn't infinitely recurse or anything here
+	TypeCheckTestCase("Repeat8_5", "[number|^]", RL(RL(RL(STR))), None),
+	TypeCheckTestCase("Repeat8_6", "[number|^]", RL(RL(RL(RL(RL(RL()))))), None),
+	TypeCheckTestCase("Repeat9_1", "[string,number]!0", STR, "list"),
+	TypeCheckTestCase("Repeat9_2", "[string,number]!0", NUM, None),
+	TypeCheckTestCase("Repeat10_1", "[string,number]+", RL(STR, NUM), "list"),
+	TypeCheckTestCase("Repeat10_2", "[string,number]+", RL(STR, NUM, STR, NUM), "list"),
+	TypeCheckTestCase("Repeat10_3", "[string,number]+", RL(STR, NUM, STR), None),
+	TypeCheckTestCase("Repeat11_1", "[string,number]+1", RL(STR), "list"),
+	TypeCheckTestCase("Repeat11_2", "[string,number]+1", RL(STR, NUM), "list"),
+	TypeCheckTestCase("Repeat11_3", "[string,number]+1", RL(STR, NUM, STR, NUM), None),
+	TypeCheckTestCase("Repeat11_4", "[string,number]+1", RL(STR, NUM, NUM), "list"),
+	TypeCheckTestCase("Repeat11_5", "[string,number]+1", RL(NUM), None),
+	TypeCheckTestCase("RO_1", "[number]*|string", NUM, "list"),
+	TypeCheckTestCase("RO_2", "[number]*|string", RL(NUM), "list"),
+	TypeCheckTestCase("RO_3", "[number]*|string", STR, "string"),
+	TypeCheckTestCase("Heir_1", "range", rpl.Range([NUM, NUM]), "range"),
+	TypeCheckTestCase("Heir_2", "range", RL(NUM, NUM), "range"),
+]
+
+def inject_type_check_tests(cls):
+	"""
+	Dynamically add the type check tests in TYPE_CHECK_TEST_CASES to a class.
+
+	For use as a decorator, simply add @inject_type_check_tests to the class.
+	For every test in the test case list, it creates a method named test_foo,
+	where foo is the key field of the test case object. Assumes that the given
+	class has a method typeCheck which takes the test case parameters.
+	"""
+	import new
+	def create_test_method(test):
+		def test_fn(self):
+			self.typeCheck(test.key, test.syn, test.data, test.expect)
+		m = new.instancemethod(test_fn, None, cls)
+		setattr(cls, 'test_%s' % test.key, m)
+
+	for test in TYPE_CHECK_TEST_CASES:
+		create_test_method(test)
+
+	return cls
+
+@inject_type_check_tests
 class TestTypeCheck(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls):
@@ -114,67 +210,6 @@ class TestTypeCheck(unittest.TestCase):
 		self.assertTrue((expect is None and result is None)
 			or (result is not None and result.typeName == expect))
 	#enddef
-
-	def test_StrStr(self): self.typeCheck("StrStrTest", "string", self.Str, "string")
-	def test_StrLit(self): self.typeCheck("StrLitTest", "string", self.Lit, "literal")
-	def test_StrNum(self): self.typeCheck("StrNumTest", "string", self.Num, None)
-	def test_OrNum(self): self.typeCheck("OrNumTest", "string|number", self.Num, "number")
-	def test_ListNum(self): self.typeCheck("ListNumTest", "[number]", self.Num, None)
-	def test_ListList(self): self.typeCheck("ListListTest", "[number]", RL(self.Num), "list")
-	def test_ListBadList(self): self.typeCheck("ListBadListTest", "[number]", RL(self.Str), None)
-	def test_LONum(self): self.typeCheck("LONumTest", "[string|number]", self.Num, None)
-	def test_LOList(self): self.typeCheck("LOListTest", "[string|number]", RL(self.Num), "list")
-	def test_Sublist(self): self.typeCheck("SublistTest", "[number,[number],number]", RL(self.Num,RL(self.Num),self.Num), "list")
-	def test_SublistBad(self): self.typeCheck("SublistBadTest", "[number,[number],number]", RL(self.Num,RL(self.Str),self.Num), None)
-	def test_OL1(self): self.typeCheck("OLTest1", "string|[number]", self.Str, "string")
-	def test_OL2(self): self.typeCheck("OLTest2", "string|[number]", RL(self.Num), "list")
-	def test_OLBad(self): self.typeCheck("OLBadTest", "string|[number]", self.Num, None)
-	def test_OL3(self): self.typeCheck("OL3", "[number|[string],number]", RL(self.Num, self.Num), "list")
-	def test_OL4(self): self.typeCheck("OL4", "[number|[string],number]", RL(RL(self.Str),self.Num), "list")
-	def test_SSSSSL(self): self.typeCheck("SSSSSLTest", "[[[[[string]]]]]", RL(RL(RL(RL(RL(self.Str))))), "list")
-	def test_Repeat1_1(self): self.typeCheck("Repeat1Test1", "[number]*", self.Num, "list")
-	def test_Repeat1_2(self): self.typeCheck("Repeat1Test2", "[number]*", RL(self.Num), "list")
-	def test_Repeat1_3(self): self.typeCheck("Repeat1Test3", "[number]*", RL(self.Num, self.Num), "list")
-	def test_Repeat1_4(self): self.typeCheck("Repeat1Test4", "[number]*", self.Str, None)
-	def test_Repeat2_1(self): self.typeCheck("Repeat2Test1", "[number]+", self.Num, None)
-	def test_Repeat2_2(self): self.typeCheck("Repeat2Test2", "[number]+", RL(self.Num), "list")
-	def test_Repeat2_3(self): self.typeCheck("Repeat2Test3", "[number]+", RL(self.Num, self.Num), "list")
-	def test_Repeat3(self): self.typeCheck("Repeat3Test", "[number|string|list]+", RL(self.Str), "list")
-	def test_Repeat4_1(self): self.typeCheck("Repeat4Test1", "[number,string]*", self.Num, "list")
-	def test_Repeat4_2(self): self.typeCheck("Repeat4Test2", "[number,string]*", self.Str, "list")
-	def test_Repeat4_3(self): self.typeCheck("Repeat4Test3", "[number,string]*", RL(self.Num, self.Str), "list")
-	def test_Repeat4_4(self): self.typeCheck("Repeat4Test4", "[number,string]*", RL(self.Str, self.Num), None)
-	def test_Repeat5_1(self): self.typeCheck("Repeat5Test1", "[number,string]!", self.Num, "list")
-	def test_Repeat5_2(self): self.typeCheck("Repeat5Test2", "[number,string]!", self.Str, "list")
-	def test_Repeat5_3(self): self.typeCheck("Repeat5Test3", "[number,string]!", RL(self.Num, self.Str), "list")
-	def test_Repeat5_4(self): self.typeCheck("Repeat5Test4", "[number,string]!", RL(self.Str,self.Num), None)
-	def test_Repeat5_5(self): self.typeCheck("Repeat5Test5", "[number,string]!", RL(self.Num, self.Str, self.Num, self.Str), None)
-	def test_Repeat6_1(self): self.typeCheck("Repeat6Test1", "[number]~", self.Num, "number")
-	def test_Repeat6_2(self): self.typeCheck("Repeat6Test2", "[number]~", RL(self.Num), "list")
-	def test_Repeat7_1(self): self.typeCheck("Repeat7Test1", "[number].", self.Num, "number")
-	def test_Repeat7_2(self): self.typeCheck("Repeat7Test2", "[number].", RL(self.Num), "list")
-	def test_Repeat8_1(self): self.typeCheck("Repeat8Test1", "[number|^]", RL(RL(self.Num)), "list")
-	def test_Repeat8_2(self): self.typeCheck("Repeat8Test2", "[^|number]", RL(RL(self.Num)), "list")
-	def test_Repeat8_3(self): self.typeCheck("Repeat8Test3", "[^|number]", RL(RL(self.Str)), None)
-	def test_Repeat8_4(self): self.typeCheck("Repeat8Test4", "[number|^]", RL(RL(RL(self.Num))), "list")
-	# Matest_ke sure_doesn't infinitely recurse or anything here
-	def test_Repeat8_5(self): self.typeCheck("Repeat8Test5", "[number|^]", RL(RL(RL(self.Str))), None)
-	def test_Repeat8_6(self): self.typeCheck("Repeat8Test6", "[number|^]", RL(RL(RL(RL(RL(RL()))))), None)
-	def test_Repeat9_1(self): self.typeCheck("Repeat9Test1", "[string,number]!0", self.Str, "list")
-	def test_Repeat9_2(self): self.typeCheck("Repeat9Test2", "[string,number]!0", self.Num, None)
-	def test_Repeat10_1(self): self.typeCheck("Repeat10Test1", "[string,number]+", RL(self.Str, self.Num), "list")
-	def test_Repeat10_2(self): self.typeCheck("Repeat10Test2", "[string,number]+", RL(self.Str, self.Num, self.Str, self.Num), "list")
-	def test_Repeat10_3(self): self.typeCheck("Repeat10Test3", "[string,number]+", RL(self.Str, self.Num, self.Str), None)
-	def test_Repeat11_1(self): self.typeCheck("Repeat11Test1", "[string,number]+1", RL(self.Str), "list")
-	def test_Repeat11_2(self): self.typeCheck("Repeat11Test2", "[string,number]+1", RL(self.Str, self.Num), "list")
-	def test_Repeat11_3(self): self.typeCheck("Repeat11Test3", "[string,number]+1", RL(self.Str, self.Num, self.Str, self.Num), None)
-	def test_Repeat11_4(self): self.typeCheck("Repeat11Test4", "[string,number]+1", RL(self.Str, self.Num, self.Num), "list")
-	def test_Repeat11_5(self): self.typeCheck("Repeat11Test5", "[string,number]+1", RL(self.Num), None)
-	def test_RO1(self): self.typeCheck("ROTest1", "[number]*|string", self.Num, "list")
-	def test_RO2(self): self.typeCheck("ROTest2", "[number]*|string", RL(self.Num), "list")
-	def test_RO3(self): self.typeCheck("ROTest3", "[number]*|string", self.Str, "string")
-	def test_Heir1(self): self.typeCheck("HeirTest1", "range", rpl.Range([self.Num, self.Num]), "range")
-	def test_Heir2(self): self.typeCheck("HeirTest2", "range", RL(self.Num, self.Num), "range")
 
 class TestReferences(RPLTestCase):
 	@classmethod
