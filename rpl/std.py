@@ -189,7 +189,7 @@ class DataFormat:
 						try: self.get(x)
 						except RPLError:
 							self._command[refKey] = ["offset", key]
-							tmp["offsetRefs"].push(x)
+							tmp["offsetRefs"].append(x)
 							continue
 						#endtry
 					#endif
