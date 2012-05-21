@@ -220,12 +220,6 @@ class TestTypeCheck(unittest.TestCase):
 		cls.basic.parse(os.path.join("tests", "rpls", "rpl.rpl"))
 	#enddef
 
-	def setUp(self):
-		self.Str = rpl.String("hi")
-		self.Lit = rpl.Literal("hi")
-		self.Num = rpl.Number(1)
-	#enddef
-
 	def typeCheck(self, key, syn, data, expect):
 		result = rpl.RPLTypeCheck(TestTypeCheck.basic, key, syn).verify(data)
 		self.assertTrue((expect is None and result is None)
