@@ -16,6 +16,18 @@ from time import time
 
 from rpl import rpl, std
 
+_timedTests = []
+
+def timedTest(fn):
+	def wrapper(self):
+		start = time()
+		fn(self)
+		_timedTests.append((fn.__name__, time() - start))
+	#enddef
+
+	return wrapper
+#enddef
+
 class RPLTestCase(unittest.TestCase):
 	# Helper functions:
 	def checkLen(self, data, exLen):
@@ -251,24 +263,33 @@ class TestReferences(RPLTestCase):
 	#enddef
 #endclass
 
-if __name__ == '__main__':
-	unittest.main()
+class TestExport(unittest.TestCase):
+	@timedTest
+	def test_export(self):
+		astd = std.Standard()
+		astd.parse(os.path.join("tests", "rpls", "data.rpl"))
+		folder = os.path.join("tests", "rpls", "data")
+		astd.Def("file", "test.rpl")
+		astd.exportData(os.path.join(folder, "data.bin"), folder)
+		# TODO: Compare test.rpl with data.rpl
+	#enddef
+#endclass
 
-""" Ignore these for now
-	log("Beginning meatier tests...")
-	std = loadmod("std", rpldir)
-	log("Loaded rpl.std")
-	log("# Test 10: Data #")
-	astd = std.Standard()
-	astd.parse(path.join("rpls", "data.rpl"))
-	folder = path.join("rpls", "data")
-	astd.Def("file", "test.rpl")
-	astd.exportData(path.join(folder, "data.bin"), folder)
-	# TODO: Compare test.rpl with data.rpl
-	log("Export successful")
-	astd.Def("file", "data.rpl")
-	astd.importData(path.join(folder, "test.bin"), folder)
-	# TODO: Compare test.bin with data.bin
-	log("Import successful")
-	log("Test 10 end")
-"""
+class TestImport(unittest.TestCase):
+	@timedTest
+	def test_import(self):
+		astd = std.Standard()
+		astd.parse(os.path.join("tests", "rpls", "data.rpl"))
+		astd.Def("file", "data.rpl")
+		folder = os.path.join("tests", "rpls", "data")
+		astd.importData(os.path.join(folder, "test.bin"), folder)
+		# TODO: Compare test.bin with data.bin
+	#enddef
+#endclass
+
+if __name__ == '__main__':
+	try:
+		unittest.main()
+	finally:
+		for test, time in _timedTests:
+			print 'time for %s: %.3fs' % (test, time)
