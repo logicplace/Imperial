@@ -78,13 +78,13 @@ class TestParse(RPLTestCase):
 		cls.basic.parse(os.path.join("tests", "rpls", "rpl.rpl"))
 	#enddef
 
-	def test_AndAnotherStatic(self):
+	def testAndAnotherStatic(self):
 		AndAnotherStatic = TestParse.basic.root["AndAnotherStatic"]
 		self.checkLen(AndAnotherStatic, 1)
 		self.check(AndAnotherStatic, "just", "literal", "because")
 	#enddef
 
-	def test_static0(self):
+	def testStatic0(self):
 		static0 = TestParse.basic.root["static0"]
 		self.checkLen(static0, 8)
 		self.check(static0, "string", "string", "hi")
@@ -204,7 +204,7 @@ def injectTypeCheckTests(cls):
 		def testFn(self):
 			self.typeCheck(test.key, test.syn, test.data, test.expect)
 		m = new.instancemethod(testFn, None, cls)
-		setattr(cls, 'test_%s' % test.key, m)
+		setattr(cls, 'test%s' % test.key, m)
 
 	for test in TYPE_CHECK_TEST_CASES:
 		createTestMethod(test)
@@ -218,12 +218,6 @@ class TestTypeCheck(unittest.TestCase):
 	def setUpClass(cls):
 		cls.basic = rpl.RPL()
 		cls.basic.parse(os.path.join("tests", "rpls", "rpl.rpl"))
-	#enddef
-
-	def setUp(self):
-		self.Str = rpl.String("hi")
-		self.Lit = rpl.Literal("hi")
-		self.Num = rpl.Number(1)
 	#enddef
 
 	def typeCheck(self, key, syn, data, expect):
@@ -240,7 +234,7 @@ class TestReferences(RPLTestCase):
 		cls.refers.parse(os.path.join("tests", "rpls", "references.rpl"))
 	#enddef
 
-	def test_stuff(self):
+	def testStuff(self):
 		x = TestReferences.refers.child("tests")
 		self.check(x, "test1", "number", 1)
 		self.comp(x, "test2", "list", [ ("literal", "+"), ("literal", "more"),
@@ -265,7 +259,7 @@ class TestReferences(RPLTestCase):
 
 class TestExport(unittest.TestCase):
 	@timedTest
-	def test_export(self):
+	def testExport(self):
 		astd = std.Standard()
 		astd.parse(os.path.join("tests", "rpls", "data.rpl"))
 		folder = os.path.join("tests", "rpls", "data")
@@ -277,7 +271,7 @@ class TestExport(unittest.TestCase):
 
 class TestImport(unittest.TestCase):
 	@timedTest
-	def test_import(self):
+	def testImport(self):
 		astd = std.Standard()
 		astd.parse(os.path.join("tests", "rpls", "data.rpl"))
 		astd.Def("file", "data.rpl")
