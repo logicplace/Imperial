@@ -3,6 +3,7 @@ from rpl import RPLError
 import Image
 import os
 import re
+import helper
 
 class Standard(RPL.RPL):
 	def __init__(self):
@@ -24,7 +25,7 @@ class DataFile:
 	def read(self):
 		"""Read from .rpl data file."""
 		rpl = self._rpl
-		raw = rpl.readFrom(self._path)
+		raw = helper.readFrom(self._path)
 
 		base = []
 		adder = []
@@ -74,7 +75,7 @@ class DataFile:
 		"""Write data to a given file."""
 		# TODO: Prettyprinting
 		comment = "# " + self.comment if self.comment else ""
-		self._rpl.writeTo(self._path, comment + os.linesep.join(map(unicode, self._base)))
+		helper.writeTo(self._path, comment + os.linesep.join(map(unicode, self._base)))
 	#enddef
 
 	def add(self, item):

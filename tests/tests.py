@@ -273,7 +273,7 @@ class TestExport(unittest.TestCase):
 		astd = std.Standard()
 		astd.parse(os.path.join("tests", "rpls", "data.rpl"))
 		folder = os.path.join("tests", "rpls", "data")
-		astd.Def("file", "test.rpl")
+		astd.addDef("file", "test.rpl")
 		astd.exportData(os.path.join(folder, "data.bin"), folder)
 		# Compare test.rpl with data.rpl
 		data = read([folder, "data.rpl"], "r")
@@ -287,7 +287,7 @@ class TestImport(unittest.TestCase):
 	def testImport(self):
 		astd = std.Standard()
 		astd.parse(os.path.join("tests", "rpls", "data.rpl"))
-		astd.Def("file", "data.rpl")
+		astd.addDef("file", "data.rpl")
 		folder = os.path.join("tests", "rpls", "data")
 		astd.importData(os.path.join(folder, "test.bin"), folder)
 		# Compare test.bin with data.bin

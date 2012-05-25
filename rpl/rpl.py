@@ -4,6 +4,7 @@ from sys import stderr
 import os
 from math import ceil
 import copy
+import helper
 
 # TODO:
 #  * RPLRef issues:
@@ -14,7 +15,7 @@ import copy
 #    otherwise return the already loaded/modified data to be further modified.
 #  * Add referencing multiline strs with @` ` form.
 
-def err(msg): stderr.write(unicode(msg) + u"\n")
+def err(msg): print msg >>stderr
 
 class RPLError(Exception): pass
 
@@ -26,48 +27,96 @@ class RPL:
 
 	# Constants
 	tokenize = re.compile(
-		(r'\s*(?:'                                # Whitespace
-		r'"([^"\r\n]*)"|'r"'([^'\r\n]*)'|"        # String
-		# Have to remove `s in processing
-		r'((?:\s*`[^`]*`\s*(?:#.*)?)+)|'          # Multi-line String
-		# Number or range (verify syntactically correct range later)
-		r'(%(r1)s%(r2)s%(r1)s:\-*%(r2)s*(?=[ ,]|$))|'
-		r'(%(key)s):([ \t]*)|'                    # Key
-		r'([{}\[\],])|'                           # Flow Identifier
-		r'@([^%(lit)s.]+(?:\.%(key)s)?(?:\[[0-9]+\])*)|' # Reference
-		r'([^%(lit)s]+)|'                         # Unquoted string or struct name/type
-		r'#.*$)'                                  # Comment
+		# Whitespace
+		(r'\s*(?:'
+		 # String: Either "etc" or 'etc' no linebreaks inside
+		 r'"([^"\r\n]*)"|'r"'([^'\r\n]*)'|"
+		 # Multi-line String: Matches `etc` but multiple in a row
+		 # NOTE: This picks up comments and the ` themselves so have to
+		 # remove those in processing.
+		 r'((?:\s*`[^`]*`\s*(?:#.*)?)+)|'
+		 # Number or range (verify syntactically correct range later)
+		 # That is, any string of numbers, -, *, :, or :c: where c is one
+		 # lowercase letter.
+		 r'(%(r1)s%(r2)s%(r1)s:\-*%(r2)s*(?=[ ,]|$))|'
+		 # Key: Lowercase letters optionally followed by numbers.
+		 # Must be followed by a colon.
+		 r'(%(key)s):([ \t]*)|'
+		 # Flow Identifier: One of: {}[],
+		 r'([{}\[\],])|'
+		 # Reference: @StructName.keyname[#][#][#] keyname and indexes are
+		 # optional. Can have infinite indexes, but only one keyname.
+		 r'@([^%(lit)s.]+(?:\.%(key)s)?(?:\[[0-9]+\])*)|'
+		 # Literal: Unquoted string or struct name/type
+		 r'([^%(lit)s]+)|'
+		 # Comment
+		 r'#.*$)'
 		) % {
+			# Range part 1
 			"r1": r'(?:[0-9',
+			# Range part 2
 			"r2": r']|(?<![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)',
+			# Invalid characters for a Literal
 			"lit": r'{}\[\],\$@"#\r\n' r"'",
+			# Valid key name
 			"key": r'[a-z]+[0-9]*'
 		}
 	, re.M | re.U)
 
 	multilineStr = re.compile(r'`([^`]*)`\s*(?:#.*)?')
 
+	# For numbers (number and hexnum) and ranges
 	number = re.compile(
 		# Must start with a number, or a single letter followed by a :
-		(r'(?:%(numx)s|[a-z](?=:))'
-		# Range split group
-		+r'(?:'
-		# Can match a range or times here
-		+r'(?:%(bin)s(%(numx)s))?'
-		# Must match a split, can either be a number or single letter followed by a :
-		+r':(?:%(numx)s|[a-z](?=[: ]|$))'
-		+r')*'
-		# To be sure we're able to end in a range/times
-		+r'(?:%(bin)s(?:%(numx)s))?'
+		(r'(?:%(num)s|[a-z](?=:))'
+		 # Range split group
+		 r'(?:'
+		 # Can match a range or times here
+		 r'(?:%(bin)s(%(num)s))?'
+		 # Must match a split, can either be a number or single letter followed by a :
+		 r':(?:%(num)s|[a-z](?=[: ]|$))'
+		 r')*'
+		 # To be sure we're able to end in a range/times
+		 r'(?:%(bin)s(?:%(num)s))?'
 		) % {
-			'bin': r'[\-*]'
-			,'numx': r'[0-9]+|\$[0-9a-fA-F]+'
+			# Binary operators
+			'bin': r'[\-*]',
+			# Valid forms for a number
+			'num': r'[0-9]+|\$[0-9a-fA-F]+'
 		}
 	)
-	isRange = re.compile(r'.*[:\-*].*')
+	# Quick check for if a number is a range or not
+	isRange = re.compile(r'[:\-*]')
+
+	_statics = {
+		"false":   "0",
+		"true":    "1",
+		"black":   "$000000",
+		"white":   "$ffffff",
+		"red":     "$ff0000",
+		"blue":    "$00ff00",
+		"green":   "$0000ff",
+		"yellow":  "$ffff00",
+		"magenta": "$ff00ff",
+		"pink":    "$ff00ff",
+		"cyan":    "$00ffff",
+		"gray":    "$a5a5a5",
+		"byte":    "1",
+		"short":   "2",
+		"long":    "4",
+		"double":  "8",
+		"LU":      "LRUD",
+		"LD":      "LRDU",
+		"RU":      "RLUD",
+		"RD":      "RLDU",
+		"UL":      "UDLR",
+		"UR":      "UDRL",
+		"DL":      "DULR",
+		"DR":      "DURL",
+	}
 
 	def __init__(self):
-		"""Be sure to call this!"""
+		# Be sure to call this!
 		self.static = {}
 		self.types = {}
 		self.structs = {}
@@ -86,74 +135,14 @@ class RPL:
 		self.regType(List)
 		self.regType(Range)
 
-		for k,v in {
-			 "false":   "0"
-			,"true":    "1"
-			,"black":   "$000000"
-			,"white":   "$ffffff"
-			,"red":     "$ff0000"
-			,"blue":    "$00ff00"
-			,"green":   "$0000ff"
-			,"yellow":  "$ffff00"
-			,"magenta": "$ff00ff"
-			,"pink":    "$ff00ff"
-			,"cyan":    "$00ffff"
-			,"gray":    "$a5a5a5"
-			,"byte":    "1"
-			,"short":   "2"
-			,"long":    "4"
-			,"double":  "8"
-			,"LU":      "LRUD"
-			,"LD":      "LRDU"
-			,"RU":      "RLUD"
-			,"RD":      "RLDU"
-			,"UL":      "UDLR"
-			,"UR":      "UDRL"
-			,"DL":      "DULR"
-			,"DR":      "DURL"
-		}.iteritems(): self.regStatic(k, v)
-	#enddef
-
-	def readFrom(self, etc):
-		"""
-		Helper class to read from a file or stream
-		"""
-		if type(etc) in [str, unicode]:
-			x = codecs.open(etc, encoding="utf-8", mode="r")
-			ret = x.read()
-			x.close()
-			return ret
-		else: return etc.read()
-	#enddef
-
-	def writeTo(self, etc, data):
-		"""
-		Helper class to write to a file or stream
-		"""
-		if type(etc) in [str, unicode]:
-			x = codecs.open(etc, encoding="utf-8", mode="w")
-			ret = x.write(data)
-			x.close()
-			return ret
-		else: return etc.write(data)
-	#enddef
-
-	def stream(self, etc):
-		"""
-		Helper class to open a file as a stream
-		"""
-		if type(etc) in [str, unicode]:
-			try: etc = open(etc, "r+b")
-			except IOError: etc = open(etc, "a+b")
-		#endif
-		return etc
+		for k,v in RPL._statics.iteritems(): self.regStatic(k, v)
 	#enddef
 
 	def parse(self, inFile):
 		"""
 		Read in a file and parse it.
 		"""
-		raw = self.readFrom(inFile)
+		raw = helper.readFrom(inFile)
 
 		lastLit, prelit = None, ""
 		currentKey = None
@@ -163,7 +152,7 @@ class RPL:
 
 		for token in RPL.tokenize.finditer(raw):
 			groups = token.groups() # Used later
-			dstr,sstr,mstr,num,key,afterkey,flow,ref,lit = groups
+			dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = groups
 			sstr = dstr or sstr # Double or single
 			add, error, skipSubInst = None, None, False
 
@@ -285,7 +274,11 @@ class RPL:
 	#enddef
 
 	def parseCreate(self, add, currentStruct, currentKey, line, char, skipSubInst=False):
-		"""Instantiates data. Used by parse and parseData"""
+		"""
+		Instantiates data. Used by parse and parseData
+		Ensures references and lists are handled appropriately, as well as
+		wrapping regular data.
+		"""
 		dtype, val = add
 
 		# Special handler for references (cause they're so speeshul)
@@ -304,15 +297,21 @@ class RPL:
 	#enddef
 
 	def parseData(self, data, currentStruct=None, currentKey=None, line=-1, char=-1):
-		"""Parse one value"""
+		"""
+		Parse one value from string form. May also take in a preparsed string
+		though this has a different return form.
+		Passing as a tuple of preparsed data returns: (type, data)
+		Passing as a string returns just the wrapped data.
+		"""
 		pp = type(data) is tuple
-		if pp: dstr,sstr,mstr,num,key,afterkey,flow,ref,lit = data
+		if pp: dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = data
 		else:
 			if data == "":
-				dstr,sstr,mstr,num, key, afterkey,flow,ref, lit = (
-				None,None,None,None,None,None,    None,None,"")
+				dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = (
+					None, None, None, None, None, None, None, None, ""
+				)
 			else:
-				try: dstr,sstr,mstr,num,key,afterkey,flow,ref,lit = self.tokenize.match(data).groups()
+				try: dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = self.tokenize.match(data).groups()
 				except AttributeError: raise RPLError("Syntax error in data: %s" % data)
 			#endif
 		#endif
@@ -328,7 +327,7 @@ class RPL:
 		elif num:
 			if not RPL.number.match(num):
 				error = "Invalid range formatting."
-			elif RPL.isRange.match(num):
+			elif RPL.isRange.search(num):
 				# Range
 				numList = []
 				ranges = num.split(":")
@@ -372,7 +371,10 @@ class RPL:
 		else: raise RPLError("Error parsing data: %s" % data)
 	#endif
 
-	def Def(self, key, value):
+	def addDef(self, key, value):
+		"""
+		Add a key/value pair to the Defs struct. Used on the command line.
+		"""
 		if "Defs" not in self.structsByName:
 			defs = self.structsByName["Defs"] = Static(self, "Defs")
 		else: defs = self.structsByName["Defs"]
@@ -443,7 +445,7 @@ class RPL:
 		"""
 		Import data from folder into the given ROM according to what.
 		"""
-		self.rom = rom = self.stream(rom)
+		self.rom = rom = helper.stream(rom)
 		self.importing = True
 		lfolder = list(os.path.split(os.path.normpath(folder)))
 
@@ -475,7 +477,7 @@ class RPL:
 		"""
 		Export data from rom into folder according to what.
 		"""
-		self.rom = rom = self.stream(rom)
+		self.rom = rom = helper.stream(rom)
 		self.importing = False
 		lfolder = list(os.path.split(os.path.normpath(folder)))
 
