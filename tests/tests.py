@@ -10,6 +10,7 @@ run this file specifically, but the former command will discover any other test
 files in the project.
 """
 
+import codecs
 import os.path
 import unittest
 from time import time
@@ -28,6 +29,15 @@ def timedTest(fn):
 	return wrapper
 #enddef
 
+def read(fileName, mode):
+	if type(fileName) is list: fileName = os.path.join(*fileName)
+	if "b" in mode: f = open(fileName, mode)
+	else: f = codecs.open(fileName, encoding="utf-8", mode="r")
+	data = f.read()
+	f.close()
+	return data
+#enddef
+
 class RPLTestCase(unittest.TestCase):
 	# Helper functions:
 	def checkLen(self, data, exLen):
@@ -40,7 +50,7 @@ class RPLTestCase(unittest.TestCase):
 		if tName == "reference": tName = data.get(retCl=True).typeName
 		self.assertEqual(tName, exType,
 			'Unexpected data type for "%s" (got "%s")' % (name, tName))
-		
+		#endif
 		if not typeOnly:
 			self.assertEqual(val, exVal,
 				'Unexpected value for "%s" (got "%s")' % (name, val))
@@ -265,7 +275,10 @@ class TestExport(unittest.TestCase):
 		folder = os.path.join("tests", "rpls", "data")
 		astd.Def("file", "test.rpl")
 		astd.exportData(os.path.join(folder, "data.bin"), folder)
-		# TODO: Compare test.rpl with data.rpl
+		# Compare test.rpl with data.rpl
+		data = read([folder, "data.rpl"], "r")
+		test = read([folder, "test.rpl"], "r")
+		self.assertEqual(data, test, "Unexpected result from export.")
 	#enddef
 #endclass
 
@@ -277,7 +290,10 @@ class TestImport(unittest.TestCase):
 		astd.Def("file", "data.rpl")
 		folder = os.path.join("tests", "rpls", "data")
 		astd.importData(os.path.join(folder, "test.bin"), folder)
-		# TODO: Compare test.bin with data.bin
+		# Compare test.bin with data.bin
+		data = read([folder, "data.bin"], "rb")
+		test = read([folder, "test.bin"], "rb")
+		self.assertEqual(data, test, "Unexpected result from export.")
 	#enddef
 #endclass
 
