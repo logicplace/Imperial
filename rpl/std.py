@@ -430,9 +430,9 @@ class DataFormat:
 			fmt = self._format[k]
 			# Get real offset
 			offset = calcedOffset
-			if fmt["offset"] is not None and fmt["offsetRefs"]:
+			if fmt["offsetRefs"]:
 				# Remove sum of static offsets
-				offset -= fmt["offset"]
+				if fmt["offset"] is not None: offset -= fmt["offset"]
 				# TODO: Gonna be difficult if not impossible to properly split
 				# these in case of multiple refs..
 				if len(fmt["offsetRefs"]) > 1:

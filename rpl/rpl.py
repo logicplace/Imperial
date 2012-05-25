@@ -1141,28 +1141,35 @@ class RPLRef:
 				ret.setBasic(data)
 				return True
 			except AttributeError: return False
-		elif not len(self.__idxs):
-			# Needs to wrap data, base it on type that's currently there?
-			ret[self.__key] = ret[self.__key].__class__(data)
-			return True
 		else:
 			k = self.__key
-			oret = None
-			callersAndSelf = callers + [self]
-			for i,x in enumerate(self.__idxs):
-				try:
-					oret = ret[k]
-					if isinstance(ret, RPLRef): ret = ret[k].get(callersAndSelf)
-					else: ret = ret[k].get()
-					ret[x] # Throw error if it doesn't exist
-					k = x
-				except IndexError:
-					raise RPLError("List not deep enough. Failed on %ith index." % (i-1))
-				#endtry
-			#endfor
-			# Needs to wrap data, base it on type that's currently there?
-			ret[k] = ret[k].__class__(data)
-			oret.set(ret)
+			if self.__idxs:
+				oret = None
+				callersAndSelf = callers + [self]
+				for i,x in enumerate(self.__idxs):
+					try:
+						oret = ret[k]
+						if isinstance(ret, RPLRef): ret = ret[k].get(callersAndSelf)
+						else: ret = ret[k].get()
+						ret[x] # Throw error if it doesn't exist
+						k = x
+					except IndexError:
+						raise RPLError("List not deep enough. Failed on %ith index." % (i-1))
+					#endtry
+				#endfor
+			#endif
+			# Needs to wrap data
+			datatype = {
+				str: "string", unicode:"string", int: "number", long:"number",
+				list: "list"
+			}[type(data)]
+			if datatype == "list" and isinstance(data[0], RPLData):
+				skipSubInst = True
+			else: skipSubInst = False
+			ret[k] = self.__rpl.parseCreate(
+				(datatype, data), None, None, *self.__pos, skipSubInst=skipSubInst
+			)
+			if self.__idxs: oret.set(ret)
 			return True
 		#endif
 	#enddef
