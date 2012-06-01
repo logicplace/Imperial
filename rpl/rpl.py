@@ -19,7 +19,7 @@ def err(msg): print msg >>stderr
 
 class RPLError(Exception): pass
 
-class RPL:
+class RPL(object):
 	"""
 	The base type for loading and interpreting RPL files.
 	Also handles "execution" and what not.
@@ -80,9 +80,9 @@ class RPL:
 		 r'(?:%(bin)s(?:%(num)s))?'
 		) % {
 			# Binary operators
-			'bin': r'[\-*]',
+			"bin": r'[\-*]',
 			# Valid forms for a number
-			'num': r'[0-9]+|\$[0-9a-fA-F]+'
+			"num": r'[0-9]+|\$[0-9a-fA-F]+'
 		}
 	)
 	# Quick check for if a number is a range or not
@@ -453,23 +453,23 @@ class RPL:
 		# importing shared data.
 
 		# Do preparations
-		toimp, toproc = [], []
+		toImport, toProcess = [], []
 		for x in self:
 			if isinstance(x, Serializable):
 				if self.wantPort(x, what) and x["import"]:
 					x.importPrepare(lfolder)
-					toimp.append(x)
+					toImport.append(x)
 				#endif
-			elif isinstance(x, Executable): toproc.append(x)
+			elif isinstance(x, Executable): toProcess.append(x)
 			#endif
 		#endfor
 		# Process
 		# We have to process this in reverse, because we process forward
 		# when exporting. eg. calc x*2 -> map 2->'b' -> writes b, we need
 		# to unmap 'b'->2 first then x/2 to have the packed value.
-		for x in reversed(toproc): x.importProcessing()
+		for x in reversed(toProcess): x.importProcessing()
 		# Commit imports
-		for x in toimp: x.importData(rom)
+		for x in toImport: x.importData(rom)
 		self.importing = None
 	#enddef
 
@@ -487,35 +487,38 @@ class RPL:
 		# other blocks
 
 		# Do preparations
-		toexp = []
+		toExport = []
 		for x in self:
 			if isinstance(x, Serializable):
-				if self.wantPort(x, what) and x["export"]: toexp.append(x)
+				if self.wantPort(x, what) and x["export"]: toExport.append(x)
 			elif isinstance(x, Executable): x.exportProcessing()
 			#endif
 		#endfor
 		# Write exports
-		for x in toexp: x.exportData(rom, lfolder)
+		for x in toExport: x.exportData(rom, lfolder)
 		for x in self.sharedDataHandlers.itervalues(): x.write()
 		self.importing = None
 	#enddef
 
 	def wrap(self, typeName, value=None):
-		"""Wrap a value in its respective RPLData class by type name"""
+		"""
+		Wrap a value in its respective RPLData class by type name.
+		"""
 		if typeName in self.types:
 			return self.types[typeName](value)
-		else: raise RPLError('No type "%s" defined' % typeName)
+		raise RPLError('No type "%s" defined' % typeName)
 	#enddef
 
-	def share(self, share, create, vargs=[], kvargs={}):
+	def share(self, share, create, *vargs, **kwargs):
 		"""
-		Return the handle by key (typically filename) of the shared data
+		Return the handle by key (typically filename) of the shared data.
+		Instantiates handle if it doesn't exist.
 		Structs that point to the same data should modify the same data, in the
-		 order that they're listed in the RPL.
+		order that they're listed in the RPL.
 		"""
 		if share in self.sharedDataHandlers: return self.sharedDataHandlers[share]
 		else:
-			tmp = create(*vargs, **kvargs)
+			tmp = create(*vargs, **kwargs)
 			tmp.setup(self, share)
 			if self.importing: tmp.read()
 			self.sharedDataHandlers[share] = tmp
@@ -530,7 +533,7 @@ class RPL:
 ################################################################################
 ################################# RPLTypeCheck #################################
 ################################################################################
-class RPLTypeCheck:
+class RPLTypeCheck(object):
 	"""
 	Checks a RPLData struct against a set of possibilities.
 	The passed syntax is as follows:
@@ -556,9 +559,22 @@ class RPLTypeCheck:
 
 	tokenize = re.compile(r'\s+|([\[\]*+!~.|,])(?:(?<=[*!~.+])([0-9]+))?|([^\s\[\]*+!~.|,^]+|\^)')
 
-	def __init__(self, rpl, name, syntax):
+	def __init__(self, rplOrPreparsed, name=None, syntax=None):
 		"""
-		FYI: This is one of the most ridiculous looking parsers I've written
+		You can either pass preparse data or a string that needs to be parsed.
+		The former is just for testing, really.
+		"""
+		# Handle preparsed data
+		if name is None and syntax is None: self._root = rplOrPreparsed
+		elif name is None or syntax is None:
+			raise TypeError("__init__() takes either 1 or 3 arguments (2 given)")
+		# Handle unparsed data
+		else: self._root = self.__parse(rplOrPreparsed, name, syntax)
+	#enddef
+
+	def __parse(self, rpl, name, syntax):
+		"""
+		FYI: This is one of the most ridiculous looking parsers I've written.
 		"""
 		lastType = None
 		remain = None
@@ -643,66 +659,72 @@ class RPLTypeCheck:
 		#endfor
 		if len(parents):
 			if lastType: parents[-1][1].append(lastType)
-			if parents[0][0] == "or": self.__root = RPLTCOr(parents[0][1])
+			if parents[0][0] == "or": return RPLTCOr(parents[0][1])
 			else: raise RPLError('Key "%s": Unclosed lists.' % name)
-		elif lastType: self.__root = lastType
-		elif remain: self.__root = remain
+		elif lastType: return lastType
+		elif remain: return remain
 		else: raise RPLError('Key "%s": I did nothing!' % name)
 	#enddef
 
-	def verify(self, data): return self.__root.verify(data)
+	def verify(self, data): return self._root.verify(data)
 #endclass
 
-class RPLTCData:
-	"""Helper class for RPLTypeCheck, contains one type"""
-	def __init__(self, rpl, t): self.__rpl, self.__type = rpl, t
+# RPL TypeCheck Data
+class RPLTCData(object):
+	"""
+	Helper class for RPLTypeCheck, contains one type.
+	"""
+	def __init__(self, rpl, t): self._rpl, self._type = rpl, t
 
 	# Starting to feel like I'm overdoing this class stuff :3
 	def verify(self, data, parentList=None):
-		if self.__type == "^":
+		if self._type == "^":
 			if parentList is not None:
 				return parentList.verify(data, parentList)
 			else: return None
-		elif (self.__type == "all"
+		elif (self._type == "all"
 			or isinstance(data, RPLRef)
-			or isinstance(data, self.__rpl.types[self.__type])
+			or isinstance(data, self._rpl.types[self._type])
 		): return data
-		elif issubclass(self.__rpl.types[self.__type], data.__class__):
+		elif issubclass(self._rpl.types[self._type], data.__class__):
 			# Attempt to recast to subclass
-			try: return self.__rpl.types[self.__type](data.get())
+			try: return self._rpl.types[self._type](data.get())
 			except RPLError: return None
 		else: return None
 	#enddef
 #endclass
 
-class RPLTCList:
-	"""Helper class for RPLTypeCheck, contains one list"""
+# RPL TypeCheck List
+class RPLTCList(object):
+	"""
+	Helper class for RPLTypeCheck, contains one list.
+	"""
 	def __init__(self, l, r="]", num=None):
-		self.__list, self.__repeat, self.__num = l, r, num
-	def rep(self, r, num): self.__repeat, self.__num = r, num
+		self._list, self._repeat, self._num = l, r, num
+	def rep(self, r, num): self._repeat, self._num = r, num
 
 	def verify(self, data, parentList=None):
 		# Make sure data is a list (if it is 0 or more)
 		if not isinstance(data, List):
-			if self.__repeat in "*!~.":
-				if self.__num is not None:
+			if self._repeat in "*!~.":
+				if self._num is not None:
 					# Select only the given index to compare.
-					if self.__num >= len(self.__list):
+					if self._num >= len(self._list):
 						raise RPLError("Index not in list.")
 					#endif
-					tmp = self.__list[self.__num].verify(data)
+					tmp = self._list[self._num].verify(data)
 					if tmp is None: return None
-					elif self.__repeat in "*!": return List([tmp])
+					elif self._repeat in "*!": return List([tmp])
 					else: return tmp
 				#endif
 
 				# This seems like strange form but it's the only logical form
 				# in my mind. This implies [A,B]* is A|B|[A,B]+ Using * on a
 				# multipart list is a little odd to begin with.
-				for x in self.__list:
+				for x in self._list:
 					tmp = x.verify(data)
 					if tmp is not None:
-						if self.__repeat in "*!": return List([tmp])
+						if self._repeat in "*!": return List([tmp])
 						else: return tmp
 					#endif
 				#endfor
@@ -712,23 +734,23 @@ class RPLTCList:
 
 		# Check lengths
 		d = data.get()
-		if self.__repeat in "+*":
-			if self.__repeat == "+" and self.__num is not None:
+		if self._repeat in "+*":
+			if self._repeat == "+" and self._num is not None:
 				# Number of non-repeating elements
-				diff = len(self.__list) - self.__num
-				if len(d) < diff or (len(d)-diff) % self.__num: return None
-				mod = (lambda(i): i if i < diff else ((i-diff) % self.__num) + diff)
-			elif (len(d) % len(self.__list)) == 0:
-				mod = (lambda(i): i % len(self.__list))
+				diff = len(self._list) - self._num
+				if len(d) < diff or (len(d)-diff) % self._num: return None
+				mod = (lambda(i): i if i < diff else ((i-diff) % self._num) + diff)
+			elif (len(d) % len(self._list)) == 0:
+				mod = (lambda(i): i % len(self._list))
 			else: return None
-		elif len(d) == len(self.__list):
+		elif len(d) == len(self._list):
 			mod = (lambda(i): i)
 		else: return None
 
 		# Loop through list contents to check them all
 		nd = []
 		for i,x in enumerate(d):
-			nd.append(self.__list[mod(i)].verify(d[i], self))
+			nd.append(self._list[mod(i)].verify(d[i], self))
 			if nd[-1] is None: return None
 		#endfor
 
@@ -737,12 +759,15 @@ class RPLTCList:
 	#enddef
 #endclass
 
-class RPLTCOr:
-	"""Helper class for RPLTypeCheck, contains one OR set"""
-	def __init__(self, orSet): self.__or = orSet
+# RPL TypeCheck Or
+class RPLTCOr(object):
+	"""
+	Helper class for RPLTypeCheck, contains one OR set.
+	"""
+	def __init__(self, orSet): self._or = orSet
 
 	def verify(self, data, parentList=None):
-		for x in self.__or:
+		for x in self._or:
 			tmp = x.verify(data, parentList)
 			if tmp is not None: return tmp
 		#endfor
@@ -754,12 +779,14 @@ class RPLTCOr:
 ################################### RPLStruct ##################################
 ################################################################################
 class RPLStruct(object):
-	"""Base class for a struct"""
+	"""
+	Base class for a struct.
+	"""
 
 	# Be sure to define typeName here!
 
 	def __init__(self, rpl, name, parent=None):
-		"""Be sure to call this in your own subclasses!"""
+		# Be sure to call this in your own subclasses!
 		self._rpl = rpl
 		self._name = name
 		self._parent = parent
@@ -775,7 +802,9 @@ class RPLStruct(object):
 	#enddef
 
 	def addChild(self, sType, name):
-		"""Add a new struct as a child of this one"""
+		"""
+		Add a new struct as a child of this one.
+		"""
 		if sType not in self._structs:
 			raise RPLError("%s isn't allowed as a substruct of %s." % (
 				sType, self.typeName
@@ -788,7 +817,9 @@ class RPLStruct(object):
 	#enddef
 
 	def regKey(self, name, basic, default=None):
-		"""Register a key by name with type and default."""
+		"""
+		Register a key by name with type and default.
+		"""
 		self._keys[name] = [RPLTypeCheck(self._rpl, name, basic),
 			self._rpl.parseData(default)
 		]
@@ -802,7 +833,9 @@ class RPLStruct(object):
 	#enddef
 
 	def validate(self):
-		"""Validate self"""
+		"""
+		Validate self.
+		"""
 		missingKeys = []
 		for k,v in self._keys.iteritems():
 			if k not in self._data:
@@ -816,11 +849,15 @@ class RPLStruct(object):
 	#enddef
 
 	def __unicode__(self):
-		"""Write struct to RPL format"""
+		"""
+		Write struct to RPL format.
+		"""
 	#enddef
 
 	def __getitem__(self, key):
-		"""Return data for key"""
+		"""
+		Return data for key.
+		"""
 		x = self
 		while x and key not in x._data: x = x.parent()
 		if x: return x._data[key]
@@ -831,7 +868,9 @@ class RPLStruct(object):
 	#enddef
 
 	def __setitem__(self, key, value):
-		"""Set data for key, verifying and casting as necessary"""
+		"""
+		Set data for key, verifying and casting as necessary.
+		"""
 		if key in self._keys:
 			# Reference's types are lazily checked
 			if key not in self._data: self._orderedKeys.append(key)
@@ -844,12 +883,16 @@ class RPLStruct(object):
 	def parent(self): return self._parent
 
 	def basic(self, callers=[]):
-		"""Stub. Return basic data (name by default)"""
+		"""
+		Stub. Return basic data (name by default).
+		"""
 		return Literal(self._name)
 	#enddef
 
 	def __len__(self):
-		"""Return number of children (including keys)"""
+		"""
+		Return number of children (including keys).
+		"""
 		return len(self._data) + len(self._children)
 	#enddef
 
@@ -877,13 +920,10 @@ class Static(RPLStruct):
 
 	typeName = "static"
 
-	def __init__(self, rpl, name, parent=None):
-		"""Honestly, this is just an example."""
-		RPLStruct.__init__(self, rpl, name, parent)
-	#enddef
-
 	def addChild(self, sType, name):
-		"""Overwrite this cause Static accepts all root children"""
+		"""
+		Overwrite this cause Static accepts all root children.
+		"""
 		if sType not in self._rpl.structs:
 			raise RPLError("%s isn't allowed as a substruct of %s." % (
 				sType, self.typeName
@@ -896,24 +936,29 @@ class Static(RPLStruct):
 	#enddef
 
 	def verify(self):
-		"""Overwrite this cause Static accepts all keys"""
+		"""
+		Overwrite this cause Static accepts all keys.
+		"""
 		return True
 	#enddef
 
 	def __setitem__(self, key, value):
-		"""Overwrite this cause Static accepts all keys"""
+		"""
+		Overwrite this cause Static accepts all keys.
+		"""
 		if key not in self._data: self._orderedKeys.append(key)
 		self._data[key] = value
 	#enddef
 #endclass
 
 class Serializable(RPLStruct):
-	"""Inherit this class for data that can be imported and/or exported"""
+	"""
+	Inherit this class for data that can be imported and/or exported.
+	"""
 
 	# NOTE: There is no typeName because this is not meant to be used directly.
 
 	def __init__(self, rpl, name, parent=None):
-		"""Register self"""
 		RPLStruct.__init__(self, rpl, name, parent)
 		self.regKey("base", "hexnum", "$000000")
 		self.regKey("file", "string", "")
@@ -925,7 +970,9 @@ class Serializable(RPLStruct):
 	#enddef
 
 	def open(self, folder, ext="bin", retName=False, justOpen=False):
-		"""Helper method for opening files"""
+		"""
+		Helper method for opening files.
+		"""
 		if not justOpen:
 			if type(folder) in [str, unicode]: folder = list(os.path.split(os.path.normpath(folder)))
 
@@ -956,32 +1003,41 @@ class Serializable(RPLStruct):
 			# Finalize path, make directories
 			path = os.path.normpath(os.path.join(*(folder + path)))
 			try: os.makedirs(os.path.dirname(path))
+			# TODO: Parse out "already exists" specifically
 			except os.error: pass
 
 			# Return requested thing (path or handle)
 			if retName: return path
 		else: path = folder
-		return self._rpl.share(path, (lambda(x): codecs.open(x, encoding="utf-8", mode="r+")))
+		return self._rpl.share(path, codecs.open, x, encoding="utf-8", mode="r+")
 	#enddef
 
 	def close(self, handle):
-		"""Helper method for closing files"""
+		"""
+		Helper method for closing files.
+		"""
 		try: handle.close()
 		except AttributeError: del handle
 	#enddef
 
 	def importPrepare(self, key, rom, folder):
-		"""Stub. Fill this in to import appropriately"""
+		"""
+		Stub. Fill this in to import appropriately.
+		"""
 		pass
 	#enddef
 
 	def importData(self, rom, folder):
-		"""Stub. Fill this in to import appropriately"""
+		"""
+		Stub. Fill this in to import appropriately.
+		"""
 		pass
 	#enddef
 
 	def exportData(self, rom, folder):
-		"""Stub. Fill this in to export appropriately"""
+		"""
+		Stub. Fill this in to export appropriately.
+		"""
 		pass
 	#enddef
 #endclass
@@ -992,12 +1048,16 @@ class Executable(RPLStruct):
 	directly importing or exporting.
 	"""
 	def importProcessing(self):
-		"""Stub. Fill this in to process data before importing."""
+		"""
+		Stub. Fill this in to process data before importing.
+		"""
 		pass
 	#enddef
 
 	def exportProcessing(self):
-		"""Stub. Fill this in to process data before exporting."""
+		"""
+		Stub. Fill this in to process data before exporting.
+		"""
 		pass
 	#enddef
 #endclass
@@ -1009,22 +1069,23 @@ class Cloneable(RPLStruct):
 	used.
 	"""
 	def __init__(self, rpl, name, parent=None):
-		"""Register self"""
 		RPLStruct.__init__(self, rpl, name, parent)
 
-		self._clone = []
+		self._clone = set()
 		self._clones = []
 	#enddef
 
 	def alsoClone(self, *add):
-		self._clone = list(set(self._clone + list(add)))
+		self._clone |= set(add)
 	#enddef
 
 	def clone(self):
 		new = self.__class__(self._rpl, self._name, self._parent)
 		# Clone isn't copied cause that should be done in the init
-		for x in ["_data", "_keys", "_orderedKeys", "_structs", "_children",
-		"_orderedChildren"] + self._clone:
+		for x in [
+			"_data", "_keys", "_orderedKeys", "_structs", "_children",
+			"_orderedChildren"
+		] + list(self._clone):
 			setattr(new, x, copy.deepcopy(getattr(self, x)))
 		#endfor
 		self._clones.append(new)
@@ -1038,7 +1099,9 @@ class Cloneable(RPLStruct):
 #################################### RPLRef ####################################
 ################################################################################
 class RPLRef:
-	"""Manages references to other fields"""
+	"""
+	Manages references to other fields.
+	"""
 
 	spec = re.compile(r'@?([^.]+)(?:\.([^\[]*))?((?:\[[0-9]+\])*)')
 	heir = re.compile(r'^(?=.)((w*)back_?)?((g*)parent)?$')
@@ -1046,42 +1109,44 @@ class RPLRef:
 	typeName = "reference"
 
 	def __init__(self, rpl, container, mykey, ref, line, char):
-		self.__rpl = rpl
-		self.__container = container
-		self.__mykey = mykey
-		self.__pos = (line, char)
+		self._rpl = rpl
+		self._container = container
+		self._mykey = mykey
+		self._pos = (line, char)
 
-		self.__struct, self.__key, idxs = self.spec.match(ref).groups()
-		if idxs: self.__idxs = map(int, idxs[1:-1].split("]["))
-		else: self.__idxs = []
+		self._struct, self._key, idxs = self.spec.match(ref).groups()
+		if idxs: self._idxs = map(int, idxs[1:-1].split("]["))
+		else: self._idxs = []
 	#enddef
 
 	def __unicode__(self):
-		"""Output ref to RPL format"""
-		ret = "@%s" % self.__struct
-		if self.__key: ret += "."+self.__key
-		if self.__idxs: ret += "[%s]" % "][".join(self.__idxs)
+		"""
+		Output ref to RPL format.
+		"""
+		ret = "@%s" % self._struct
+		if self._key: ret += "."+self._key
+		if self._idxs: ret += "[%s]" % "][".join(self._idxs)
 		return ret
 	#enddef
 
-	def parts(self): return self.__struct, self.__key, self.__idxs
+	def parts(self): return self._struct, self._key, self._idxs
 
 	def pointer(self, callers=[], retCl=False, this=None):
 		# When a reference is made, this function should know what struct made
-		#  the reference ("this", ie. self.__container) BUT also the chain of
-		#  references up to this point..
-		# First check if we're referring to self or referrer and/or parents
-		heir = RPLRef.heir.match(self.__struct)
-		if self.__struct == "this" or heir:
-			if self.__container is None or self.__mykey is None:
+		# the reference ("this", ie. self._container) BUT also the chain of
+		# references up to this point..
+		# First check if we're referring to self or referrer and/or parents.
+		heir = RPLRef.heir.match(self._struct)
+		if self._struct == "this" or heir:
+			if self._container is None or self._mykey is None:
 				raise RPLError("Cannot use relative references in data form.")
 			#endif
 			# Referrer history
 			if heir and heir.group(1):
 				try: ret = callers[-1 - len(heir.group(2))]
-				except IndexError: raise RPLError("No %s." % self.__struct)
+				except IndexError: raise RPLError("No %s." % self._struct)
 			# "this" or parents only
-			else: ret = this or self.__container
+			else: ret = this or self._container
 			# "parent"
 			if heir and heir.group(3):
 				ret = ret.parent()
@@ -1091,16 +1156,16 @@ class RPLRef:
 					except Exception as x:
 						if ret is not None: raise x
 					#endtry
-					if ret is None: raise RPLError("No %s." % self.__struct)
+					if ret is None: raise RPLError("No %s." % self._struct)
 				#endfor
 			#endif
-		else: ret = self.__rpl.structsByName[self.__struct]
+		else: ret = self._rpl.structsByName[self._struct]
 		return ret
 	#enddef
 
 	def getFromIndex(self, ret, callers):
 		callersAndSelf = callers + [self]
-		for i,x in enumerate(self.__idxs):
+		for i, x in enumerate(self._idxs):
 			try:
 				if isinstance(ret, RPLRef): ret = ret.get(callersAndSelf)[x]
 				elif isinstance(ret, List): ret = ret.get()[x]
@@ -1115,17 +1180,19 @@ class RPLRef:
 	#endif
 
 	def get(self, callers=[], retCl=False, this=None):
-		"""Return referenced value"""
+		"""
+		Return referenced value.
+		"""
 		ret = self.pointer(callers, retCl, this)
-		if not self.__key: ret = ret.basic()
-		else: ret = ret[self.__key]
+		if not self._key: ret = ret.basic()
+		else: ret = ret[self._key]
 		ret = self.getFromIndex(ret, callers)
 
 		# Verify type
-		if (self.__container is not None and self.__mykey is not None
-		and self.__mykey in self.__container._keys):
+		if (self._container is not None and self._mykey is not None
+		and self._mykey in self._container._keys):
 			# TODO: Combobulate data to verify..?
-			#ret = self.__container._keys[self.__mykey][0].verify(data)
+			#ret = self._container._keys[self._mykey][0].verify(data)
 			pass
 		#endif
 		if retCl: return ret
@@ -1137,18 +1204,18 @@ class RPLRef:
 		"""Set referenced value (these things are pointers, y'know"""
 		ret = self.pointer(callers, retCl, this)
 
-		if not self.__key:
+		if not self._key:
 			try:
 				# This passes unwrapped data
 				ret.setBasic(data)
 				return True
 			except AttributeError: return False
 		else:
-			k = self.__key
-			if self.__idxs:
+			k = self._key
+			if self._idxs:
 				oret = None
 				callersAndSelf = callers + [self]
-				for i,x in enumerate(self.__idxs):
+				for i, x in enumerate(self._idxs):
 					try:
 						oret = ret[k]
 						if isinstance(ret, RPLRef): ret = ret[k].get(callersAndSelf)
@@ -1168,10 +1235,10 @@ class RPLRef:
 			if datatype == "list" and isinstance(data[0], RPLData):
 				skipSubInst = True
 			else: skipSubInst = False
-			ret[k] = self.__rpl.parseCreate(
-				(datatype, data), None, None, *self.__pos, skipSubInst=skipSubInst
+			ret[k] = self._rpl.parseCreate(
+				(datatype, data), None, None, *self._pos, skipSubInst=skipSubInst
 			)
-			if self.__idxs: oret.set(ret)
+			if self._idxs: oret.set(ret)
 			return True
 		#endif
 	#enddef
@@ -1183,8 +1250,8 @@ class RPLRef:
 			for x in pnt.clones(): self.proc(func, x)
 		else:
 			# TODO: Better error wording
-			if not self.__key: raise RPLError("Tried to proc on basic reference.")
-			self.getFromIndex(pnt[self.__key], callers).proc(func)
+			if not self._key: raise RPLError("Tried to proc on basic reference.")
+			self.getFromIndex(pnt[self._key], callers).proc(func)
 		#endif
 	#enddef
 #endclass
@@ -1197,6 +1264,7 @@ class RPLData(object):
 	def __init__(self, data=None):
 		if data is not None: self.set(data)
 	#enddef
+
 	def get(self): return self._data
 	def set(self, data): self._data = data
 
@@ -1206,8 +1274,8 @@ class RPLData(object):
 	#enddef
 
 	#def defaultSize(self)       # Returns default size for use by Data struct
-	#def serialize(self, **opts)         # Return binary form of own data.
-	#def unserialize(self, data, **opts) # Parse binary data and set to self.
+	#def serialize(self, **kwargs)         # Return binary form of own data.
+	#def unserialize(self, data, **kwargs) # Parse binary data and set to self.
 
 	def __eq__(self, data):
 		"""Compare data contained in objects)"""
@@ -1244,14 +1312,14 @@ class String(RPLData):
 		return '"' + String.binchr.sub(String.replOut, self._data) + '"'
 	#enddef
 
-	def serialize(self, **opts):
+	def serialize(self, **kwargs):
 		rstr = self._data.encode("utf8")
-		if "size" not in opts or not opts["size"]: return rstr
+		if "size" not in kwargs or not kwargs["size"]: return rstr
 		# TODO: This can split a utf8 sequence at the end. Need to fix..
-		rstr = rstr[0:min(opts["size"], len(rstr))]
-		rpad = opts["padchar"] * (opts["size"] - len(rstr))
+		rstr = rstr[0:min(kwargs["size"], len(rstr))]
+		rpad = kwargs["padchar"] * (kwargs["size"] - len(rstr))
 		if rpad == "": return rstr
-		padside = opts["padside"]
+		padside = kwargs["padside"]
 		if padside == "left": return rpad + rtsr
 		elif padside[1:] == "center":
 			split = (ceil if padside[0] == "r" else int)(len(rpad) / 2)
@@ -1259,7 +1327,7 @@ class String(RPLData):
 		elif padside == "right": return rtsr + rpad
 	#enddef
 
-	def unserialize(self, data, **opts): self._data = data.decode("utf8")
+	def unserialize(self, data, **kwargs): self._data = data.decode("utf8")
 
 	@staticmethod
 	def replIn(mo):
@@ -1298,9 +1366,9 @@ class Number(RPLData):
 
 	def defaultSize(self): return 4
 
-	def serialize(self, **opts):
-		big, ander, ret = (opts["endian"] == "big"), 0xff, r''
-		for i in range(opts["size"]):
+	def serialize(self, **kwargs):
+		big, ander, ret = (kwargs["endian"] == "big"), 0xff, r''
+		for i in range(kwargs["size"]):
 			c = chr((self._data & ander) >> (i*8))
 			if big: ret = c + ret
 			else: ret += c
@@ -1309,8 +1377,8 @@ class Number(RPLData):
 		return ret
 	#enddef
 
-	def unserialize(self, data, **opts):
-		big = (opts["endian"] == "big")
+	def unserialize(self, data, **kwargs):
+		big = (kwargs["endian"] == "big")
 		size = len(data)
 		self._data = 0
 		for i,x in enumerate(data):

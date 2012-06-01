@@ -28,10 +28,10 @@ class DataFile:
 		raw = helper.readFrom(self._path)
 
 		base = []
-		adder = []
+		parents = []
 		for token in rpl.tokenize.finditer(raw):
 			groups = token.groups() # Used later
-			dstr,sstr,mstr,num,key,afterkey,flow,ref,lit = groups
+			dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = groups
 			sstr = dstr or sstr # Double or single
 
 			# Find the position (used for ref and errors)
@@ -44,11 +44,11 @@ class DataFile:
 				if flow and flow in "{}": raise RPLError("Structs not allowed in data files")
 				elif flow == "[":
 					# Begins list
-					adder.append([])
+					parents.append([])
 				elif flow == "]":
 					# End list
-					if adder:
-						add = ("list", adder.pop())
+					if parents:
+						add = ("list", parents.pop())
 						skipSubInst = True
 					else: raise RPLError("] without a [.")
 				elif sstr or mstr or num or ref or lit:
@@ -58,7 +58,7 @@ class DataFile:
 				if add:
 					val = rpl.parseCreate(add, None, None, line, char, skipSubInst)
 
-					if adder: adder[-1].append(val)
+					if parents: parents[-1].append(val)
 					else: base.append(val)
 				#endif
 			except RPLError as err:
@@ -332,7 +332,7 @@ class DataFormat:
 				tmp = self._data["x"]
 				if isinstance(tmp, RPL.String):
 					self._format[key] = RPL.List(
-						map((lambda(x): self._rpl.parseData(x)), tmp.get().split())
+						map(self._rpl.parseData, tmp.get().split())
 					)
 				else: self._format[key] = tmp
 				del self._data["x"]
@@ -385,8 +385,7 @@ class DataFormat:
 			data = self[k]
 			typeName = self.get(self._format[k]["type"])
 			if typeName[0:7] == "Format:":
-				ls = []
-				for x in data: ls.append(x.exportDataLoop())
+				ls = [x.exportDataLoop() for x in data]
 				data = RPL.List(ls)
 			#endif
 			# A command implies this data is inferred from the data that's
@@ -563,7 +562,7 @@ class Map(RPL.Executable):
 		self.regKey("data", "[number|string]*")
 	#enddef
 
-	def xxProcessing(self, p, u):
+	def doProcessing(self, p, u):
 		st = isinstance(p, RPL.String) and isinstance(u, RPL.String)
 		if not st and (isinstance(p, RPL.String) or isinstance(u, RPL.String)):
 			raise RPLError("Packed and unpacked must be the same type.")
@@ -580,7 +579,7 @@ class Map(RPL.Executable):
 
 		def proc(ls):
 			newstr = ""
-			for i,x in enumerate(ls):
+			for i, x in enumerate(ls):
 				try:
 					if st: newstr += np[nu.index(x)]
 					else: x.set(np[nu.index(x)])
@@ -595,11 +594,11 @@ class Map(RPL.Executable):
 	#enddef
 
 	def importProcessing(self, rom, folder):
-		self.xxProcessing(self["packed"], self["unpacked"])
+		self.doProcessing(self["packed"], self["unpacked"])
 	#enddef
 
 	def exportProcessing(self, rom, folder):
-		self.xxProcessing(self["unpacked"], self["packed"])
+		self.doProcessing(self["unpacked"], self["packed"])
 	#enddef
 #endclass
 
