@@ -15,7 +15,7 @@ import helper
 #    otherwise return the already loaded/modified data to be further modified.
 #  * Add referencing multiline strs with @` ` form.
 
-def err(msg): print msg >>stderr
+def err(msg): stderr.write(unicode(msg) + "\n")
 
 class RPLError(Exception): pass
 
@@ -296,7 +296,7 @@ class RPL(object):
 		return val
 	#enddef
 
-	def parseData(self, data, currentStruct=None, currentKey=None, line=-1, char=-1):
+	def parseData(self, data, currentStruct=None, currentKey=None, line=-1, char=-1, raw=False):
 		"""
 		Parse one value from string form. May also take in a preparsed string
 		though this has a different return form.
@@ -363,9 +363,12 @@ class RPL(object):
 		elif pp: raise RPLError("Invalid data.")
 		else: raise RPLError("Invalid data: %s" % data)
 
-		if add and pp: return add
-		elif add and type(add) is not tuple: return add
-		elif add: return self.parseCreate(add, currentStruct, currentKey, line, char)
+		if add:
+			if raw:
+				if type(add) is not tuple: return add
+				else: return add[1]
+			elif pp or type(add) is not tuple: return add
+			else: return self.parseCreate(add, currentStruct, currentKey, line, char)
 		elif error: raise RPLError(error)
 		elif pp: raise RPLError("Error parsing data.")
 		else: raise RPLError("Error parsing data: %s" % data)
@@ -418,6 +421,8 @@ class RPL(object):
 		"""
 		Method to register a custom struct.
 		"""
+		try: classRef.typeName
+		except AttributeError: classRef.typeName = classRef.__name__.lower()
 		self.structs[classRef.typeName] = classRef
 	#enddef
 
@@ -538,6 +543,8 @@ class RPLTypeCheck(object):
 	Checks a RPLData struct against a set of possibilities.
 	The passed syntax is as follows:
 	 * type - Type name
+	 * type:(allowed values) - A comma separated list of allowed values
+	          This is not valid for list-derived types.
 	 * all  - Any type allowed
 	 * [type, ...] - List containing specific types
 	 * |    - Boolean or
@@ -557,7 +564,24 @@ class RPLTypeCheck(object):
 	 * ^    - Recurse parent list at this point
 	"""
 
-	tokenize = re.compile(r'\s+|([\[\]*+!~.|,])(?:(?<=[*!~.+])([0-9]+))?|([^\s\[\]*+!~.|,^]+|\^)')
+	tokenize = re.compile(
+		# Whitespace
+		r'\s+|'
+		# List forms
+		r'([\[\]*+!~.|,])(?:(?<=[*!~.+])([0-9]+))?|'
+		r'(?:'
+			# Type (or all)
+			r'([^\s\[\]*+!~.|,^:]+)'
+			# Allowed types (optional)
+			r'('
+				r':\((?:(?:"[^"]+"|'
+				r"'[^']'|[^'"
+				r'",]+)\s*,?\s*)+\)'
+			r')?|'
+			# Recursion operator
+			r'(\^)'
+		r')'
+	)
 
 	def __init__(self, rplOrPreparsed, name=None, syntax=None):
 		"""
@@ -582,10 +606,14 @@ class RPLTypeCheck(object):
 		lastWasListEnd, lastWasRep = False, False
 		for token in RPLTypeCheck.tokenize.finditer(syntax):
 			try:
-				flow, num, tName = token.groups()
+				#print name, token.groups()
+				flow, num, tName, discrete, recurse = token.groups()
 				if num: num = int(num)
 
-				if tName: lastType = RPLTCData(rpl, tName)
+				if recurse: tName = recurse
+				if discrete: discrete = [rpl.parseData(x.strip(), raw=True) for x in discrete[2:-1].split(",")]
+
+				if tName: lastType = RPLTCData(rpl, tName, discrete)
 				elif flow == "[":
 					if lastType is None:
 						# New list, append to list/parents
@@ -674,7 +702,9 @@ class RPLTCData(object):
 	"""
 	Helper class for RPLTypeCheck, contains one type.
 	"""
-	def __init__(self, rpl, t): self._rpl, self._type = rpl, t
+	def __init__(self, rpl, t, discrete=None):
+		self._rpl, self._type, self._discrete = rpl, t, discrete
+	#enddef
 
 	# Starting to feel like I'm overdoing this class stuff :3
 	def verify(self, data, parentList=None):
@@ -685,6 +715,8 @@ class RPLTCData(object):
 		elif (self._type == "all"
 			or isinstance(data, RPLRef)
 			or isinstance(data, self._rpl.types[self._type])
+		) and (not self._discrete
+			or data in self._discrete
 		): return data
 		elif issubclass(self._rpl.types[self._type], data.__class__):
 			# Attempt to recast to subclass
@@ -820,8 +852,9 @@ class RPLStruct(object):
 		"""
 		Register a key by name with type and default.
 		"""
-		self._keys[name] = [RPLTypeCheck(self._rpl, name, basic),
-			self._rpl.parseData(default)
+		check = RPLTypeCheck(self._rpl, name, basic)
+		self._keys[name] = [check,
+			None if default is None else check.verify(self._rpl.parseData(default))
 		]
 	#enddef
 
@@ -829,6 +862,8 @@ class RPLStruct(object):
 		"""
 		Method to register a custom struct.
 		"""
+		try: classRef.typeName
+		except AttributeError: classRef.typeName = classRef.__name__.lower()
 		self._structs[classRef.typeName] = classRef
 	#enddef
 
@@ -1131,7 +1166,7 @@ class RPLRef:
 
 	def parts(self): return self._struct, self._key, self._idxs
 
-	def pointer(self, callers=[], retCl=False, this=None):
+	def pointer(self, callers=[], this=None):
 		# When a reference is made, this function should know what struct made
 		# the reference ("this", ie. self._container) BUT also the chain of
 		# references up to this point..
@@ -1183,7 +1218,7 @@ class RPLRef:
 		"""
 		Return referenced value.
 		"""
-		ret = self.pointer(callers, retCl, this)
+		ret = self.pointer(callers, this)
 		if not self._key: ret = ret.basic()
 		else: ret = ret[self._key]
 		ret = self.getFromIndex(ret, callers)
@@ -1202,7 +1237,7 @@ class RPLRef:
 
 	def set(self, data, callers=[], retCl=False, this=None):
 		"""Set referenced value (these things are pointers, y'know"""
-		ret = self.pointer(callers, retCl, this)
+		ret = self.pointer(callers, this)
 
 		if not self._key:
 			try:
@@ -1243,15 +1278,17 @@ class RPLRef:
 		#endif
 	#enddef
 
-	def proc(self, func, clone=None):
+	def proc(self, func, callers=[], clone=None):
 		"""Used by executables"""
-		pnt = clone or self.pointer(callers, retCl)
-		if clone is None and isinstance(pnt, Cloneable):
-			for x in pnt.clones(): self.proc(func, x)
+		point = clone or self.pointer(callers)
+		if clone is None and isinstance(point, Cloneable):
+			for x in point.clones(): self.proc(func, callers, x)
 		else:
 			# TODO: Better error wording
 			if not self._key: raise RPLError("Tried to proc on basic reference.")
-			self.getFromIndex(pnt[self._key], callers).proc(func)
+			# TODO: Check that I'm doing callers right here. I think it's right
+			# but I don't wanna think that hard right now.
+			self.getFromIndex(point[self._key], callers).proc(func, callers + [self])
 		#endif
 	#enddef
 #endclass
@@ -1269,7 +1306,9 @@ class RPLData(object):
 	def set(self, data): self._data = data
 
 	def proc(self, func, clone=None):
-		"""Used by executables"""
+		"""
+		Used by executables.
+		"""
 		self.set(func(self.get()))
 	#enddef
 
@@ -1303,7 +1342,9 @@ class String(RPLData):
 	def set(self, data):
 		if type(data) is str: data = unicode(data)
 		elif type(data) is not unicode:
-			raise RPLError('Type "%s" expects unicode or str.' % self.typeName)
+			raise RPLError('Type "%s" expects unicode or str. Got "%s"' % (
+				self.typeName, type(data).__name__
+			))
 		#endif
 		self._data = String.escape.sub(String.replIn, data)
 	#enddef
