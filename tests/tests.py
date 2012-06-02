@@ -4,6 +4,8 @@
 """
 Test cases for RPL.
 
+NOTE: Timed test results only shown with "python -m tests.tests" Will fix later
+
 The easiest way to run this is via "python -m unittest discover" from the
 project root directory. Alternatively, you can use "python -m tests.tests" to
 run this file specifically, but the former command will discover any other test
@@ -23,7 +25,10 @@ def timedTest(fn):
 	def wrapper(self):
 		start = time()
 		fn(self)
-		_timedTests.append((fn.__name__, time() - start))
+		_timedTests.append((
+			self.__class__.__name__ + "." + fn.__name__,
+			time() - start
+		))
 	#enddef
 
 	return wrapper
@@ -267,13 +272,41 @@ class TestReferences(RPLTestCase):
 	#enddef
 #endclass
 
-class TestExport(unittest.TestCase):
+# Uhg, can't do this yet cause it'll only return the right data during the process
+#class TestIOStatic(unittest.TestCase):
+#	def testImport(self):
+#		astd = std.Standard()
+#		astd.parse(os.path.join("tests", "rpls", "iostatic.rpl"))
+#		astd.importData("", "") # Nothing is imported
+#		self.assertEqual(astd.child("Test")["name"].get(), "imp")
+#	#enddef
+
+#	def testExport(self):
+#		astd = std.Standard()
+#		astd.parse(os.path.join("tests", "rpls", "iostatic.rpl"))
+#		astd.exportData("", "") # Nothing is imported
+#		self.assertEqual(astd.child("Test")["name"].get(), "exp")
+#	#enddef
+##enclass
+
+class TestData(unittest.TestCase):
+	@timedTest
+	def testImport(self):
+		astd = std.Standard()
+		astd.parse(os.path.join("tests", "rpls", "data.rpl"))
+		folder = os.path.join("tests", "rpls", "data")
+		astd.importData(os.path.join(folder, "test.bin"), folder)
+		# Compare test.bin with data.bin
+		data = read([folder, "data.bin"], "rb")
+		test = read([folder, "test.bin"], "rb")
+		self.assertEqual(data, test, "Unexpected result from export.")
+	#enddef
+
 	@timedTest
 	def testExport(self):
 		astd = std.Standard()
 		astd.parse(os.path.join("tests", "rpls", "data.rpl"))
 		folder = os.path.join("tests", "rpls", "data")
-		astd.addDef("file", "test.rpl")
 		astd.exportData(os.path.join(folder, "data.bin"), folder)
 		# Compare test.rpl with data.rpl
 		data = read([folder, "data.rpl"], "r")
@@ -282,24 +315,35 @@ class TestExport(unittest.TestCase):
 	#enddef
 #endclass
 
-class TestImport(unittest.TestCase):
+class TestMapString(unittest.TestCase):
 	@timedTest
 	def testImport(self):
 		astd = std.Standard()
-		astd.parse(os.path.join("tests", "rpls", "data.rpl"))
-		astd.addDef("file", "data.rpl")
-		folder = os.path.join("tests", "rpls", "data")
+		astd.parse(os.path.join("tests", "rpls", "map_string.rpl"))
+		folder = os.path.join("tests", "rpls", "map")
 		astd.importData(os.path.join(folder, "test.bin"), folder)
 		# Compare test.bin with data.bin
 		data = read([folder, "data.bin"], "rb")
 		test = read([folder, "test.bin"], "rb")
 		self.assertEqual(data, test, "Unexpected result from export.")
 	#enddef
+
+	@timedTest
+	def testExport(self):
+		astd = std.Standard()
+		astd.parse(os.path.join("tests", "rpls", "map_string.rpl"))
+		folder = os.path.join("tests", "rpls", "map")
+		astd.exportData(os.path.join(folder, "data.bin"), folder)
+		# Compare test.rpl with data.rpl
+		data = read([folder, "data.rpl"], "r")
+		test = read([folder, "test.rpl"], "r")
+		self.assertEqual(data, test, "Unexpected result from export.")
+	#enddef
 #endclass
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 	try:
 		unittest.main()
 	finally:
 		for test, time in _timedTests:
-			print 'time for %s: %.3fs' % (test, time)
+			print "Time for %s: %.3fs" % (test, time)
