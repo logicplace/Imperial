@@ -25,6 +25,10 @@
 #	xpixels: [number, 4]
 #}
 
+iostatic File {
+	name: [data.rpl, test.rpl]
+}
+
 # TODO: Typechecking is failing on xlen and xpstrbase without the 0 offset
 format PascalStr {
 	endian: little
@@ -37,7 +41,7 @@ format PascalStr {
 data TestFile {
 	endian: little
 	sign: unsigned
-	file: @Defs.file
+	file: @File.name
 
 	xpstrbase: [number, 4, 0]
 	# TODO: More tests in header here
