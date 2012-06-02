@@ -10,10 +10,13 @@ class Standard(RPL.RPL):
 		RPL.RPL.__init__(self)
 		self.regStruct(Data)
 		self.regStruct(Format)
+		self.regStruct(Map)
+		self.regStruct(IOStatic)
+		self.regType(Bin)
 	#enddef
 #endclass
 
-class DataFile:
+class DataFile(object):
 	def __init__(self, inFile=None):
 		self._base = []
 		self.comment = ""
@@ -23,7 +26,9 @@ class DataFile:
 	def setup(self, rpl, path): self._rpl, self._path = rpl, path
 
 	def read(self):
-		"""Read from .rpl data file."""
+		"""
+		Read from .rpl data file.
+		"""
 		rpl = self._rpl
 		raw = helper.readFrom(self._path)
 
@@ -72,14 +77,18 @@ class DataFile:
 	#enddef
 
 	def write(self):
-		"""Write data to a given file."""
+		"""
+		Write data to a given file.
+		"""
 		# TODO: Prettyprinting
 		comment = "# " + self.comment if self.comment else ""
 		helper.writeTo(self._path, comment + os.linesep.join(map(unicode, self._base)))
 	#enddef
 
 	def add(self, item):
-		"""Add item to data. Must be RPLData type"""
+		"""
+		Add item to data. Must be RPLData type.
+		"""
 		if not isinstance(item, RPL.RPLData):
 			raise RPLError("Tried to add non-data to rpl data file.")
 		#endif
@@ -146,7 +155,7 @@ class Sound(RPL.Serializable):
 	pass
 #endclass
 
-class DataFormat:
+class DataFormat(object):
 	"""The mutual parent for Data and Format"""
 	def __init__(self):
 		# String only uses default data size. Number only uses bin as type
@@ -252,7 +261,7 @@ class DataFormat:
 		for i in range(self._orderedKeys.index(key)-1, -1, -1):
 			if self._orderedKeys[i][0] == "x":
 				lastKey = self._orderedKeys[i]
-				lastFmt = self._format[lastKey]
+				lastFmt = self.__parseFormat(lastKey)
 				lastType = self.get(lastFmt["type"])
 				if lastType[0:7] == "Format:":
 					size = 0
@@ -560,6 +569,7 @@ class Map(RPL.Executable):
 		self.regKey("packed", "string|[number|string]+")
 		self.regKey("unpacked", "string|[number|string]+")
 		self.regKey("data", "[number|string]*")
+		self.regKey("unmapped", "string:(except, add, drop)", "except")
 	#enddef
 
 	def doProcessing(self, p, u):
@@ -569,36 +579,103 @@ class Map(RPL.Executable):
 		#endif
 		p, u = p.get(), u.get()
 		if len(p) != len(u):
-			raise RPLError("Packed and unpacked must be the same length.")
+			raise RPLError(
+				"Packed (len: %i) and unpacked (len: %i) must be the same length."
+				% (len(p), len(u))
+			)
 		#endif
 
-		np = []
-		for x in p: np.append(x.get())
-		nu = []
-		for x in u: nu.append(x.get())
+		if st: nu = u
+		else:
+			nu = [x.get() for x in u]
+		#endif
 
-		def proc(ls):
+		def procString(string):
+			if type(string) not in [str, unicode]:
+				raise RPLError("Must use string data with string maps."
+					"Tried to map %s." % type(string).__name__
+				)
+			#endif
 			newstr = ""
-			for i, x in enumerate(ls):
+			for i, x in enumerate(string):
 				try:
-					if st: newstr += np[nu.index(x)]
-					else: x.set(np[nu.index(x)])
+					newstr += p[nu.index(x)]
 				except ValueError:
-					if st: newstr += x
+					action = self["unmapped"].get()
+					if action == "except":
+						raise RPLError(u'Unmapped value: %s' % unicode(RPL.String(x)))
+					elif action == "add": newstr += x
 				#endtry
 			#endfor
-			if st: self["data"].set(newstr)
+			return newstr
 		#enddef
 
-		self["data"].proc(proc)
+		def proc(data):
+			if type(data) is list:
+				newlist = []
+				for i, x in enumerate(data):
+					try:
+						newlist.append(p[nu.index(x.get())])
+					except ValueError:
+						action = self["unmapped"].get()
+						if action == "except":
+							raise RPLError(u"Unmapped value: %s" % unicode(x))
+						elif action == "add": newlist.append(x)
+					#endtry
+				#endfor
+				return newlist
+			else:
+				try: return p[nu.index(data.get())].get()
+				except ValueError:
+					action = self["unmapped"].get()
+					if action == "except":
+						raise RPLError(u"Unmapped value: %s" % unicode(data))
+					elif action == "add": return data.get()
+				#endtry
+			#endif
+		#enddef
+
+		if st: self["data"].proc(procString)
+		else: self["data"].proc(proc)
 	#enddef
 
-	def importProcessing(self, rom, folder):
+	def importProcessing(self):
 		self.doProcessing(self["packed"], self["unpacked"])
 	#enddef
 
-	def exportProcessing(self, rom, folder):
+	def exportProcessing(self):
 		self.doProcessing(self["unpacked"], self["packed"])
+	#enddef
+#endclass
+
+# Input/Output [dependent] Static
+class IOStatic(RPL.Static):
+	"""
+	Returned data from a key depends on whether we're importing or exporting.
+	Format is key: [import, export]
+	"""
+
+	typeName = "iostatic"
+
+	def __getitem__(self, key):
+		idx = 0 if self._rpl.importing else 1
+		return self._data[key][idx]
+	#enddef
+
+	def __setitem__(self, key, value):
+		if key not in self._data:
+			# Initial set
+			if not isinstance(value, RPL.List) or len(value.get()) != 2:
+				raise RPLError("IOStatic requires each entry to be a list of two values.")
+			#endif
+			self._orderedKeys.append(key)
+			# This is supposed to be a static! So it should be fine to .get() here.
+			self._data[key] = value.get()
+		else:
+			# When references set it
+			idx = 0 if self._rpl.importing else 1
+			self._data[key][idx] = value
+		#endif
 	#enddef
 #endclass
 
