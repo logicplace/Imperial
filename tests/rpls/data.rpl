@@ -26,7 +26,7 @@
 #}
 
 iostatic File {
-	name: [data.rpl, test.rpl]
+	name: [data.rpl, test.data.rpl]
 }
 
 # TODO: Typechecking is failing on xlen and xpstrbase without the 0 offset

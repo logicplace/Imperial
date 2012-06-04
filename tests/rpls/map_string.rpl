@@ -5,7 +5,7 @@ map {
 }
 
 iostatic File {
-	name: [data.rpl, test.rpl]
+	name: [map_string.rpl, test.map_string.rpl]
 }
 
 data MappedStr {
