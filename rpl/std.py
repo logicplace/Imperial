@@ -173,8 +173,9 @@ class DataFormat(object):
 		self.importing = False
 	#enddef
 
-	def __parseFormat(self, key):
+	def _parseFormat(self, key):
 		fmt = self._format[key]
+		if fmt is None: raise RPLError("No format for key %s." % key)
 		if isinstance(fmt, RPL.List):
 			fmt = fmt.get()
 			# Let's parse and cache this
@@ -256,12 +257,12 @@ class DataFormat(object):
 	#endif
 
 	def offsetOf(self, key):
-		fmt = self._format[key]
+		fmt = self._parseFormat(key)
 		if fmt["offset"] is not None: return fmt["offset"]
 		for i in range(self._orderedKeys.index(key)-1, -1, -1):
 			if self._orderedKeys[i][0] == "x":
 				lastKey = self._orderedKeys[i]
-				lastFmt = self.__parseFormat(lastKey)
+				lastFmt = self._parseFormat(lastKey)
 				lastType = self.get(lastFmt["type"])
 				if lastType[0:7] == "Format:":
 					size = 0
@@ -278,7 +279,7 @@ class DataFormat(object):
 		except RPLError:
 			if key[0] == "x":
 				# If the key doesn't exist yet, we should attempt to retrieve it
-				fmt = self.__parseFormat(key)
+				fmt = self._parseFormat(key)
 				if self.importing:
 					if key in self._command:
 						com = self._command[key]
@@ -357,7 +358,7 @@ class DataFormat(object):
 		data = data or self._rpl.share(filename, DataFile)
 		for k in self.iterkeys():
 			if k[0] != "x": continue
-			self.__parseFormat(k)
+			self._parseFormat(k)
 		#endfor
 		for k in self.iterkeys():
 			if k[0] != "x": continue
@@ -468,7 +469,7 @@ class DataFormat(object):
 		size = 0
 		for k in self.iterkeys():
 			if k[0] != "x": continue
-			fmt = self.__parseFormat(k)
+			fmt = self._parseFormat(k)
 			if self.get(fmt["type"])[0:7] == "Format:":
 				for x in self[k]: size += x.len()
 			else: size += self.get(fmt["size"])
@@ -482,7 +483,7 @@ class DataFormat(object):
 		count = 0
 		for k in self.iterkeys():
 			if k[0] != "x": continue
-			self.__parseFormat(k)
+			self._parseFormat(k)
 			if k not in self._command: count += 1
 		#endfor
 		self._count = count
@@ -500,7 +501,6 @@ class Format(DataFormat, RPL.Cloneable):
 	def __init__(self, rpl, name, parent=None):
 		RPL.Cloneable.__init__(self, rpl, name, parent)
 		DataFormat.__init__(self)
-		self.alsoClone("_format","_command")
 		self._base = None
 	#enddef
 
@@ -556,6 +556,21 @@ class Data(DataFormat, RPL.Serializable):
 		datafile = self._rpl.share(filename, DataFile)
 		datafile.comment = self["comment"].get()
 		self.exportDataLoop(datafile)
+	#enddef
+
+	def prepareForProc(self, cloneName, cloneKey, cloneRef):
+		# This only matters here when exporting, it should already be prepared
+		# when importing.
+		if self.importing: return
+		for k in self.iterkeys():
+			if k[0] != "x": continue
+			dataType = self.get(self._parseFormat(k)["type"])
+			# We only care about the format types
+			if dataType[0:7] != "Format:": continue
+			# If this needs to be prepared, run the get to read in the data
+			if dataType[7:] == cloneName: self[k]
+			# Note we don't break here because it can be referenced multiple times
+		#endfor
 	#enddef
 #endclass
 
@@ -625,12 +640,12 @@ class Map(RPL.Executable):
 				#endfor
 				return newlist
 			else:
-				try: return p[nu.index(data.get())].get()
+				try: return p[nu.index(data)].get()
 				except ValueError:
 					action = self["unmapped"].get()
 					if action == "except":
 						raise RPLError(u"Unmapped value: %s" % unicode(data))
-					elif action == "add": return data.get()
+					elif action == "add": return data
 				#endtry
 			#endif
 		#enddef
