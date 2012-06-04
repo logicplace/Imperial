@@ -13,7 +13,7 @@ files in the project.
 """
 
 import codecs
-import os.path
+import os
 import unittest
 from time import time
 
@@ -185,7 +185,7 @@ TYPE_CHECK_TEST_CASES = [
 	TypeCheckTestCase("Repeat8_2", "[^|number]", RL(RL(NUM)), "list"),
 	TypeCheckTestCase("Repeat8_3", "[^|number]", RL(RL(STR)), None),
 	TypeCheckTestCase("Repeat8_4", "[number|^]", RL(RL(RL(NUM))), "list"),
-	# Matest_ke sure_doesn't infinitely recurse or anything here
+	# Make sure it doesn't infinitely recurse or anything here
 	TypeCheckTestCase("Repeat8_5", "[number|^]", RL(RL(RL(STR))), None),
 	TypeCheckTestCase("Repeat8_6", "[number|^]", RL(RL(RL(RL(RL(RL()))))), None),
 	TypeCheckTestCase("Repeat9_1", "[string,number]!0", STR, "list"),
@@ -203,6 +203,15 @@ TYPE_CHECK_TEST_CASES = [
 	TypeCheckTestCase("RO_3", "[number]*|string", STR, "string"),
 	TypeCheckTestCase("Heir_1", "range", rpl.Range([NUM, NUM]), "range"),
 	TypeCheckTestCase("Heir_2", "range", RL(NUM, NUM), "range"),
+	TypeCheckTestCase("Discrete1_1", "string:(one, two, three)", rpl.String("one"), "string"),
+	TypeCheckTestCase("Discrete1_2", "string:(one, two, three)", rpl.String("two"), "string"),
+	TypeCheckTestCase("Discrete1_3", "string:(one, two, three)", rpl.String("three"), "string"),
+	TypeCheckTestCase("Discrete1_4", "string:(one, two, three)", rpl.String("four"), None),
+	TypeCheckTestCase("Discrete2_1", "string:(one, two)|number:(1, 2)", rpl.String("one"), "string"),
+	TypeCheckTestCase("Discrete2_2", "string:(one, two)|number:(1, 2)", rpl.String("two"), "string"),
+	TypeCheckTestCase("Discrete2_3", "string:(one, two)|number:(1, 2)", rpl.Number(1), "number"),
+	TypeCheckTestCase("Discrete2_4", "string:(one, two)|number:(1, 2)", rpl.Number(2), "number"),
+	TypeCheckTestCase("Discrete2_5", "string:(one, two)|number:(1, 2)", rpl.Number(5), None),
 ]
 
 def injectTypeCheckTests(cls):
@@ -238,7 +247,11 @@ class TestTypeCheck(unittest.TestCase):
 	def typeCheck(self, key, syn, data, expect):
 		result = rpl.RPLTypeCheck(TestTypeCheck.basic, key, syn).verify(data)
 		self.assertTrue((expect is None and result is None)
-			or (result is not None and result.typeName == expect))
+			or (result is not None and result.typeName == expect),
+			'Expecting "%s" but result was %s' % (
+				expect, "an error" if result is None else '"%s"' % result.typeName
+			)
+		)
 	#enddef
 #endclass
 
@@ -287,58 +300,67 @@ class TestReferences(RPLTestCase):
 #		astd.exportData("", "") # Nothing is imported
 #		self.assertEqual(astd.child("Test")["name"].get(), "exp")
 #	#enddef
-##enclass
+##endclass
 
-class TestData(unittest.TestCase):
-	@timedTest
-	def testImport(self):
+class IOTest(object):
+	"""
+	compares: Tuples of (expected data, result data) order is important because
+	          the result data is deleted before the tests.
+	"""
+	def _xxport(self, direction, name, *compares):
 		astd = std.Standard()
-		astd.parse(os.path.join("tests", "rpls", "data.rpl"))
-		folder = os.path.join("tests", "rpls", "data")
-		astd.importData(os.path.join(folder, "test.bin"), folder)
-		# Compare test.bin with data.bin
-		data = read([folder, "data.bin"], "rb")
-		test = read([folder, "test.bin"], "rb")
-		self.assertEqual(data, test, "Unexpected result from export.")
+		astd.parse(os.path.join("tests", "rpls", name + ".rpl"))
+		folder = os.path.join("tests", "rpls", name.split("_", 1)[0])
+
+		# Delete files
+		for file1, file2 in compares:
+			try: os.unlink(os.path.join(folder, file2))
+			except OSError: pass
+#			except OSError as err:
+#				if err.errno == 2: pass
+#				raise
+#			#endtry
+		#endfor
+
+		if direction == 0: astd.importData(os.path.join(folder, "test." + name + ".bin"), folder)
+		else: astd.exportData(os.path.join(folder, name + ".bin"), folder)
+
+		for file1, file2 in compares:
+			# Compare test.bin with data.bin
+			data = read([folder, file1], "rb")
+			test = read([folder, file2], "rb")
+			self.assertEqual(data, test, "Unexpected result from %s." %
+				["import", "export"][direction]
+			)
+		#endfor
 	#enddef
 
+	def _import(self, name, *compares): return self._xxport(0, name, *compares)
+	def _export(self, name, *compares): return self._xxport(1, name, *compares)
+#enddef
+
+class TestData(unittest.TestCase, IOTest):
 	@timedTest
-	def testExport(self):
-		astd = std.Standard()
-		astd.parse(os.path.join("tests", "rpls", "data.rpl"))
-		folder = os.path.join("tests", "rpls", "data")
-		astd.exportData(os.path.join(folder, "data.bin"), folder)
-		# Compare test.rpl with data.rpl
-		data = read([folder, "data.rpl"], "r")
-		test = read([folder, "test.rpl"], "r")
-		self.assertEqual(data, test, "Unexpected result from export.")
-	#enddef
+	def testImport(self): self._import("data", ("data.bin", "test.data.bin"))
+
+	@timedTest
+	def testExport(self): self._export("data", ("data.rpl", "test.data.rpl"))
 #endclass
 
-class TestMapString(unittest.TestCase):
+class TestMapString(unittest.TestCase, IOTest):
 	@timedTest
-	def testImport(self):
-		astd = std.Standard()
-		astd.parse(os.path.join("tests", "rpls", "map_string.rpl"))
-		folder = os.path.join("tests", "rpls", "map")
-		astd.importData(os.path.join(folder, "test.bin"), folder)
-		# Compare test.bin with data.bin
-		data = read([folder, "data.bin"], "rb")
-		test = read([folder, "test.bin"], "rb")
-		self.assertEqual(data, test, "Unexpected result from export.")
-	#enddef
+	def testImport(self): self._import("map_string", ("map_string.bin", "test.map_string.bin"))
 
 	@timedTest
-	def testExport(self):
-		astd = std.Standard()
-		astd.parse(os.path.join("tests", "rpls", "map_string.rpl"))
-		folder = os.path.join("tests", "rpls", "map")
-		astd.exportData(os.path.join(folder, "data.bin"), folder)
-		# Compare test.rpl with data.rpl
-		data = read([folder, "data.rpl"], "r")
-		test = read([folder, "test.rpl"], "r")
-		self.assertEqual(data, test, "Unexpected result from export.")
-	#enddef
+	def testExport(self): self._export("map_string", ("map_string.rpl", "test.map_string.rpl"))
+#endclass
+
+class TestMapList(unittest.TestCase, IOTest):
+	@timedTest
+	def testImport(self): self._import("map_list", ("map_list.bin", "test.map_list.bin"))
+
+	@timedTest
+	def testExport(self): self._export("map_list", ("map_list.rpl", "test.map_list.rpl"))
 #endclass
 
 if __name__ == "__main__":
