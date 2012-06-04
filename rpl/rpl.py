@@ -19,6 +19,28 @@ def err(msg): stderr.write(unicode(msg) + "\n")
 
 class RPLError(Exception): pass
 
+class RecurseIter:
+	def __init__(self, children):
+		self._iter, self._iterIndex = None, 0
+		self.children = children
+	#enddef
+
+	def __iter__(self): return self
+
+	def next(self):
+		try:
+			if self._iter is None:
+				self._iter = self.children[self._iterIndex].recurse()
+				return self.children[self._iterIndex]
+			else: return self._iter.next()
+		except StopIteration:
+			self._iterIndex += 1
+			self._iter = None
+			return self.next()
+		except IndexError: raise StopIteration
+	#enddef
+#endclass
+
 class RPL(object):
 	"""
 	The base type for loading and interpreting RPL files.
@@ -220,7 +242,7 @@ class RPL(object):
 							error = "Key with no value. (Above here!)"
 						#endif
 
-						currentStruct.validate()
+						#currentStruct.validate()
 						currentStruct = currentStruct.parent()
 					elif flow == "[":
 						# Begins list
@@ -459,7 +481,7 @@ class RPL(object):
 
 		# Do preparations
 		toImport, toProcess = [], []
-		for x in self:
+		for x in self.recurse():
 			if isinstance(x, Serializable):
 				if self.wantPort(x, what) and x["import"]:
 					x.importPrepare(lfolder)
@@ -475,6 +497,8 @@ class RPL(object):
 		for x in reversed(toProcess): x.importProcessing()
 		# Commit imports
 		for x in toImport: x.importData(rom)
+
+		rom.close()
 		self.importing = None
 	#enddef
 
@@ -493,7 +517,7 @@ class RPL(object):
 
 		# Do preparations
 		toExport = []
-		for x in self:
+		for x in self.recurse():
 			if isinstance(x, Serializable):
 				if self.wantPort(x, what) and x["export"]: toExport.append(x)
 			elif isinstance(x, Executable): x.exportProcessing()
@@ -502,6 +526,8 @@ class RPL(object):
 		# Write exports
 		for x in toExport: x.exportData(rom, lfolder)
 		for x in self.sharedDataHandlers.itervalues(): x.write()
+
+		rom.close()
 		self.importing = None
 	#enddef
 
@@ -533,6 +559,7 @@ class RPL(object):
 
 	def child(self, name): return self.root[name]
 	def __iter__(self): return iter(self.orderedRoot)
+	def recurse(self): return RecurseIter(self.orderedRoot)
 #endclass
 
 ################################################################################
@@ -576,7 +603,7 @@ class RPLTypeCheck(object):
 			r'('
 				r':\((?:(?:"[^"]+"|'
 				r"'[^']'|[^'"
-				r'",]+)\s*,?\s*)+\)'
+				r'",)]+)\s*,?\s*)+\)'
 			r')?|'
 			# Recursion operator
 			r'(\^)'
@@ -606,7 +633,6 @@ class RPLTypeCheck(object):
 		lastWasListEnd, lastWasRep = False, False
 		for token in RPLTypeCheck.tokenize.finditer(syntax):
 			try:
-				#print name, token.groups()
 				flow, num, tName, discrete, recurse = token.groups()
 				if num: num = int(num)
 
@@ -715,9 +741,10 @@ class RPLTCData(object):
 		elif (self._type == "all"
 			or isinstance(data, RPLRef)
 			or isinstance(data, self._rpl.types[self._type])
-		) and (not self._discrete
-			or data in self._discrete
-		): return data
+		):
+			if not self._discrete or data.get() in self._discrete:
+				return data
+			else: return None
 		elif issubclass(self._rpl.types[self._type], data.__class__):
 			# Attempt to recast to subclass
 			try: return self._rpl.types[self._type](data.get())
@@ -867,21 +894,22 @@ class RPLStruct(object):
 		self._structs[classRef.typeName] = classRef
 	#enddef
 
-	def validate(self):
-		"""
-		Validate self.
-		"""
-		missingKeys = []
-		for k,v in self._keys.iteritems():
-			if k not in self._data:
-				# Should this wrap? Or verify? Or should the definers have to do that?
-				if v[1] is not None: self._data[k] = v[1]
-				else: missingKeys.append(k)
-			#endif
-		#endfor
-		if missingKeys: raise RPLError("Missing keys: " + ", ".join(missingKeys))
-		return True
-	#enddef
+#	def validate(self):
+#		"""
+#		Validate self.
+#		"""
+#		missingKeys = []
+#		for k,v in self._keys.iteritems():
+#			try: self[k]
+#			except RPLError:
+#				# Should this wrap? Or verify? Or should the definers have to do that?
+#				if v[1] is not None: self._data[k] = v[1]
+#				else: missingKeys.append(k)
+#			#endif
+#		#endfor
+#		if missingKeys: raise RPLError("Missing keys: " + ", ".join(missingKeys))
+#		return True
+#	#enddef
 
 	def __unicode__(self):
 		"""
@@ -897,8 +925,8 @@ class RPLStruct(object):
 		while x and key not in x._data: x = x.parent()
 		if x: return x._data[key]
 		elif key in self._keys and self._keys[key][1] is not None:
-			x._data[key] = self._keys[key][1]
-			return x._data[key]
+			self._data[key] = self._keys[key][1]
+			return self._data[key]
 		else: raise RPLError('No key "%s"' % key)
 	#enddef
 
@@ -914,8 +942,15 @@ class RPLStruct(object):
 		else: raise RPLError('"%s" has no key "%s".' % (self.typeName, key))
 	#enddef
 
-	def name(self): return self._name
-	def parent(self): return self._parent
+	def prepareForProc(self, cloneName, cloneKey, cloneRef):
+		"""
+		Stub: If the struct is going to deal in cloneables, it should implement this.
+		When a proc is called, this will be called on every struct telling it
+		what cloneable (by name and key) it needs to make preparations for. This
+		function should make those preparations.
+		"""
+		pass
+	#enddef
 
 	def basic(self, callers=[]):
 		"""
@@ -923,6 +958,9 @@ class RPLStruct(object):
 		"""
 		return Literal(self._name)
 	#enddef
+
+	def name(self): return self._name
+	def parent(self): return self._parent
 
 	def __len__(self):
 		"""
@@ -935,6 +973,7 @@ class RPLStruct(object):
 	def child(self, name): return self._children[name]
 	def __iter__(self): return iter(self._orderedChildren)
 	def iterkeys(self): return iter(self._orderedKeys)
+	def recurse(self): return RecurseIter(self._orderedChildren)
 
 	def get(self, data):
 		if isinstance(data, RPLRef): return data.get(this=self)
@@ -970,12 +1009,12 @@ class Static(RPLStruct):
 		return new
 	#enddef
 
-	def verify(self):
-		"""
-		Overwrite this cause Static accepts all keys.
-		"""
-		return True
-	#enddef
+#	def validate(self):
+#		"""
+#		Overwrite this cause Static accepts all keys.
+#		"""
+#		return True
+#	#enddef
 
 	def __setitem__(self, key, value):
 		"""
@@ -1038,8 +1077,10 @@ class Serializable(RPLStruct):
 			# Finalize path, make directories
 			path = os.path.normpath(os.path.join(*(folder + path)))
 			try: os.makedirs(os.path.dirname(path))
-			# TODO: Parse out "already exists" specifically
-			except os.error: pass
+			except OSError as err:
+				if err.errno == 17: pass
+				else: raise
+			#endif
 
 			# Return requested thing (path or handle)
 			if retName: return path
@@ -1106,23 +1147,16 @@ class Cloneable(RPLStruct):
 	def __init__(self, rpl, name, parent=None):
 		RPLStruct.__init__(self, rpl, name, parent)
 
-		self._clone = set()
 		self._clones = []
 	#enddef
 
-	def alsoClone(self, *add):
-		self._clone |= set(add)
-	#enddef
-
 	def clone(self):
-		new = self.__class__(self._rpl, self._name, self._parent)
-		# Clone isn't copied cause that should be done in the init
-		for x in [
-			"_data", "_keys", "_orderedKeys", "_structs", "_children",
-			"_orderedChildren"
-		] + list(self._clone):
-			setattr(new, x, copy.deepcopy(getattr(self, x)))
-		#endfor
+		clones, rpl, parent = self._clones, self._rpl, self._parent
+		del self._clones
+		self._rpl, self._parent = None, None
+		new = copy.deepcopy(self)
+		self._clones, self._rpl, self._parent = clones, rpl, parent
+		new._rpl, new._parent = rpl, parent
 		self._clones.append(new)
 		return new
 	#enddef
@@ -1236,7 +1270,9 @@ class RPLRef:
 	#endif
 
 	def set(self, data, callers=[], retCl=False, this=None):
-		"""Set referenced value (these things are pointers, y'know"""
+		"""
+		Set referenced value (these things are pointers, y'know).
+		"""
 		ret = self.pointer(callers, this)
 
 		if not self._key:
@@ -1279,9 +1315,13 @@ class RPLRef:
 	#enddef
 
 	def proc(self, func, callers=[], clone=None):
-		"""Used by executables"""
+		"""
+		Used by executables.
+		"""
 		point = clone or self.pointer(callers)
 		if clone is None and isinstance(point, Cloneable):
+			args = (point.name(), self._key, point)
+			for x in self._rpl.recurse(): x.prepareForProc(*args)
 			for x in point.clones(): self.proc(func, callers, x)
 		else:
 			# TODO: Better error wording
@@ -1318,7 +1358,7 @@ class RPLData(object):
 
 	def __eq__(self, data):
 		"""Compare data contained in objects)"""
-		if not isinstance(data, RPLData): data = RPL.parseData(RPL(), data)
+		if not isinstance(data, RPLData): data = RPL.parseData(RPL, data)
 		if isinstance(self, data.__class__) or isinstance(data, self.__class__):
 			d1, d2 = self.get(), data.get()
 			if type(d1) is list and type(d2) is list:
