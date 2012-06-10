@@ -8,11 +8,11 @@ import helper
 class Standard(RPL.RPL):
 	def __init__(self):
 		RPL.RPL.__init__(self)
-		self.regStruct(Data)
-		self.regStruct(Format)
-		self.regStruct(Map)
-		self.regStruct(IOStatic)
-		self.regType(Bin)
+		self.registerStruct(Data)
+		self.registerStruct(Format)
+		self.registerStruct(Map)
+		self.registerStruct(IOStatic)
+		self.registerType(Bin)
 	#enddef
 #endclass
 
@@ -34,7 +34,7 @@ class DataFile(object):
 
 		base = []
 		parents = []
-		for token in rpl.tokenize.finditer(raw):
+		for token in rpl.specification.finditer(raw):
 			groups = token.groups() # Used later
 			dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = groups
 			sstr = dstr or sstr # Double or single
@@ -67,7 +67,7 @@ class DataFile(object):
 					else: base.append(val)
 				#endif
 			except RPLError as err:
-				rpl.err("Error in line %i char %i: %s" % (
+				helper.err("Error in line %i char %i: %s" % (
 					line, char, err.args[0]
 				))
 			#endtry
@@ -122,9 +122,9 @@ class Graphic(RPL.Serializable):
 
 	def __init__(self, rpl, name, parent=None):
 		RPLStruct.__init__(self, rpl, name, parent)
-		self.regKey("rotate", "number", "0")
-		self.regKey("mirror", "number", "false")
-		self.regKey("flip", "number", "false")
+		self.registerKey("rotate", "number", "0")
+		self.registerKey("mirror", "number", "false")
+		self.registerKey("flip", "number", "false")
 	#enddef
 
 	def importTransform(self, img):
@@ -159,11 +159,11 @@ class DataFormat(object):
 	"""The mutual parent for Data and Format"""
 	def __init__(self):
 		# String only uses default data size. Number only uses bin as type
-		self.regKey("endian", "string", "little")
-		self.regKey("pad", "string", "\x00")
-		self.regKey("padside", "string", "left")
-		self.regKey("sign", "string", "unsigned")
-		self.regKey("x", "string|[string, number, string|number]+1", "")
+		self.registerKey("endian", "string", "little")
+		self.registerKey("pad", "string", "\x00")
+		self.registerKey("padside", "string", "left")
+		self.registerKey("sign", "string", "unsigned")
+		self.registerKey("x", "string|[string, number, string|number]+1", "")
 
 		self._parentClass = RPL.Cloneable if isinstance(self, RPL.Cloneable) else RPL.Serializable
 		self._format = {}
@@ -542,8 +542,8 @@ class Data(DataFormat, RPL.Serializable):
 	def __init__(self, rpl, name, parent=None):
 		RPL.Serializable.__init__(self, rpl, name, parent)
 		DataFormat.__init__(self)
-		self.regKey("pretty", "number", "false")
-		self.regKey("comment", "string", "")
+		self.registerKey("pretty", "number", "false")
+		self.registerKey("comment", "string", "")
 	#enddef
 
 	def importData(self, rom):
@@ -581,10 +581,10 @@ class Map(RPL.Executable):
 	def __init__(self, rpl, name, parent=None):
 		# Yes, it only wants RPLStruct's init, NOT Serializable's!!
 		RPL.Executable.__init__(self, rpl, name, parent)
-		self.regKey("packed", "string|[number|string]+")
-		self.regKey("unpacked", "string|[number|string]+")
-		self.regKey("data", "[number|string]*")
-		self.regKey("unmapped", "string:(except, add, drop)", "except")
+		self.registerKey("packed", "string|[number|string]+")
+		self.registerKey("unpacked", "string|[number|string]+")
+		self.registerKey("data", "[number|string]*")
+		self.registerKey("unmapped", "string:(except, add, drop)", "except")
 	#enddef
 
 	def doProcessing(self, p, u):

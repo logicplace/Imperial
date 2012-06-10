@@ -15,11 +15,12 @@ import helper
 #    otherwise return the already loaded/modified data to be further modified.
 #  * Add referencing multiline strs with @` ` form.
 
-def err(msg): stderr.write(unicode(msg) + "\n")
-
 class RPLError(Exception): pass
 
 class RecurseIter:
+	"""
+	Iterator used by both RPL and RPLStruct to recurse their children.
+	"""
 	def __init__(self, children):
 		self._iter, self._iterIndex = None, 0
 		self.children = children
@@ -29,15 +30,21 @@ class RecurseIter:
 
 	def next(self):
 		try:
+			# This will be None at the beginning and after completing a child.
 			if self._iter is None:
 				self._iter = self.children[self._iterIndex].recurse()
+				# This order makes it return itself before returning any of its children
 				return self.children[self._iterIndex]
 			else: return self._iter.next()
 		except StopIteration:
+			# Raised when child has completed. Continue to next child.
 			self._iterIndex += 1
 			self._iter = None
 			return self.next()
-		except IndexError: raise StopIteration
+		except IndexError:
+			# Raised when there are no children remaining. End iteration.
+			raise StopIteration
+		#endtry
 	#enddef
 #endclass
 
@@ -45,10 +52,12 @@ class RPL(object):
 	"""
 	The base type for loading and interpreting RPL files.
 	Also handles "execution" and what not.
+	The commandline and any other programs that may use this system will
+	interface with this object.
 	"""
 
 	# Constants
-	tokenize = re.compile(
+	specification = re.compile(
 		# Whitespace
 		(r'\s*(?:'
 		 # String: Either "etc" or 'etc' no linebreaks inside
@@ -76,6 +85,8 @@ class RPL(object):
 		) % {
 			# Range part 1
 			"r1": r'(?:[0-9',
+			# Between these parts, one can add more things to this set.
+			# It's used above to add :\-* in one portion.
 			# Range part 2
 			"r2": r']|(?<![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)',
 			# Invalid characters for a Literal
@@ -85,6 +96,7 @@ class RPL(object):
 		}
 	, re.M | re.U)
 
+	# Used to parse a multiline string token into its real data
 	multilineStr = re.compile(r'`([^`]*)`\s*(?:#.*)?')
 
 	# For numbers (number and hexnum) and ranges
@@ -107,9 +119,12 @@ class RPL(object):
 			"num": r'[0-9]+|\$[0-9a-fA-F]+'
 		}
 	)
+
 	# Quick check for if a number is a range or not
 	isRange = re.compile(r'[:\-*]')
 
+	# Statics are literals that are replaced with another value.
+	# NOTE: I'm considering removing them.
 	_statics = {
 		"false":   "0",
 		"true":    "1",
@@ -138,48 +153,99 @@ class RPL(object):
 	}
 
 	def __init__(self):
-		# Be sure to call this!
-		self.static = {}
-		self.types = {}
-		self.structs = {}
-		self.root = {}
-		self.orderedRoot = []
-		self.structsByName = {}
-		self.sharedDataHandlers = {}
-		self.importing = None
+		# Be sure to call this from your module's version!
+		self.static = {}             # List of statics
+		self.types = {}              # Registered data types
+		self.structs = {}            # Structs allowed in the root
+		self.root = {}               # Top-level structs in the rpl file
+		self.orderedRoot = []        # Same as above, but in order
+		self.structsByName = {}      # All structs in the file
+		self.sharedDataHandlers = {} # Used by RPL.share
+		self.importing = None        # Used by RPL.share, NOTE: I would like to remove this..
 
 		# Registrations
-		self.regStruct(Static)
-		self.regType(String)
-		self.regType(Literal)
-		self.regType(Number)
-		self.regType(HexNum)
-		self.regType(List)
-		self.regType(Range)
+		self.registerStruct(Static)
+		self.registerType(String)
+		self.registerType(Literal)
+		self.registerType(Number)
+		self.registerType(HexNum)
+		self.registerType(List)
+		self.registerType(Range)
 
-		for k,v in RPL._statics.iteritems(): self.regStatic(k, v)
+		for k,v in RPL._statics.iteritems(): self.registerStatic(k, v)
 	#enddef
 
 	def parse(self, inFile):
 		"""
-		Read in a file and parse it.
+		Read in a file and parse it. The form is essentially structs with
+		key/value pairs in them. Each struct type has different functionality
+		and there are different datatypes as well. There are also references.
+
+		Values may only be contained in keys which may only be contained in
+		structs.
+
+		Therefore the root may only contain structs.
+
+		Key names and struct types must be lowercase. Both may be trailed
+		by numbers as well.
+
+		It is convention for a struct name to be proper case, but is not
+		required by the parser.
+
+		Key/value pairs may be separated with a comma or a newline. Values
+		within a list follow the same convention. The only value that cannot
+		be separated by a newline (from a directly following value of the same
+		type) is the multiline string. For example:
+
+		list: [
+			`str1`
+			`still str1`
+		]
+		# vs.
+		list: [
+			`str1`,
+			`str2`
+		]
+
+		The basic datatypes are: number, string, and list. They are the absolute
+		base types of the system, and I for one think that's so for any system.
+		There are more basic forms, however, the make up the syntax. Each type
+		from then on is derived from one of the above three basic types. These
+		are all of the types and their syntax (Name(Comment):
+		Number:                                    1234
+		HexNum(Hexadecimal Number):                $12a4B0
+
+		String:                                    "abcdef"
+		Literal:                                   abcdef
+
+		List:                                      [1, "abc", etc]
+		Range(List form: [1,2,3,4,5,5,x,4]):       1-4:5*2:x:4
+
+		Reference(To basic data):                  @SomeStruct
+		Reference(To a key's value):               @SomeStruct.key
+		Reference(To a value within a key's list): @SomeStruct.key[3][0]
+
+		You may see tests/rpls/rpl.rpl for an example.
 		"""
-		raw = helper.readFrom(inFile)
+		raw = helper.readFrom(inFile) # Raw data from file
 
-		lastLit, prelit = None, ""
-		currentKey = None
-		currentStruct = None
-		counts = {}
-		adder = []
+		# Prelit allows colons to be inside literals.
+		lastLit, prelit = None, "" # Helpers for literal forming
+		currentKey = None          # What key the next value is for
+		currentStruct = None       # What struct we are currently parsing
+		counts = {}                # How many of a certain struct type we've enountered
+		parents = []               # Current hierarchy of structs and lists
 
-		for token in RPL.tokenize.finditer(raw):
+		for token in RPL.specification.finditer(raw):
 			groups = token.groups() # Used later
 			dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = groups
-			sstr = dstr or sstr # Double or single
+			sstr = dstr or sstr # Double or single quoted string
+			# (type, value) to add; error to throw; skip list childs' instantiations
 			add, error, skipSubInst = None, None, False
 
 			# Find the position (used for ref and errors)
 			pos = token.start()
+			# Line and character numbers are 1-based (because gedit is 1-based o/ )
 			line, char = raw.count("\n",0,pos) + 1, pos - raw.rfind("\n",0,pos) + 1
 
 			try:
@@ -187,9 +253,9 @@ class RPL(object):
 					# Literals can either be the struct head (type and optionally name)
 					# or a string that has no quotes.
 					lit = lit.rstrip()
-					# If the last token was a key or this is inside a list,
-					#  this is string data
-					if currentKey or adder:
+					# If the last token was a key or this is inside a list, this
+					# is string data (as a literal type).
+					if currentKey or parents:
 						add = self.parseData(groups)
 						if prelit:
 							add = (add[0], prelit + add[1])
@@ -237,7 +303,7 @@ class RPL(object):
 					elif flow == "}":
 						# Close struct
 						if currentStruct is None: error = "} without a {."
-						elif adder: error = "Unclosed list."
+						elif parents: error = "Unclosed list."
 						elif currentKey is not None:
 							error = "Key with no value. (Above here!)"
 						#endif
@@ -246,19 +312,19 @@ class RPL(object):
 						currentStruct = currentStruct.parent()
 					elif flow == "[":
 						# Begins list
-						adder.append([])
+						parents.append([])
 					elif flow == "]":
 						# End list
-						if adder:
-							add = ("list", adder.pop())
+						if parents:
+							add = ("list", parents.pop())
 							skipSubInst = True
 						else: error = "] without a [."
 					elif flow == ",":
-						# Separator
+						# Separator (only really directs the regex)
 						pass
 					#endif
 				elif key:
-					if currentStruct is None or adder:
+					if currentStruct is None or parents:
 						prelit = key + ":" + afterkey
 					else: currentKey = key
 				elif sstr or mstr or num or ref:
@@ -276,8 +342,8 @@ class RPL(object):
 					add = self.parseCreate(add, currentStruct, currentKey, line, char, skipSubInst)
 				dtype, val = add.typeName, add # For statics
 
-				if adder:
-					adder[-1].append(val)
+				if parents:
+					parents[-1].append(val)
 				elif currentStruct and currentKey:
 					currentStruct[currentKey] = val
 					currentKey = None
@@ -287,7 +353,7 @@ class RPL(object):
 			#endif
 
 			if error:
-				err("Error in line %i char %i: %s" % (
+				helper.err("Error in line %i char %i: %s" % (
 					line, char, error
 				))
 				return False
@@ -308,6 +374,8 @@ class RPL(object):
 			val = RPLRef(self, currentStruct, currentKey, val, line, char)
 		elif skipSubInst: val = self.wrap(*add)
 		else:
+			# So I don't have to have two branches doing the same thing we
+			# regard the data as a list for now, and change it back after.
 			if type(val) is not list: nl, val = True, [add]
 			else: nl = False
 			val = map(lambda(x): self.wrap(*x), val)
@@ -324,6 +392,7 @@ class RPL(object):
 		though this has a different return form.
 		Passing as a tuple of preparsed data returns: (type, data)
 		Passing as a string returns just the wrapped data.
+		You may use raw to return unwrapped data, without type.
 		"""
 		pp = type(data) is tuple
 		if pp: dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = data
@@ -333,7 +402,7 @@ class RPL(object):
 					None, None, None, None, None, None, None, None, ""
 				)
 			else:
-				try: dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = self.tokenize.match(data).groups()
+				try: dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = self.specification.match(data).groups()
 				except AttributeError: raise RPLError("Syntax error in data: %s" % data)
 			#endif
 		#endif
@@ -344,7 +413,7 @@ class RPL(object):
 		if ref: add = ("reference", ref)
 		elif sstr: add = ("string", sstr)
 		elif mstr:
-			# Need to remove all `s
+			# Need to remove all `s and comments
 			add = ("string", "".join(RPL.multilineStr.findall(mstr)))
 		elif num:
 			if not RPL.number.match(num):
@@ -399,6 +468,7 @@ class RPL(object):
 	def addDef(self, key, value):
 		"""
 		Add a key/value pair to the Defs struct. Used on the command line.
+		Basically run time definitions, similar to the -D flag in gcc.
 		"""
 		if "Defs" not in self.structsByName:
 			defs = self.structsByName["Defs"] = Static(self, "Defs")
@@ -406,14 +476,17 @@ class RPL(object):
 		defs[key] = self.parseData(value, defs, key)
 	#enddef
 
-	def addChild(self, sType, name):
+	def addChild(self, structType, name):
 		"""
 		Add a new struct to the root "element"
+		Note that this currently does not add things to structsByName, making
+		structs only added to the root by this method unreferenceable.
+		I'm not sure if this should be adjusted or not, yet.
 		"""
-		if sType not in self.structs:
-			raise RPLError("%s isn't allowed as a substruct of root." % sType)
+		if structType not in self.structs:
+			raise RPLError("%s isn't allowed as a substruct of root." % structType)
 		#endif
-		new = self.structs[sType](self, name)
+		new = self.structs[structType](self, name)
 		self.root[name] = new
 		self.orderedRoot.append(new)
 		return new
@@ -422,26 +495,30 @@ class RPL(object):
 	def __unicode__(self):
 		"""
 		Write self as an RPL file.
+		Obviously this returns a string and does not actually write a file.
 		"""
+		# TODO: entire function
+		pass
 	#enddef
 
-	def regType(self, classRef):
+	def registerType(self, classRef):
 		"""
 		Method to register a custom type.
 		"""
 		self.types[classRef.typeName] = classRef
 	#enddef
 
-	def regStatic(self, name, value):
+	def registerStatic(self, name, value):
 		"""
 		Method to register a custom static variable. Use sparingly.
+		NOTE: Statics may be removed in favor of a less lossy system.
 		"""
 		self.static[name] = self.parseData(value)
 	#enddef
 
-	def regStruct(self, classRef):
+	def registerStruct(self, classRef):
 		"""
-		Method to register a custom struct.
+		Method to register a custom struct as allowable in the root.
 		"""
 		try: classRef.typeName
 		except AttributeError: classRef.typeName = classRef.__name__.lower()
@@ -450,27 +527,35 @@ class RPL(object):
 
 	def template(self, outFile):
 		"""
-		Output a basic RPL template
+		Output a basic RPL template. I would recommend replacing this in your
+		own modules, with something significantly more specific.
 		"""
 		outFile.write("ROM {}\n")
 	#enddef
 
 	def verify(self):
 		"""
-		Stub. You must replace this in your own things.
+		Stub. You must replace this in your own modules.
 		Verifies that the selected ROM is the expected one according to the
 		RPL's ROM field.
 		"""
+		# TODO: Generic things like hash checks over the whole file or segments
 		return None
 	#enddef
 
 	def wantPort(self, x, what):
+		# Runtime may request only certain executables be run. All children of
+		# the given names are also executed. This recurses to find if it (x) or
+		# any parent was requested.
 		return x and (not what or x.name() in what or wantPort(x.parent(), what))
 	#enddef
 
 	def importData(self, rom, folder, what=[]):
 		"""
 		Import data from folder into the given ROM according to what.
+		rom is the location of the binary ROM file.
+		folder is the base folder for the project files.
+		what is a list of names requested for execution.
 		"""
 		self.rom = rom = helper.stream(rom)
 		self.importing = True
@@ -505,6 +590,9 @@ class RPL(object):
 	def exportData(self, rom, folder, what=[]):
 		"""
 		Export data from rom into folder according to what.
+		rom is the location of the binary ROM file.
+		folder is the base folder for the project files.
+		what is a list of names requested for execution.
 		"""
 		self.rom = rom = helper.stream(rom)
 		self.importing = False
@@ -591,7 +679,7 @@ class RPLTypeCheck(object):
 	 * ^    - Recurse parent list at this point
 	"""
 
-	tokenize = re.compile(
+	specification = re.compile(
 		# Whitespace
 		r'\s+|'
 		# List forms
@@ -625,13 +713,14 @@ class RPLTypeCheck(object):
 
 	def __parse(self, rpl, name, syntax):
 		"""
+		Parses a typecheck string. See class's docstring for the specification.
 		FYI: This is one of the most ridiculous looking parsers I've written.
 		"""
 		lastType = None
 		remain = None
 		parents = []
 		lastWasListEnd, lastWasRep = False, False
-		for token in RPLTypeCheck.tokenize.finditer(syntax):
+		for token in RPLTypeCheck.specification.finditer(syntax):
 			try:
 				flow, num, tName, discrete, recurse = token.groups()
 				if num: num = int(num)
@@ -726,27 +815,31 @@ class RPLTypeCheck(object):
 # RPL TypeCheck Data
 class RPLTCData(object):
 	"""
-	Helper class for RPLTypeCheck, contains one type.
+	Helper class for RPLTypeCheck; contains one type.
 	"""
 	def __init__(self, rpl, t, discrete=None):
 		self._rpl, self._type, self._discrete = rpl, t, discrete
 	#enddef
 
-	# Starting to feel like I'm overdoing this class stuff :3
+	# Starting to feel like I'm overdoing this class stuff. :3
 	def verify(self, data, parentList=None):
+		# Recursion operator check.
 		if self._type == "^":
 			if parentList is not None:
 				return parentList.verify(data, parentList)
 			else: return None
+		# If there is a discrete set of values, verify within that.
+		elif self._discrete and data.get() not in self._discrete:
+			return None
+		# Check if the given type is valid.
 		elif (self._type == "all"
 			or isinstance(data, RPLRef)
 			or isinstance(data, self._rpl.types[self._type])
-		):
-			if not self._discrete or data.get() in self._discrete:
-				return data
-			else: return None
+		): return data
+		# Otherwise, check if the expected type is a more specific subclass
+		# of ther given type.
 		elif issubclass(self._rpl.types[self._type], data.__class__):
-			# Attempt to recast to subclass
+			# Attempt to recast to subclass.
 			try: return self._rpl.types[self._type](data.get())
 			except RPLError: return None
 		else: return None
@@ -756,14 +849,14 @@ class RPLTCData(object):
 # RPL TypeCheck List
 class RPLTCList(object):
 	"""
-	Helper class for RPLTypeCheck, contains one list.
+	Helper class for RPLTypeCheck; contains one list.
 	"""
 	def __init__(self, l, r="]", num=None):
 		self._list, self._repeat, self._num = l, r, num
 	def rep(self, r, num): self._repeat, self._num = r, num
 
 	def verify(self, data, parentList=None):
-		# Make sure data is a list (if it is 0 or more)
+		# Make sure data is a list (if it is 0 or more).
 		if not isinstance(data, List):
 			if self._repeat in "*!~.":
 				if self._num is not None:
@@ -821,7 +914,7 @@ class RPLTCList(object):
 # RPL TypeCheck Or
 class RPLTCOr(object):
 	"""
-	Helper class for RPLTypeCheck, contains one OR set.
+	Helper class for RPLTypeCheck; contains one OR set.
 	"""
 	def __init__(self, orSet): self._or = orSet
 
@@ -840,9 +933,12 @@ class RPLTCOr(object):
 class RPLStruct(object):
 	"""
 	Base class for a struct.
+	When making your own struct type, inherit from this, or a subclass of it.
+	There are more specific general structs below that will likely be more
+	fitting than inheriting this directly.
 	"""
 
-	# Be sure to define typeName here!
+	# Be sure to define typeName here in your own subclasses!
 
 	def __init__(self, rpl, name, parent=None):
 		# Be sure to call this in your own subclasses!
@@ -875,19 +971,19 @@ class RPLStruct(object):
 		return new
 	#enddef
 
-	def regKey(self, name, basic, default=None):
+	def registerKey(self, name, typeStr, default=None):
 		"""
 		Register a key by name with type and default.
 		"""
-		check = RPLTypeCheck(self._rpl, name, basic)
+		check = RPLTypeCheck(self._rpl, name, typeStr)
 		self._keys[name] = [check,
 			None if default is None else check.verify(self._rpl.parseData(default))
 		]
 	#enddef
 
-	def regStruct(self, classRef):
+	def registerStruct(self, classRef):
 		"""
-		Method to register a custom struct.
+		Method to register a struct as allowable for being a substruct of this.
 		"""
 		try: classRef.typeName
 		except AttributeError: classRef.typeName = classRef.__name__.lower()
@@ -915,11 +1011,15 @@ class RPLStruct(object):
 		"""
 		Write struct to RPL format.
 		"""
+		# TODO: Write this.
+		pass
 	#enddef
 
 	def __getitem__(self, key):
 		"""
 		Return data for key.
+		You're allowed to replace this if you require special functionality.
+		Just please make sure it all functions logically.
 		"""
 		x = self
 		while x and key not in x._data: x = x.parent()
@@ -933,6 +1033,8 @@ class RPLStruct(object):
 	def __setitem__(self, key, value):
 		"""
 		Set data for key, verifying and casting as necessary.
+		You're allowed to replace this if you require special functionality.
+		Just please make sure it all functions logically.
 		"""
 		if key in self._keys:
 			# Reference's types are lazily checked
@@ -955,6 +1057,8 @@ class RPLStruct(object):
 	def basic(self, callers=[]):
 		"""
 		Stub. Return basic data (name by default).
+		In your documentation, please state if this will always return the name
+		by some necessity, or if in the future it may change to an actual value.
 		"""
 		return Literal(self._name)
 	#enddef
@@ -976,11 +1080,19 @@ class RPLStruct(object):
 	def recurse(self): return RecurseIter(self._orderedChildren)
 
 	def get(self, data):
+		"""
+		These handle references in terms of cloneables, ensuring "this" refers
+		the the appropriate instance rather than the uninstanced struct.
+		"""
 		if isinstance(data, RPLRef): return data.get(this=self)
 		else: return data.get()
 	#endif
 
 	def set(self, data, val):
+		"""
+		These handle references in terms of cloneables, ensuring "this" refers
+		the the appropriate instance rather than the uninstanced struct.
+		"""
 		if isinstance(data, RPLRef): return data.set(val, this=self)
 		else: return data.set(val)
 	#endif
@@ -1034,11 +1146,11 @@ class Serializable(RPLStruct):
 
 	def __init__(self, rpl, name, parent=None):
 		RPLStruct.__init__(self, rpl, name, parent)
-		self.regKey("base", "hexnum", "$000000")
-		self.regKey("file", "string", "")
-		self.regKey("ext", "string", "")
-		self.regKey("export", "number", "true")
-		self.regKey("import", "number", "true")
+		self.registerKey("base", "hexnum", "$000000")
+		self.registerKey("file", "string", "")
+		self.registerKey("ext", "string", "")
+		self.registerKey("export", "number", "true")
+		self.registerKey("import", "number", "true")
 
 		self._prepared = False
 	#enddef
@@ -1172,7 +1284,8 @@ class RPLRef:
 	Manages references to other fields.
 	"""
 
-	spec = re.compile(r'@?([^.]+)(?:\.([^\[]*))?((?:\[[0-9]+\])*)')
+	specification = re.compile(r'@?([^.]+)(?:\.([^\[]*))?((?:\[[0-9]+\])*)')
+	# Way way ... back; Great great ... grand parent
 	heir = re.compile(r'^(?=.)((w*)back_?)?((g*)parent)?$')
 
 	typeName = "reference"
@@ -1183,7 +1296,7 @@ class RPLRef:
 		self._mykey = mykey
 		self._pos = (line, char)
 
-		self._struct, self._key, idxs = self.spec.match(ref).groups()
+		self._struct, self._key, idxs = self.specification.match(ref).groups()
 		if idxs: self._idxs = map(int, idxs[1:-1].split("]["))
 		else: self._idxs = []
 	#enddef
@@ -1233,6 +1346,7 @@ class RPLRef:
 	#enddef
 
 	def getFromIndex(self, ret, callers):
+		# Traverses a list to find the requested data within.
 		callersAndSelf = callers + [self]
 		for i, x in enumerate(self._idxs):
 			try:
@@ -1316,7 +1430,8 @@ class RPLRef:
 
 	def proc(self, func, callers=[], clone=None):
 		"""
-		Used by executables.
+		Used by executables. Runs a procedure over every instance of a clone.
+		Or if not cloneable, it runs it over the only instance.
 		"""
 		point = clone or self.pointer(callers)
 		if clone is None and isinstance(point, Cloneable):
@@ -1347,17 +1462,21 @@ class RPLData(object):
 
 	def proc(self, func, clone=None):
 		"""
-		Used by executables.
+		Used by executables. Mostly so that one doesn't have to check if they're
+		working with a reference or not.
 		"""
 		self.set(func(self.get()))
 	#enddef
 
+	# You must define these in your own types.
 	#def defaultSize(self)       # Returns default size for use by Data struct
 	#def serialize(self, **kwargs)         # Return binary form of own data.
 	#def unserialize(self, data, **kwargs) # Parse binary data and set to self.
 
 	def __eq__(self, data):
-		"""Compare data contained in objects)"""
+		"""
+		Compare data contained in objects.
+		"""
 		if not isinstance(data, RPLData): data = RPL.parseData(RPL, data)
 		if isinstance(self, data.__class__) or isinstance(data, self.__class__):
 			d1, d2 = self.get(), data.get()
@@ -1374,7 +1493,9 @@ class RPLData(object):
 #endclass
 
 class String(RPLData):
-	"""String basic type"""
+	"""
+	String basic type.
+	"""
 	typeName = "string"
 
 	escape = re.compile(r'\$(\$|[0-9a-fA-F]{2})')
@@ -1424,16 +1545,22 @@ class String(RPLData):
 #endclass
 
 class Literal(String):
-	"""Literal basic type"""
+	"""
+	Literal interpreted type.
+	"""
 	typeName = "literal"
 
+	badchr = re.compile(r'^[ \t]|[\x00-\x08\x0a-\x1f\x7f-\xff{}\[\],\$@"#\r\n' r"']|[ \t]$")
+
 	def __unicode__(self):
-		return String.binchr.sub(String.replOut, self._data)
+		return self.badchr.sub(String.replOut, self._data)
 	#enddef
 #endclass
 
 class Number(RPLData):
-	"""Number basic type"""
+	"""
+	Number basic type.
+	"""
 	typeName = "number"
 
 	def set(self, data):
@@ -1471,14 +1598,18 @@ class Number(RPLData):
 #endclass
 
 class HexNum(Number):
-	"""HexNum interpreted type"""
+	"""
+	HexNum interpreted type.
+	"""
 	typeName = "hexnum"
 
 	def __unicode__(self): return "$%x" % self._data
 #endclass
 
 class List(RPLData):
-	"""List basic type"""
+	"""
+	List basic type.
+	"""
 	typeName = "list"
 
 	def set(self, data):
@@ -1494,7 +1625,10 @@ class List(RPLData):
 #enclass
 
 class Range(List):
-	"""Range interpreted type"""
+	"""
+	Range interpreted type.
+	It's a list of numbers and one character literals.
+	"""
 	typeName = "range"
 
 	def set(self, data):

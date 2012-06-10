@@ -1,5 +1,8 @@
 import codecs
 
+# So I can be lazy about writing errors
+def err(msg): stderr.write(unicode(msg) + "\n")
+
 def readFrom(etc):
 	"""
 	Helper class to read from a file or stream
