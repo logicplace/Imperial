@@ -1,7 +1,15 @@
 import codecs
+from sys import stderr
 
 # So I can be lazy about writing errors
 def err(msg): stderr.write(unicode(msg) + "\n")
+
+# TODO: Define some levels
+logLevel = 0
+def log(level, msg):
+	global logLevel
+	if level <= logLevel: print "LOG(%i): %s" % (debugLevel, unicode(msg))
+#enddef
 
 def readFrom(etc):
 	"""
