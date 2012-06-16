@@ -176,8 +176,11 @@ class DataFormat(object):
 	def _parseFormat(self, key):
 		fmt = self._format[key]
 		if fmt is None: raise RPLError("No format for key %s." % key)
-		if isinstance(fmt, RPL.List):
-			fmt = fmt.get()
+		dofmt = None
+		if isinstance(fmt, RPL.String): dofmt = fmt.get().split()
+		if isinstance(fmt, RPL.List): dofmt = fmt.get()
+		if dofmt:
+			fmt = dofmt
 			# Let's parse and cache this
 			tmp = {
 				"type": fmt[0],
@@ -194,6 +197,7 @@ class DataFormat(object):
 				#endif
 			#endif
 			for x in fmt[2:]:
+				refKey = None
 				if isinstance(x, RPL.RPLRef):
 					refKey = self.refersToSelf(x)
 					if refKey and self.importing:
