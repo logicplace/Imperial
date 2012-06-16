@@ -46,12 +46,12 @@ iostatic File {
 }
 
 format Number {
-	xnum: [number, 1, 0]
+	xnum: [number, 1]
 }
 
 data MappedNums {
 	file: @File.name
 
-	xnum: [number, 1, 0]
-	xnums: [@Number, 30, 1]
+	xnum: [number, 1]
+	xnums: [@Number, 30]
 }

@@ -18,3 +18,7 @@ static {
 static AndAnotherStatic {
 	just: because
 } # because, because, because, BECAUSE~
+
+static regression {
+	endoflistnospacenumber: [lit, 1]
+}

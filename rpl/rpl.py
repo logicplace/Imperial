@@ -1,6 +1,5 @@
 import re
 import codecs
-from sys import stderr
 import os
 from math import ceil
 import copy
@@ -17,7 +16,7 @@ import helper
 
 class RPLError(Exception): pass
 
-class RecurseIter:
+class RecurseIter(object):
 	"""
 	Iterator used by both RPL and RPLStruct to recurse their children.
 	"""
@@ -69,7 +68,7 @@ class RPL(object):
 		 # Number or range (verify syntactically correct range later)
 		 # That is, any string of numbers, -, *, :, or :c: where c is one
 		 # lowercase letter.
-		 r'(%(r1)s%(r2)s%(r1)s:\-*%(r2)s*(?=[ ,]|$))|'
+		 r'(%(r1)s%(r2)s%(r1)s:\-*%(r2)s*(?=[,\]\s]|$))|'
 		 # Key: Lowercase letters optionally followed by numbers.
 		 # Must be followed by a colon.
 		 r'(%(key)s):([ \t]*)|'

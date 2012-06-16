@@ -17,7 +17,7 @@ import os
 import unittest
 from time import time
 
-from rpl import rpl, std
+from rpl import rpl, std, helper
 
 _timedTests = []
 
@@ -41,6 +41,16 @@ def read(fileName, mode):
 	data = f.read()
 	f.close()
 	return data
+#enddef
+
+def list2english(lst, quote='"'):
+	if not quote: quote = ''
+	if len(lst) == 1: return quote + lst[0] + quote
+	elif len(lst) == 2:
+		return quote + lst[0] + quote + ' and ' + quote + lst[1] + quote
+	else:
+		return quote + (quote + ', ' + quote).join(lst[0:-1]) + quote + ' and ' + quote + lst[-1] + quote
+	#endif
 #enddef
 
 class RPLTestCase(unittest.TestCase):
@@ -81,7 +91,8 @@ class RPLTestCase(unittest.TestCase):
 		tName, val = data[key].typeName, data[key].get()
 		if tName == "reference": tName = data[key].get(retCl=True).typeName
 		self.assertEqual(tName, exType,
-			'Unexpected datatype for "%s.%s" (got "%s")' % (data.name(), key, tName))
+			'Unexpected datatype for "%s.%s" Got: %s' % (data.name(), key, tName)
+		)
 		self.subComp(val, ex, "%s.%s" % (data.name(), key))
 	#enddef
 #endclass
@@ -91,6 +102,13 @@ class TestParse(RPLTestCase):
 	def setUpClass(cls):
 		cls.basic = rpl.RPL()
 		cls.basic.parse(os.path.join("tests", "rpls", "rpl.rpl"))
+	#enddef
+
+	def testRegressions(self):
+		regression = TestParse.basic.root["regression"]
+		self.comp(regression, "endoflistnospacenumber", "list", [
+			("literal", "lit"), ("number", 1)
+		])
 	#enddef
 
 	def testAndAnotherStatic(self):
@@ -148,39 +166,39 @@ TYPE_CHECK_TEST_CASES = [
 	TypeCheckTestCase("StrNum", "string", NUM, None),
 	TypeCheckTestCase("OrNum", "string|number", NUM, "number"),
 	TypeCheckTestCase("ListNum", "[number]", NUM, None),
-	TypeCheckTestCase("ListList", "[number]", RL(NUM), "list"),
+	TypeCheckTestCase("ListList", "[number]", RL(NUM), ["number"]),
 	TypeCheckTestCase("ListBadList", "[number]", RL(STR), None),
 	TypeCheckTestCase("LONum", "[string|number]", NUM, None),
-	TypeCheckTestCase("LOList", "[string|number]", RL(NUM), "list"),
-	TypeCheckTestCase("Sublist", "[number,[number],number]", RL(NUM, RL(NUM), NUM), "list"),
+	TypeCheckTestCase("LOList", "[string|number]", RL(NUM), ["number"]),
+	TypeCheckTestCase("Sublist", "[number,[number],number]", RL(NUM, RL(NUM), NUM), ["number", "list", "number"]),
 	TypeCheckTestCase("SublistBad", "[number,[number],number]", RL(NUM, RL(STR), NUM), None),
 	TypeCheckTestCase("OL_1", "string|[number]", STR, "string"),
-	TypeCheckTestCase("OL_2", "string|[number]", RL(NUM), "list"),
+	TypeCheckTestCase("OL_2", "string|[number]", RL(NUM), ["number"]),
 	TypeCheckTestCase("OLBad", "string|[number]", NUM, None),
-	TypeCheckTestCase("OL_3", "[number|[string],number]", RL(NUM, NUM), "list"),
-	TypeCheckTestCase("OL_4", "[number|[string],number]", RL(RL(STR), NUM), "list"),
+	TypeCheckTestCase("OL_3", "[number|[string],number]", RL(NUM, NUM), ["number", "number"]),
+	TypeCheckTestCase("OL_4", "[number|[string],number]", RL(RL(STR), NUM), ["list", "number"]),
 	TypeCheckTestCase("SSSSSL", "[[[[[string]]]]]", RL(RL(RL(RL(RL(STR))))), "list"),
-	TypeCheckTestCase("Repeat1_1", "[number]*", NUM, "list"),
-	TypeCheckTestCase("Repeat1_2", "[number]*", RL(NUM), "list"),
-	TypeCheckTestCase("Repeat1_3", "[number]*", RL(NUM, NUM), "list"),
+	TypeCheckTestCase("Repeat1_1", "[number]*", NUM, ["number"]),
+	TypeCheckTestCase("Repeat1_2", "[number]*", RL(NUM), ["number"]),
+	TypeCheckTestCase("Repeat1_3", "[number]*", RL(NUM, NUM), ["number", "number"]),
 	TypeCheckTestCase("Repeat1_4", "[number]*", STR, None),
 	TypeCheckTestCase("Repeat2_1", "[number]+", NUM, None),
-	TypeCheckTestCase("Repeat2_2", "[number]+", RL(NUM), "list"),
-	TypeCheckTestCase("Repeat2_3", "[number]+", RL(NUM, NUM), "list"),
-	TypeCheckTestCase("Repeat3", "[number|string|list]+", RL(STR), "list"),
-	TypeCheckTestCase("Repeat4_1", "[number,string]*", NUM, "list"),
-	TypeCheckTestCase("Repeat4_2", "[number,string]*", STR, "list"),
-	TypeCheckTestCase("Repeat4_3", "[number,string]*", RL(NUM, STR), "list"),
+	TypeCheckTestCase("Repeat2_2", "[number]+", RL(NUM), ["number"]),
+	TypeCheckTestCase("Repeat2_3", "[number]+", RL(NUM, NUM), ["number", "number"]),
+	TypeCheckTestCase("Repeat3", "[number|string|list]+", RL(STR), ["string"]),
+	TypeCheckTestCase("Repeat4_1", "[number,string]*", NUM, ["number"]),
+	TypeCheckTestCase("Repeat4_2", "[number,string]*", STR, ["string"]),
+	TypeCheckTestCase("Repeat4_3", "[number,string]*", RL(NUM, STR), ["number", "string"]),
 	TypeCheckTestCase("Repeat4_4", "[number,string]*", RL(STR, NUM), None),
-	TypeCheckTestCase("Repeat5_1", "[number,string]!", NUM, "list"),
-	TypeCheckTestCase("Repeat5_2", "[number,string]!", STR, "list"),
-	TypeCheckTestCase("Repeat5_3", "[number,string]!", RL(NUM, STR), "list"),
+	TypeCheckTestCase("Repeat5_1", "[number,string]!", NUM, ["number"]),
+	TypeCheckTestCase("Repeat5_2", "[number,string]!", STR, ["string"]),
+	TypeCheckTestCase("Repeat5_3", "[number,string]!", RL(NUM, STR), ["number", "string"]),
 	TypeCheckTestCase("Repeat5_4", "[number,string]!", RL(STR, NUM), None),
 	TypeCheckTestCase("Repeat5_5", "[number,string]!", RL(NUM, STR, NUM, STR), None),
 	TypeCheckTestCase("Repeat6_1", "[number]~", NUM, "number"),
-	TypeCheckTestCase("Repeat6_2", "[number]~", RL(NUM), "list"),
+	TypeCheckTestCase("Repeat6_2", "[number]~", RL(NUM), ["number"]),
 	TypeCheckTestCase("Repeat7_1", "[number].", NUM, "number"),
-	TypeCheckTestCase("Repeat7_2", "[number].", RL(NUM), "list"),
+	TypeCheckTestCase("Repeat7_2", "[number].", RL(NUM), ["number"]),
 	TypeCheckTestCase("Repeat8_1", "[number|^]", RL(RL(NUM)), "list"),
 	TypeCheckTestCase("Repeat8_2", "[^|number]", RL(RL(NUM)), "list"),
 	TypeCheckTestCase("Repeat8_3", "[^|number]", RL(RL(STR)), None),
@@ -188,18 +206,24 @@ TYPE_CHECK_TEST_CASES = [
 	# Make sure it doesn't infinitely recurse or anything here
 	TypeCheckTestCase("Repeat8_5", "[number|^]", RL(RL(RL(STR))), None),
 	TypeCheckTestCase("Repeat8_6", "[number|^]", RL(RL(RL(RL(RL(RL()))))), None),
-	TypeCheckTestCase("Repeat9_1", "[string,number]!0", STR, "list"),
+	TypeCheckTestCase("Repeat9_1", "[string,number]!0", STR, ["string"]),
 	TypeCheckTestCase("Repeat9_2", "[string,number]!0", NUM, None),
-	TypeCheckTestCase("Repeat10_1", "[string,number]+", RL(STR, NUM), "list"),
-	TypeCheckTestCase("Repeat10_2", "[string,number]+", RL(STR, NUM, STR, NUM), "list"),
+	TypeCheckTestCase("Repeat10_1", "[string,number]+", RL(STR, NUM), ["string", "number"]),
+	TypeCheckTestCase("Repeat10_2", "[string,number]+", RL(STR, NUM, STR, NUM), ["string", "number", "string", "number"]),
 	TypeCheckTestCase("Repeat10_3", "[string,number]+", RL(STR, NUM, STR), None),
-	TypeCheckTestCase("Repeat11_1", "[string,number]+1", RL(STR), "list"),
-	TypeCheckTestCase("Repeat11_2", "[string,number]+1", RL(STR, NUM), "list"),
+	TypeCheckTestCase("Repeat11_1", "[string,number]+1", RL(STR), ["string"]),
+	TypeCheckTestCase("Repeat11_2", "[string,number]+1", RL(STR, NUM), ["string", "number"]),
 	TypeCheckTestCase("Repeat11_3", "[string,number]+1", RL(STR, NUM, STR, NUM), None),
-	TypeCheckTestCase("Repeat11_4", "[string,number]+1", RL(STR, NUM, NUM), "list"),
+	TypeCheckTestCase("Repeat11_4", "[string,number]+1", RL(STR, NUM, NUM), ["string", "number", "number"]),
 	TypeCheckTestCase("Repeat11_5", "[string,number]+1", RL(NUM), None),
-	TypeCheckTestCase("RO_1", "[number]*|string", NUM, "list"),
-	TypeCheckTestCase("RO_2", "[number]*|string", RL(NUM), "list"),
+	TypeCheckTestCase("Repeat12_1", "[string,number,string|number]+1", RL(STR), None),
+	TypeCheckTestCase("Repeat12_2", "[string,number,string|number]+1", RL(STR, NUM), ["string", "number"]),
+	TypeCheckTestCase("Repeat12_3", "[string,number,string|number]+1", RL(STR, NUM, STR, NUM), ["string", "number", "string", "number"]),
+	TypeCheckTestCase("Repeat12_4", "[string,number,string|number]+1", RL(STR, NUM, STR), ["string", "number", "string"]),
+	TypeCheckTestCase("Repeat12_5", "[string,number,string|number]+1", RL(STR, NUM, NUM), ["string", "number", "number"]),
+	TypeCheckTestCase("Repeat12_6", "[string,number,string|number]+1", RL(NUM), None),
+	TypeCheckTestCase("RO_1", "[number]*|string", NUM, ["number"]),
+	TypeCheckTestCase("RO_2", "[number]*|string", RL(NUM), ["number"]),
 	TypeCheckTestCase("RO_3", "[number]*|string", STR, "string"),
 	TypeCheckTestCase("Heir_1", "range", rpl.Range([NUM, NUM]), "range"),
 	TypeCheckTestCase("Heir_2", "range", RL(NUM, NUM), "range"),
@@ -246,12 +270,33 @@ class TestTypeCheck(unittest.TestCase):
 
 	def typeCheck(self, key, syn, data, expect):
 		result = rpl.RPLTypeCheck(TestTypeCheck.basic, key, syn).verify(data)
-		self.assertTrue((expect is None and result is None)
-			or (result is not None and result.typeName == expect),
-			'Expecting "%s" but result was %s' % (
-				expect, "an error" if result is None else '"%s"' % result.typeName
+		if type(expect) is list:
+			self.assertTrue(isinstance(result, rpl.List),
+				'Expecting list but result was "%s"' % result.typeName
 			)
-		)
+			resultList = result.get()
+			self.assertEqual(len(expect), len(resultList),
+				'Expecting length of %i but result was length %i' % (
+					len(expect), len(resultList)
+				)
+			)
+			types = [x.typeName for x in resultList]
+			self.assertEqual(expect, types,
+				'Expecting type%s %s inside the list, but received type%s %s' % (
+					's' if len(expect) > 1 else '',
+					list2english(expect),
+					's' if len(types) > 1 else '',
+					list2english(types),
+				)
+			)
+		else:
+			self.assertTrue((expect is None and result is None)
+				or (result is not None and result.typeName == expect),
+				'Expecting "%s" but result was %s' % (
+					expect, "an error" if result is None else '"%s"' % result.typeName
+				)
+			)
+		#endif
 	#enddef
 #endclass
 
