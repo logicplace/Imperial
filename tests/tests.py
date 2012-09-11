@@ -236,6 +236,21 @@ TYPE_CHECK_TEST_CASES = [
 	TypeCheckTestCase("Discrete2_3", "string:(one, two)|number:(1, 2)", rpl.Number(1), "number"),
 	TypeCheckTestCase("Discrete2_4", "string:(one, two)|number:(1, 2)", rpl.Number(2), "number"),
 	TypeCheckTestCase("Discrete2_5", "string:(one, two)|number:(1, 2)", rpl.Number(5), None),
+	TypeCheckTestCase("Bool1", "bool", rpl.String("true"), "bool"),
+	TypeCheckTestCase("Bool2", "bool", rpl.String("1"), "bool"),
+	TypeCheckTestCase("Bool3", "bool", rpl.String("on"), "bool"),
+	TypeCheckTestCase("Bool4", "bool", rpl.Number(1), "bool"),
+	TypeCheckTestCase("Bool5", "bool", rpl.String("false"), "bool"),
+	TypeCheckTestCase("Bool6", "bool", rpl.String("0"), "bool"),
+	TypeCheckTestCase("Bool7", "bool", rpl.String("off"), "bool"),
+	TypeCheckTestCase("Bool8", "bool", rpl.Number(0), "bool"),
+	TypeCheckTestCase("Bool9", "bool", rpl.String("butt"), None),
+	TypeCheckTestCase("Bool10", "bool", rpl.Literal("true"), "bool"),
+	TypeCheckTestCase("Size1", "size", rpl.String("byte"), "size"),
+	TypeCheckTestCase("Size2", "size", rpl.String("short"), "size"),
+	TypeCheckTestCase("Size3", "size", rpl.String("long"), "size"),
+	TypeCheckTestCase("Size4", "size", rpl.String("double"), "size"),
+	TypeCheckTestCase("Size5", "size", rpl.String("junk"), None),
 ]
 
 def injectTypeCheckTests(cls):
@@ -269,7 +284,8 @@ class TestTypeCheck(unittest.TestCase):
 	#enddef
 
 	def typeCheck(self, key, syn, data, expect):
-		result = rpl.RPLTypeCheck(TestTypeCheck.basic, key, syn).verify(data)
+		try: result = rpl.RPLTypeCheck(TestTypeCheck.basic, key, syn).verify(data)
+		except rpl.RPLError: result = None
 		if type(expect) is list:
 			self.assertTrue(isinstance(result, rpl.List),
 				'Expecting list but result was "%s"' % result.typeName
@@ -406,6 +422,14 @@ class TestMapList(unittest.TestCase, IOTest):
 
 	@timedTest
 	def testExport(self): self._export("map_list", ("map_list.rpl", "test.map_list.rpl"))
+#endclass
+
+class TestTable(unittest.TestCase, IOTest):
+	@timedTest
+	def testImport(self): self._import("table", ("table.bin", "test.table.bin"))
+
+	@timedTest
+	def testExport(self): self._export("table", ("table.rpl", "test.table.rpl"))
 #endclass
 
 if __name__ == "__main__":
