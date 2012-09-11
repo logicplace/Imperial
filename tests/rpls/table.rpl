@@ -1,0 +1,48 @@
+iostatic File {
+	name: [table.rpl, test.table.rpl]
+}
+
+data Main {
+	base: $000000
+	endian: little
+	file: @File.name
+
+	xnumcols: [number, 2]
+	xcolumns: [@Column, @this.xnumcols]
+	xnumrows: [number, 4]
+	xdata:    [@Table, @this.xnumrows]
+}
+
+format Column {
+	xnamelen: [number, 1]
+	xname:    [string, @this.xnamelen]
+	xtype:    [number, 1]
+}
+
+table Table {
+	index:  0-3
+	format: [@Type_Byte, @Type_String, @Type_Int16, @Type_Int32]
+
+	head {
+		head: @Main.xcolumns
+		name: xname
+		type: xtype
+	}
+}
+
+format Type_Byte {
+	xval: [number, 1]
+}
+
+format Type_String {
+	xlen: [number, 1]
+	xval: [string, @this.xlen]
+}
+
+format Type_Int16 {
+	xval: [number, 2]
+}
+
+format Type_Int32 {
+	xval: [number, 4]
+}
