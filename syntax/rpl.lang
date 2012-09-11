@@ -166,8 +166,7 @@
 			</include>
 		</context>
 
-		<context id="rpl-data" end-parent="true" first-line-only="true">
-			<start>\%{def:always-match}</start>
+		<context id="rpl-data">
 			<include>
 				<context ref="def:shell-like-comment"/>
 				<context ref="list"/>
@@ -180,8 +179,7 @@
 			</include>
 		</context>
 
-		<context id="rpl-reg" end-parent="true" first-line-only="true">
-			<start>\%{def:always-match}</start>
+		<context id="rpl-reg">
 			<include>
 				<context ref="def:shell-like-comment"/>
 				<context ref="struct"/>
