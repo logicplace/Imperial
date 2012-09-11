@@ -45,3 +45,17 @@ def stream(etc):
 	#endif
 	return etc
 #enddef
+
+def oneOfIn(l1, l2):
+	for x in l1:
+		if x in l2: return True
+	#endfor
+	return False
+#enddef
+
+def list2english(l, conjunction=u"and"):
+	l = map(unicode, l)
+	if len(l) == 1: return l[0]
+	elif len(l) == 2: return u"%s %s %s" % (l[0], conjunction, l[1])
+	else: return u"%s, %s %s" % (", ".join(l[0:-1]), conjunction, l[-1])
+#enddef
