@@ -1,21 +1,58 @@
-import rpl as RPL
-from rpl import RPLError
-import Image
 import os
 import re
+import Image
 import helper
+import rpl as RPL
+from rpl import RPLError
+from textwrap import dedent
+from collections import OrderedDict as odict
 
-class Standard(RPL.RPL):
-	def __init__(self):
-		RPL.RPL.__init__(self)
-		self.registerStruct(Data)
-		self.registerStruct(Format)
-		self.registerStruct(Map)
-		self.registerStruct(IOStatic)
-		self.registerStruct(Table)
-		self.registerType(Bin)
-	#enddef
+#
+# Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
+#
+# This file is part of Imperial Exchange.
+#
+# Imperial Exchange is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Imperial Exchange is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+def register(rpl):
+	rpl.registerStruct(Data)
+	rpl.registerStruct(Format)
+	rpl.registerStruct(Map)
+	rpl.registerStruct(IOStatic)
+
+	rpl.registerType(Bin)
 #endclass
+
+def printHelp(more_info=[]):
+	print(
+		"std is the standard library for RPL.\n"
+		"It offers the structs:\n"
+		"  data  format  map  iostatic\n\n"
+		"And the types:\n"
+		"  bin\n"
+	)
+	if not more_info: print "Use --help std [structs...] for more info"
+	infos = {
+		"data": Data, "format": Format,
+		"map": Map, "iostatic": IOStatic,
+		"bin": Bin,
+	}
+	for x in more_info:
+		if x in infos: print dedent(infos[x].__doc__)
+	#endfor
+#enddef
 
 class DataFile(RPL.Share):
 	def __init__(self, inFile=None):
@@ -230,7 +267,7 @@ class DataFormat(object):
 		self.registerKey("x", "string|[string, number, string|number]+1", "")
 
 		self._parentClass = RPL.Cloneable if isinstance(self, RPL.Cloneable) else RPL.Serializable
-		self._format = {}
+		self._format = odict()
 		self._command = {}
 		self._len = None
 		self._count = None
@@ -241,11 +278,7 @@ class DataFormat(object):
 	def _parseFormat(self, key):
 		fmt = self._format[key]
 		if fmt is None: raise RPLError("No format for key %s." % key)
-		dofmt = None
-		if isinstance(fmt, RPL.String): dofmt = fmt.get().split()
-		if isinstance(fmt, RPL.List): dofmt = fmt.get()
-		if dofmt:
-			fmt = dofmt
+		if type(fmt) is list:
 			# Let's parse and cache this
 			tmp = {
 				"type": fmt[0],
@@ -298,11 +331,9 @@ class DataFormat(object):
 			# it must be specified!)
 			if tmp["offset"] is None:
 				first = True
-				for i in range(self._orderedKeys.index(key)):
-					if self._orderedKeys[i][0] == "x":
-						first = False
-						break
-					#endif
+				for k in self._format:
+					if k != key: first = False
+					break
 				#endfor
 				if first: tmp["offset"] = 0
 			#endif
@@ -328,9 +359,10 @@ class DataFormat(object):
 	def offsetOf(self, key):
 		fmt = self._parseFormat(key)
 		if fmt["offset"] is not None: return fmt["offset"]
-		for i in range(self._orderedKeys.index(key)-1, -1, -1):
-			if self._orderedKeys[i][0] == "x":
-				lastKey = self._orderedKeys[i]
+		keys = self._format.keys()
+		for i in range(keys.index(key)-1, -1, -1):
+			if keys[i][0] == "x":
+				lastKey = keys[i]
 				lastFmt = self._parseFormat(lastKey)
 				lastType = self.get(lastFmt["type"])
 				if ":" in lastType:
@@ -408,14 +440,10 @@ class DataFormat(object):
 		if key[0] == "x":
 			if key not in self._format:
 				self._parentClass.__setitem__(self, "x", value)
-				# We don't want "x" in here
-				self._orderedKeys[-1] = key
 				tmp = self._data["x"]
 				if isinstance(tmp, RPL.String):
-					self._format[key] = RPL.List(
-						map(self._rpl.parseData, tmp.get().split())
-					)
-				else: self._format[key] = tmp
+					self._format[key] = map(self._rpl.parseData, tmp.get().split())
+				else: self._format[key] = tmp.get()
 				del self._data["x"]
 			else: self._data[key] = value
 		else:
@@ -427,12 +455,9 @@ class DataFormat(object):
 		self.importing = True
 		filename = filename or self.open(folder, "rpl", True)
 		data = data or self._rpl.share(filename, DataFile)
-		for k in self.iterkeys():
-			if k[0] != "x": continue
-			self._parseFormat(k)
-		#endfor
-		for k in self.iterkeys():
-			if k[0] != "x": continue
+		keys = [x for x in self._format]
+		for k in keys: self._parseFormat(k)
+		for k in keys:
 			if k in self._command: continue
 			typeName = self.get(self._format[k]["type"])
 			if type(data) is list:
@@ -464,8 +489,7 @@ class DataFormat(object):
 		Initially called from Data.importData
 		"""
 		base = self["base"].get()
-		for k in self.iterkeys():
-			if k[0] != "x": continue
+		for k in self._format:
 			fmt = self._format[k]
 			data = self[k]
 			typeName = self.get(self._format[k]["type"])
@@ -493,9 +517,8 @@ class DataFormat(object):
 		ret = []
 		# Ensures everything is loaded and tagged with commands, so nothing
 		# is accidentally exported.. Not optimal I don't think?
-		for k in self.iterkeys(): self[k]
-		for k in self.iterkeys():
-			if k[0] != "x": continue
+		for k in self._format: self[k]
+		for k in self._format:
 			# We need to do it like this to ensure it had been read from the file...
 			data = self[k]
 			typeName = self.get(self._format[k]["type"])
@@ -518,8 +541,7 @@ class DataFormat(object):
 
 	def calculateOffsets(self):
 		calcedOffset=0
-		for k in self.iterkeys():
-			if k[0] != "x": continue
+		for k in self._format:
 			fmt = self._format[k]
 			# Get real offset
 			offset = calcedOffset
@@ -551,8 +573,7 @@ class DataFormat(object):
 	def len(self):
 		if self._len is not None: return self._len
 		size = 0
-		for k in self.iterkeys():
-			if k[0] != "x": continue
+		for k in self._format:
 			fmt = self._parseFormat(k)
 			data = self[k]
 			typeName = self.get(self._format[k]["type"])
@@ -572,13 +593,9 @@ class DataFormat(object):
 		count = 0
 
 		# Ensure commands are set...
-		for k in self.iterkeys():
-			if k[0] != "x": continue
-			self._parseFormat(k)
-		#endfor
+		for k in self._format: self._parseFormat(k)
 
-		for k in self.iterkeys():
-			if k[0] != "x": continue
+		for k in self._format:
 			if k not in self._command: count += 1
 		#endfor
 		self._count = count
@@ -632,7 +649,6 @@ class Data(DataFormat, RPL.Serializable):
 	Pad char: Only relevant to strings, it's the char to pad with.
 	Pad side: Only relevant to strings, can be "left", "right", or "center"
 	"""
-
 	typeName = "data"
 
 	def __init__(self, rpl, name, parent=None):
@@ -658,8 +674,7 @@ class Data(DataFormat, RPL.Serializable):
 		# This only matters here when exporting, it should already be prepared
 		# when importing.
 		if self.importing: return
-		for k in self.iterkeys():
-			if k[0] != "x": continue
+		for k in self._format:
 			dataType = self.get(self._parseFormat(k)["type"])
 			# We only care about the format types
 			if dataType[0:7] != "Format:": continue
@@ -667,158 +682,6 @@ class Data(DataFormat, RPL.Serializable):
 			if dataType[7:] == cloneName: self[k]
 			# Note we don't break here because it can be referenced multiple times
 		#endfor
-	#enddef
-#endclass
-
-# TODO: Move table to its own library, after making a library system
-class Table(RPL.Cloneable):
-	"""
-	Manages dynamic typing and such
-	format: List of references to format struct.
-	"""
-	def __init__(self, rpl, name, parent=None):
-		RPL.Cloneable.__init__(self, rpl, name, parent)
-		self.registerKey("index", "[number|string]+")
-		self.registerKey("format", "[string]+")
-		self.registerStruct(TableHead)
-
-		self._base = None
-		self._head = None
-		self._row = []
-	#enddef
-
-	def __getitem__(self, key):
-		if key == "row": return self._row
-		elif key == "head":
-			if self._head is None:
-				self._head = self.childrenByType(TableHead)
-				if len(self._head) == 0: raise RPL.RPLError("table structs must have a head substruct.")
-				self._head = self._head[0]
-			#endif
-			return self._head
-		elif key == "base": return self._base
-		else: return RPL.Cloneable.__getitem__(self, key)
-	#enddef
-
-	def importPrepare(self, folder, filename, data):
-		"""
-		Called from DataFormat.importPrepare
-		"""
-		# This will also ensure head exists
-		head = self["head"]
-
-		self._row = []
-		for idx, col in enumerate(self.get(head["head"])):
-			typeidx = col[self.get(head["type"])]
-			try: idxidx = self.get("index").index(typeidx)
-			except ValueError:
-				raise RPLError("Encountered unknown type %s when processing table." % typeidx)
-			#endtry
-
-			tmp = self.get(self.get("format")[idxidx]).split(":", 1)
-			if len(tmp) == 1: struct, name = "Format", tmp[0]
-			else: struct, name = tuple(tmp)
-			# TODO: Verify struct somehow?
-
-			ref = self._rpl.child(name)
-			one = ref.countExported() == 1
-			clone = ref.clone()
-			if one: tmp = [data[idx]]
-			else: tmp = data[idx].get()
-			clone.importPrepare(folder, filename, tmp)
-			self._row.append(clone)
-		#endfor
-	#enddef
-
-	def exportPrepare(self, rom):
-		"""
-		Called after the clone is set up for it to grab the data from the ROM.
-		"""
-		if len(self.get("format")) != len(self.get("index")):
-			raise RPLError("format and index must have the same number of values")
-		#endif
-
-		# This will also ensure head exists
-		head = self["head"]
-
-		# Loop through each column in the head and read in the respective format
-		address = self._base.get()
-		for x in self.get(head["head"]):
-			typeidx = x[self.get(head["type"])]
-			try: idx = self.get("index").index(typeidx)
-			except ValueError:
-				raise RPLError("Encountered unknown type %s when processing table." % typeidx)
-			#endtry
-
-			tmp = self.get(self.get("format")[idx]).split(":", 1)
-			if len(tmp) == 1: struct, name = "Format", tmp[0]
-			else: struct, name = tuple(tmp)
-			# TODO: Verify struct somehow?
-			clone = self._rpl.child(name).clone()
-			clone._base = RPL.Number(address)
-			if hasattr(clone, "exportPrepare"): clone.exportPrepare(rom)
-			self._row.append(clone)
-			address += clone.len()
-		#endfor
-	#enddef
-
-	def importDataLoop(self, rom):
-		for x in self._row: x.importDataLoop(rom)
-	#enddef
-
-	def exportDataLoop(self, datafile=None):
-		ret = []
-		for x in self._row: ret.append(x.exportDataLoop(datafile))
-		return RPL.List(ret)
-	#enddef
-
-	def calculateOffsets(self):
-		calcedOffset = 0
-		for x in self._row:
-			x._base = RPL.Number(calcedOffset)
-			calcedOffset += x.calculateOffsets()
-		#endfor
-		return calcedOffset
-	#enddef
-
-	def countExported(self):
-		return len(self._row)
-	#enddef
-
-	def basic(self, callers=[]):
-		"""
-		Returns the name with a prefix, used for referencing this as a type.
-		"""
-		return RPL.Literal("Table:" + self._name)
-	#enddef
-
-	def len(self):
-		"""
-		Used by DataFormat exportPrepare to determine size of struct in bytes
-		"""
-		length = 0
-		for x in self._row: length += x.len()
-		return length
-	#enddef
-#endclass
-
-class TableHead(RPL.RPLStruct):
-	"""
-	Describes the columns of a table
-	This basically acts as a map from known key names to the ones in "head"
-	head: Reference to the list of table rows. This should be a key in a data
-	      or format struct that refers to a format struct.
-	name: Key storing column name, optional
-	type: Key storing type index
-	index: Key storing unique index for the row, optional
-	"""
-	typeName = "head"
-	def __init__(self, rpl, name, parent=None):
-		RPL.RPLStruct.__init__(self, rpl, name, parent)
-		self.registerKey("head", "reference")
-		self.registerKey("name", "string", "")
-		self.registerKey("type", "string")
-		self.registerKey("index", "string", "")
 	#enddef
 #endclass
 
@@ -865,8 +728,11 @@ class GenericGraphic(Graphic):
 
 class Map(RPL.Executable):
 	"""
-	Translates data
+	Translates data.
+	TODO: More info
 	"""
+	typeName = "map"
+
 	def __init__(self, rpl, name, parent=None):
 		RPL.Executable.__init__(self, rpl, name, parent)
 		self.registerKey("packed", "string|[number|string]+")
@@ -957,7 +823,6 @@ class IOStatic(RPL.Static):
 	Returned data from a key depends on whether we're importing or exporting.
 	Format is key: [import, export]
 	"""
-
 	typeName = "iostatic"
 
 	def __getitem__(self, key):
@@ -971,7 +836,6 @@ class IOStatic(RPL.Static):
 			if not isinstance(value, RPL.List) or len(value.get()) != 2:
 				raise RPLError("IOStatic requires each entry to be a list of two values.")
 			#endif
-			self._orderedKeys.append(key)
 			# This is supposed to be a static! So it should be fine to .get() here.
 			self._data[key] = value.get()
 		else:
@@ -986,6 +850,10 @@ class IOStatic(RPL.Static):
 ##################################### Types ####################################
 ################################################################################
 class Bin(RPL.String):
+	"""
+	Manages binary data.
+	Prints data in a fancy, hex editor-like way.
+	"""
 	typeName = "bin"
 
 	def set(self, data):
