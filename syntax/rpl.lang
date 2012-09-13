@@ -102,15 +102,15 @@
 
 		<context id="number"><include>
 			<context id="number-ok" style-ref="number">
-				<match>(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=:))(?:(?:[\-*](?:[0-9]+|\$[0-9a-fA-F]+))?:(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=[: ]|$)))*(?:[\-*](?:[0-9]+|\$[0-9a-fA-F]+))?</match>
+				<match>(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=:))(?:(?:[\-*+~](?:[0-9]+|\$[0-9a-fA-F]+))?:(?:[0-9]+|\$[0-9a-fA-F]+|[a-z](?=[: ,\]}]|$)))*(?:[\-*+~](?:[0-9]+|\$[0-9a-fA-F]+))?</match>
 			</context>
 			<context id="number-invalid" style-ref="error">
-				<match>(?:[0-9]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)(?:[0-9:\-*]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)*(?=[ ,]|$)</match>
+				<match>(?:[0-9]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)(?:[0-9:\-*+~]|(?&lt;![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)*(?=[ ,]|$)</match>
 			</context>
 		</include></context>
 
 		<context id="hexnum" style-ref="hex">
-			<match>\$[0-9a-fA-F]+(?![0-9a-fA-F]*[\-:])</match>
+			<match>\$[0-9a-fA-F]+(?![0-9a-fA-F]*[\-:*~+])</match>
 		</context>
 
 		<context id="ref" style-ref="ref">
