@@ -25,6 +25,8 @@
 #	xpixels: [number, 4]
 #}
 
+RPL { lib: std }
+
 iostatic File {
 	name: [data.rpl, test.data.rpl]
 }

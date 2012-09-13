@@ -1,3 +1,5 @@
+RPL { lib: [std, table] }
+
 iostatic File {
 	name: [table.rpl, test.table.rpl]
 }

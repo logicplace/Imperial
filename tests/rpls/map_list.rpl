@@ -1,3 +1,5 @@
+RPL { lib: std }
+
 # Note that there are better ways to do this in practice..
 static {
 	packed: [
