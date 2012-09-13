@@ -1,6 +1,25 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 
+#
+# Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
+#
+# This file is part of Imperial Exchange.
+#
+# Imperial Exchange is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Imperial Exchange is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
+#
+
 """
 Test cases for RPL.
 
@@ -17,7 +36,7 @@ import os
 import unittest
 from time import time
 
-from rpl import rpl, std, helper
+from rpl import rpl, helper
 
 _timedTests = []
 
@@ -64,11 +83,12 @@ class RPLTestCase(unittest.TestCase):
 		tName, val = data.typeName, data.get()
 		if tName == "reference": tName = data.get(retCl=True).typeName
 		self.assertEqual(tName, exType,
-			'Unexpected data type for "%s" (got "%s")' % (name, tName))
-		#endif
+			'Unexpected data type for "%s" (got "%s")' % (name, tName)
+		)
 		if not typeOnly:
 			self.assertEqual(val, exVal,
-				'Unexpected value for "%s" (got "%s")' % (name, val))
+				'Unexpected value for "%s" (got "%s")' % (name, val)
+			)
 		#endif
 	#enddef
 
@@ -77,13 +97,13 @@ class RPLTestCase(unittest.TestCase):
 
 	def subComp(self, l1, l2, heir):
 		self.assertEqual(len(l1), len(l2),
-			'Incompatible lengths in "%s" (%i vs %i)' % (heir, len(l1), len(l2)))
+			'Incompatible lengths in "%s" (%i vs %i)' % (heir, len(l1), len(l2))
+		)
 		for i, x in enumerate(l1):
 			n = heir + ("[%i]" % i)
 			isList = isinstance(x, rpl.List)
 			self.subCheck(x, n, *(l2[i]), typeOnly=isList)
-			if isList:
-				self.subComp(x.get(), l2[i][1], n)
+			if isList: self.subComp(x.get(), l2[i][1], n)
 		#endfor
 	#enddef
 
@@ -346,31 +366,71 @@ class TestReferences(RPLTestCase):
 	#enddef
 #endclass
 
-# Uhg, can't do this yet cause it'll only return the right data during the process
+class TestRPL(RPLTestCase):
+	@classmethod
+	def setUpClass(cls):
+		# The .rpl is relative to itself, however, we're not running from its
+		# directory, like it expects.
+		os.environ["RPL_INCLUDE_PATH"] = "tests/rpls"
+		cls.refers = rpl.RPL()
+		cls.refers.parse(os.path.join("tests", "rpls", "rplstruct.rpl"))
+	#enddef
+
+	def testLibs(self):
+		# Check if data struct is available to see if the lib loaded.
+		self.assertTrue("data" in TestRPL.refers.structs,
+			"Expected to find data struct as available in root."
+		)
+	#enddef
+
+	def testIncludes(self):
+		# Check checkme to see if the include worked.
+		checkme = TestRPL.refers.child("checkme")
+		checkme2 = TestRPL.refers.child("checkme2")
+		self.assertEqual(checkme["doiwork"].get(), "yes",
+			'Expected checkme.doiwork to be "yes"'
+		)
+		self.assertEqual(checkme2["doiwork"].get(), "yes",
+			'Expected checkme2.doiwork to be "yes"'
+		)
+	#enddef
+#endclass
+
+class TestROM(RPLTestCase):
+	@timedTest
+	def testROM(self):
+		arpl = rpl.RPL()
+		arpl.parse(os.path.join("tests", "rpls", "rom.rpl"))
+		folder = os.path.join("tests", "rpls", "rom")
+		arpl.importData(os.path.join(folder, "test.bin"), folder, nocreate=True)
+	#enddef
+#endclass
+
+# Uhg, can't do this yet cause it'll only return the right data during the process.
 #class TestIOStatic(unittest.TestCase):
 #	def testImport(self):
-#		astd = std.Standard()
-#		astd.parse(os.path.join("tests", "rpls", "iostatic.rpl"))
-#		astd.importData("", "") # Nothing is imported
-#		self.assertEqual(astd.child("Test")["name"].get(), "imp")
+#		arpl = rpl.RPL()
+#		arpl.parse(os.path.join("tests", "rpls", "iostatic.rpl"))
+#		arpl.importData("", "") # Nothing is imported
+#		self.assertEqual(arpl.child("Test")["name"].get(), "imp")
 #	#enddef
 
 #	def testExport(self):
-#		astd = std.Standard()
-#		astd.parse(os.path.join("tests", "rpls", "iostatic.rpl"))
-#		astd.exportData("", "") # Nothing is imported
-#		self.assertEqual(astd.child("Test")["name"].get(), "exp")
+#		arpl = rpl.RPL()
+#		arpl.parse(os.path.join("tests", "rpls", "iostatic.rpl"))
+#		arpl.exportData("", "") # Nothing is imported
+#		self.assertEqual(arpl.child("Test")["name"].get(), "exp")
 #	#enddef
 ##endclass
 
-class IOTest(object):
+class IOTest(RPLTestCase):
 	"""
 	compares: Tuples of (expected data, result data) order is important because
 	          the result data is deleted before the tests.
 	"""
 	def _xxport(self, direction, name, *compares):
-		astd = std.Standard()
-		astd.parse(os.path.join("tests", "rpls", name + ".rpl"))
+		arpl = rpl.RPL()
+		arpl.parse(os.path.join("tests", "rpls", name + ".rpl"))
 		folder = os.path.join("tests", "rpls", name.split("_", 1)[0])
 
 		# Delete files
@@ -383,8 +443,8 @@ class IOTest(object):
 #			#endtry
 		#endfor
 
-		if direction == 0: astd.importData(os.path.join(folder, "test." + name + ".bin"), folder)
-		else: astd.exportData(os.path.join(folder, name + ".bin"), folder)
+		if direction == 0: arpl.importData(os.path.join(folder, "test." + name + ".bin"), folder)
+		else: arpl.exportData(os.path.join(folder, name + ".bin"), folder)
 
 		for file1, file2 in compares:
 			# Compare test.bin with data.bin
@@ -400,7 +460,7 @@ class IOTest(object):
 	def _export(self, name, *compares): return self._xxport(1, name, *compares)
 #enddef
 
-class TestData(unittest.TestCase, IOTest):
+class TestData(IOTest):
 	@timedTest
 	def testImport(self): self._import("data", ("data.bin", "test.data.bin"))
 
@@ -408,7 +468,7 @@ class TestData(unittest.TestCase, IOTest):
 	def testExport(self): self._export("data", ("data.rpl", "test.data.rpl"))
 #endclass
 
-class TestMapString(unittest.TestCase, IOTest):
+class TestMapString(IOTest):
 	@timedTest
 	def testImport(self): self._import("map_string", ("map_string.bin", "test.map_string.bin"))
 
@@ -416,7 +476,7 @@ class TestMapString(unittest.TestCase, IOTest):
 	def testExport(self): self._export("map_string", ("map_string.rpl", "test.map_string.rpl"))
 #endclass
 
-class TestMapList(unittest.TestCase, IOTest):
+class TestMapList(IOTest):
 	@timedTest
 	def testImport(self): self._import("map_list", ("map_list.bin", "test.map_list.bin"))
 
@@ -424,7 +484,7 @@ class TestMapList(unittest.TestCase, IOTest):
 	def testExport(self): self._export("map_list", ("map_list.rpl", "test.map_list.rpl"))
 #endclass
 
-class TestTable(unittest.TestCase, IOTest):
+class TestTable(IOTest):
 	@timedTest
 	def testImport(self): self._import("table", ("table.bin", "test.table.bin"))
 

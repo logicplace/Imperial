@@ -1,0 +1,11 @@
+RPL {
+	lib: std
+	# .rpl extension should be optional
+	include: [ rplstruct/include.rpl, rplstruct/include2 ]
+
+	help: [
+		"These defs don't actually exist, just testing help..."
+		["def1", "Fake define number one."]
+		["def2", "Fake define number two."]
+	]
+}

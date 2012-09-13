@@ -1,0 +1,23 @@
+# This tests against test.bin only.
+# The other files included are manual cuts of the ranges below. You can confirm
+# the CRC32s of these with an external program (I used cksfv on Linux).
+
+ROM MainTest {
+	# id and name default to position 0 and using the length given
+	id: "wM"
+	name: "wM"
+	text: [
+		[ "OQ", $08 ]
+		[ "><", $10 ]
+	]
+	crc32: $b648eb5d
+}
+
+ROM PartialCRCTest {
+	crc32: [
+		[ $b648eb5d, b:e ]
+		[ $4a673352, e:b ]
+		[ $a37103d2, $00-$03:$08:e ]
+		[ $e6a0d8e3, $02+3:$09~3:$0f+3 ]
+	]
+}

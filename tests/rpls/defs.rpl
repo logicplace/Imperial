@@ -1,0 +1,17 @@
+RPL {
+	lib: test
+	help: [
+		"Defs test file.$0aUsage: %prog --run %rpl -dstr STRING [-ddefaulted STRING]"
+		["str",       "First string to write."]
+		["defaulted", "Second string to write. (default: hi)"]
+	]
+}
+
+static Defs {
+	defaulted: "hi"
+}
+
+echo {
+	line1: @Defs.str
+	line2: @Defs.defaulted
+}
