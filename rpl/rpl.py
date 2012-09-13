@@ -1,9 +1,30 @@
-import re
-import codecs
 import os
-from math import ceil
+import re
 import copy
+import codecs
 import helper
+from math import ceil
+from zlib import crc32
+from collections import OrderedDict as odict
+
+#
+# Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
+#
+# This file is part of Imperial Exchange.
+#
+# Imperial Exchange is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Imperial Exchange is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
+#
 
 # TODO:
 #  * RPLRef issues:
@@ -21,8 +42,7 @@ class RecurseIter(object):
 	Iterator used by both RPL and RPLStruct to recurse their children.
 	"""
 	def __init__(self, children):
-		self._iter, self._iterIndex = None, 0
-		self.children = children
+		self._children, self._iter = children.itervalues(), None
 	#enddef
 
 	def __iter__(self): return self
@@ -30,23 +50,20 @@ class RecurseIter(object):
 	def next(self):
 		try:
 			# This will be None at the beginning and after completing a child.
-			if self._iter is None:
-				self._iter = self.children[self._iterIndex].recurse()
-				# This order makes it return itself before returning any of its children
-				return self.children[self._iterIndex]
-			else: return self._iter.next()
+			if self._iter: return self._iter.next()
+			else: raise StopIteration
 		except StopIteration:
 			# Raised when child has completed. Continue to next child.
-			self._iterIndex += 1
-			self._iter = None
-			return self.next()
-		except IndexError:
-			# Raised when there are no children remaining. End iteration.
-			raise StopIteration
+			child = self._children.next() # This will raise if we're done
+			self._iter = child.recurse()
+			# This order makes it return itself before returning any of its children
+			return child
 		#endtry
 	#enddef
 #endclass
 
+# TODO: Sometime I need to make RPL and RPLStruct inherit the same class
+# for their redundant functions..
 class RPL(object):
 	"""
 	The base type for loading and interpreting RPL files.
@@ -68,7 +85,7 @@ class RPL(object):
 		 # Number or range (verify syntactically correct range later)
 		 # That is, any string of numbers, -, *, :, or :c: where c is one
 		 # lowercase letter.
-		 r'(%(r1)s%(r2)s%(r1)s:\-*%(r2)s*(?=[,\]\s]|$))|'
+		 r'(%(r1)s%(r2)s%(r1)s:\-*+~%(r2)s*(?=[,\]\s]|$))|'
 		 # Key: Lowercase letters optionally followed by numbers.
 		 # Must be followed by a colon.
 		 r'(%(key)s):([ \t]*)|'
@@ -85,7 +102,7 @@ class RPL(object):
 			# Range part 1
 			"r1": r'(?:[0-9',
 			# Between these parts, one can add more things to this set.
-			# It's used above to add :\-* in one portion.
+			# It's used above to add :\-*+~ in one portion.
 			# Range part 2
 			"r2": r']|(?<![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)',
 			# Invalid characters for a Literal
@@ -113,29 +130,34 @@ class RPL(object):
 		 r'(?:%(bin)s(?:%(num)s))?'
 		) % {
 			# Binary operators
-			"bin": r'[\-*]',
+			"bin": r'[\-*+~]',
 			# Valid forms for a number
 			"num": r'[0-9]+|\$[0-9a-fA-F]+'
 		}
 	)
 
 	# Quick check for if a number is a range or not
-	isRange = re.compile(r'[:\-*]')
+	isRange = re.compile(r'[:\-*+~]')
 
 	def __init__(self):
-		# Be sure to call this from your module's version!
 		self.types = {}              # Registered data types
 		self.structs = {}            # Structs allowed in the root
-		self.root = {}               # Top-level structs in the rpl file
-		self.orderedRoot = []        # Same as above, but in order
+		self.root = odict()          # Top-level structs in the rpl file
 		self.structsByName = {}      # All structs in the file
 		self.sharedDataHandlers = {} # Used by RPL.share
 		self.importing = None        # Used by RPL.share, NOTE: I would like to remove this..
+		self.alreadyLoaded   = ["helper", "__init__", "rpl"]
+		self.alreadyIncluded = []    # These are used by RPL.load
+		self.defaultTemplateStructs = ["RPL", "ROM"] # What to include in the default template
 
 		# Registrations
+		self.registerStruct(StructRPL)
+		self.registerStruct(ROM)
 		self.registerStruct(Static)
+
 		self.registerType(String)
 		self.registerType(Literal)
+		self.registerType(Path)
 		self.registerType(Number)
 		self.registerType(HexNum)
 		self.registerType(List)
@@ -144,7 +166,7 @@ class RPL(object):
 		self.registerType(Size)
 	#enddef
 
-	def parse(self, inFile):
+	def parse(self, inFile, onlyCareAboutTypes=[]):
 		"""
 		Read in a file and parse it. The form is essentially structs with
 		key/value pairs in them. Each struct type has different functionality
@@ -180,7 +202,7 @@ class RPL(object):
 		base types of the system, and I for one think that's so for any system.
 		There are more basic forms, however, the make up the syntax. Each type
 		from then on is derived from one of the above three basic types. These
-		are all of the types and their syntax (Name(Comment):
+		are all of the types and their syntax (Name(Comment)):
 		Number:                                    1234
 		HexNum(Hexadecimal Number):                $12a4B0
 
@@ -262,7 +284,7 @@ class RPL(object):
 
 							if structName in self.structsByName:
 								error = 'Struct name "%s" is already taken' % structName
-							else:
+							elif not onlyCareAboutTypes or structType in onlyCareAboutTypes:
 								self.structsByName[structName] = currentStruct = (
 									currentStruct if currentStruct else self
 								).addChild(structType, structName)
@@ -277,7 +299,11 @@ class RPL(object):
 							error = "Key with no value. (Above here!)"
 						#endif
 
-						#currentStruct.validate()
+						# TODO: The second condition is kinda hacky, it's meant to avoid
+						# loading external things in partial-parsing mode..
+						if isinstance(currentStruct, StructRPL) and not onlyCareAboutTypes:
+							self.load(currentStruct)
+						#endif
 						currentStruct = currentStruct.parent()
 					elif flow == "[":
 						# Begins list
@@ -321,10 +347,9 @@ class RPL(object):
 			#endif
 
 			if error:
-				helper.err("Error in line %i char %i: %s" % (
+				raise RPLError("Error in line %i char %i: %s" % (
 					line, char, error
 				))
-				return False
 			#endif
 		#endfor
 	#enddef
@@ -352,6 +377,12 @@ class RPL(object):
 		#endif
 
 		return val
+	#enddef
+
+	@staticmethod
+	def numOrHex(num):
+		if num[0] == "$": return ("hexnum", int(num[1:], 16))
+		else: return ("number", int(num))
 	#enddef
 
 	def parseData(self, data, currentStruct=None, currentKey=None, line=-1, char=-1, raw=False):
@@ -394,18 +425,29 @@ class RPL(object):
 				for r in ranges:
 					bounds = r.split("-")
 					times = r.split("*")
+					inc = r.split("+")
+					dec = r.split("~")
 					if len(bounds) == 2:
-						l, r = int(bounds[0]), int(bounds[1])
-						numList += map(lambda(x): ("number",x), (
-							range(l, r+1) if l < r else range(l, r-1, -1)
-						))
+						lt, l = RPL.numOrHex(bounds[0])
+						rt, r = RPL.numOrHex(bounds[1])
+						numList += [(lt, l)] + map(lambda(x): ("number", x), (
+							range(l + 1, r) if l < r else range(l - 1, r, -1)
+						)) + [(rt, r)]
 					elif len(times) == 2:
-						l, r = int(times[0]), int(times[1])
-						numList += map(lambda(x): ("number",x), [l] * r)
+						lt, l = RPL.numOrHex(times[0])
+						rt, r = RPL.numOrHex(times[1])
+						numList += map(lambda(x): (lt, x), [l] * r)
+					elif len(inc) == 2:
+						lt, l = RPL.numOrHex(inc[0])
+						rt, r = RPL.numOrHex(inc[1])
+						numList += map(lambda(x): (lt, x), range(l, l + r))
+					elif len(dec) == 2:
+						lt, l = RPL.numOrHex(dec[0])
+						rt, r = RPL.numOrHex(dec[1])
+						numList += map(lambda(x): (lt, x), range(l, l - r, -1))
 					elif r in "abcdefghijklmnopqrstuvwxyz":
 						numList.append(("literal", r))
-					elif r[0] == "$": numList.append(("hexnum", int(r[1:], 16)))
-					else: numList.append(("number", int(r)))
+					else: numList.append(RPL.numOrHex(r))
 				#endfor
 
 				add = ("range", numList)
@@ -418,6 +460,8 @@ class RPL(object):
 			#endif
 		elif lit or (type(data) is str and data == ""):
 			add = ("literal", lit.strip())
+		# TODO: Hack, deal with this later
+		elif data == "[]": add = ("list", [])
 		elif pp: raise RPLError("Invalid data.")
 		else: raise RPLError("Invalid data: %s" % data)
 
@@ -429,6 +473,51 @@ class RPL(object):
 		elif pp: raise RPLError("Error parsing data.")
 		else: raise RPLError("Error parsing data: %s" % data)
 	#endif
+
+	def load(self, struct):
+		"""
+		Loads includes and libs. Used by parse, probably should not need to
+		use it directly. (But if you generate a ROM struct for some reason,
+		this isn't called when you append it, so you can do it manually then.)
+		"""
+		# Load libraries (python modules defining struct and data types)
+		for lib in struct["lib"].get():
+			lib = lib.get()
+			if lib in self.alreadyLoaded: continue
+			tmp = __import__(lib, globals(), locals())
+			tmp.register(self)
+			self.alreadyLoaded.append(lib)
+		#endfor
+
+		if "RPL_INCLUDE_PATH" in os.environ:
+			includePaths = set(["."] + os.environ["RPL_INCLUDE_PATH"].split(";"))
+		else: includePaths = ["."]
+		# Include other RPLs (this should inherently handle ROM structs
+		# in the included files)
+		for incl in struct["include"].get():
+			incl = incl.get()
+			if incl in self.alreadyIncluded: continue
+			for path in includePaths:
+				path = os.path.join(path, incl)
+				tmp = None
+				try: tmp = open(path, "r")
+				except IOError as err:
+					if err.errno == 2:
+						try: tmp = open(path + os.extsep + "rpl", "r")
+						except IOError as err:
+							if err.errno == 2: continue
+							else: raise RPLError("Could not include file %s: %s" % (path, err.strerror))
+						#endtry
+					else: raise RPLError("Could not include file %s: %s" % (path, err.strerror))
+				if tmp:
+					self.parse(tmp)
+					tmp.close()
+					self.alreadyIncluded.append(incl)
+					break
+				#endif
+			#endfor
+		#endfor
+	#enddef
 
 	def addDef(self, key, value):
 		"""
@@ -453,7 +542,6 @@ class RPL(object):
 		#endif
 		new = self.structs[structType](self, name)
 		self.root[name] = new
-		self.orderedRoot.append(new)
 		return new
 	#enddef
 
@@ -478,26 +566,23 @@ class RPL(object):
 		Method to register a custom struct as allowable in the root.
 		"""
 		try: classRef.typeName
-		except AttributeError: classRef.typeName = classRef.__name__.lower()
+		except AttributeError:
+			raise RPLError(
+				"You may not register a struct "
+				"(%s) without a typeName." % classRef.__class__.__name__
+			)
 		self.structs[classRef.typeName] = classRef
 	#enddef
 
-	def template(self, outFile):
+	def template(self, structs=[]):
 		"""
-		Output a basic RPL template. I would recommend replacing this in your
-		own modules, with something significantly more specific.
+		Output the template. By default this is RPL and ROM.
 		"""
-		outFile.write("ROM {}\n")
-	#enddef
-
-	def verify(self):
-		"""
-		Stub. You must replace this in your own modules.
-		Verifies that the selected ROM is the expected one according to the
-		RPL's ROM field.
-		"""
-		# TODO: Generic things like hash checks over the whole file or segments
-		return None
+		return (
+			"# Description\n"
+			"# Author: Your Name\n"
+			"\n\n".join([x.template() for x in structs or self.defaultTemplateStructs])
+		)
 	#enddef
 
 	def wantPort(self, x, what):
@@ -507,14 +592,14 @@ class RPL(object):
 		return x and (not what or x.name() in what or wantPort(x.parent(), what))
 	#enddef
 
-	def importData(self, rom, folder, what=[]):
+	def importData(self, rom, folder, what=[], nocreate=False):
 		"""
 		Import data from folder into the given ROM according to what.
 		rom is the location of the binary ROM file.
 		folder is the base folder for the project files.
 		what is a list of names requested for execution.
 		"""
-		self.rom = rom = helper.stream(rom)
+		self.rom = rom = helper.stream(helper.FakeStream() if nocreate else rom)
 		self.importing = True
 		lfolder = list(os.path.split(os.path.normpath(folder)))
 
@@ -540,20 +625,22 @@ class RPL(object):
 		for x in reversed(toProcess): x.importProcessing()
 
 		# Commit imports
-		for x in toImport: x.importData(rom)
+		if not nocreate:
+			for x in toImport: x.importData(rom)
+		#endif
 
 		rom.close()
 		self.importing = None
 	#enddef
 
-	def exportData(self, rom, folder, what=[]):
+	def exportData(self, rom, folder, what=[], nocreate=False):
 		"""
 		Export data from rom into folder according to what.
 		rom is the location of the binary ROM file.
 		folder is the base folder for the project files.
 		what is a list of names requested for execution.
 		"""
-		self.rom = rom = helper.stream(rom)
+		self.rom = rom = helper.stream(helper.FakeStream() if nocreate else rom)
 		self.importing = False
 		lfolder = list(os.path.split(os.path.normpath(folder)))
 
@@ -577,8 +664,10 @@ class RPL(object):
 		for x in toProcess: x.exportProcessing()
 
 		# Write exports
-		for x in toExport: x.exportData(lfolder)
-		for x in self.sharedDataHandlers.itervalues(): x.write()
+		if not nocreate:
+			for x in toExport: x.exportData(lfolder)
+			for x in self.sharedDataHandlers.itervalues(): x.write()
+		#endif
 
 		rom.close()
 		self.importing = None
@@ -611,8 +700,23 @@ class RPL(object):
 	#enddef
 
 	def child(self, name): return self.root[name]
-	def __iter__(self): return iter(self.orderedRoot)
-	def recurse(self): return RecurseIter(self.orderedRoot)
+	def __iter__(self): return self.root.itervalues()
+	def recurse(self): return RecurseIter(self.root)
+
+	def childrenByType(self, typeName):
+		"""
+		Return list of children that fit the given typeName
+		typeName may be a string or the class that it will grab the string from
+		"""
+		if type(typeName) not in [str, unicode] and issubclass(typeName, RPLStruct):
+			typeName = typeName.typeName
+		#endif
+		ret = []
+		for x in self.root.itervalues():
+			if x.typeName == typeName: ret.append(x)
+		#endfor
+		return ret
+	#enddef
 #endclass
 
 ################################################################################
@@ -629,13 +733,13 @@ class RPLTypeCheck(object):
 	 * [type, ...] - List containing specific types
 	 * |    - Boolean or
 	 * []*  - Can either be just the contents, or a list containing multiple
-	         of that content. Multipart lists treat commas like |
+	          of that content. Multipart lists treat commas like |
 	 * []*# - Where # is a number indicating the index to match for nonlist
 	          version, rather than matching any index.
 	 * []+  - Contents may be repeated indefinitely within the list.
 	 * []+# - Only repeat the last # elements, 0 or more times.
 	 * []!  - May be any one of the contents not in a list, or the whole list.
-	 *       ie. Like * but unable to repeat the list.
+	 *        ie. Like * but unable to repeat the list.
 	 * []!# - See []*#
 	 * []~  - Nonnormalizing form of []*
 	 * []~# - See []*#
@@ -923,11 +1027,9 @@ class RPLStruct(object):
 		self._name = name
 		self._parent = parent
 		self._data = {}
-		self._keys = {}
-		self._orderedKeys = []
+		self._keys = odict()
 		self._structs = {}
-		self._children = {}
-		self._orderedChildren = []
+		self._children = odict()
 
 		#try: self.typeName
 		#except AttributeError: self.typeName = self.__class__.__name__.lower()
@@ -944,7 +1046,6 @@ class RPLStruct(object):
 		#endif
 		new = self._structs[sType](self._rpl, name, self)
 		self._children[name] = new
-		self._orderedChildren.append(new)
 		return new
 	#enddef
 
@@ -953,9 +1054,14 @@ class RPLStruct(object):
 		Register a key by name with type and default.
 		"""
 		check = RPLTypeCheck(self._rpl, name, typeStr)
-		self._keys[name] = [check,
-			None if default is None else check.verify(self._rpl.parseData(default))
-		]
+		if default is not None:
+			default = self._rpl.parseData(default)
+			# Try to verify, so it can adjust typing
+			try: default = check.verify(default)
+			# But if it fails, we should trust the programmer knows what they want..
+			except RPLError: pass
+		#endif
+		self._keys[name] = [check, default]
 	#enddef
 
 	def registerStruct(self, classRef):
@@ -966,23 +1072,6 @@ class RPLStruct(object):
 		except AttributeError: classRef.typeName = classRef.__name__.lower()
 		self._structs[classRef.typeName] = classRef
 	#enddef
-
-#	def validate(self):
-#		"""
-#		Validate self.
-#		"""
-#		missingKeys = []
-#		for k,v in self._keys.iteritems():
-#			try: self[k]
-#			except RPLError:
-#				# Should this wrap? Or verify? Or should the definers have to do that?
-#				if v[1] is not None: self._data[k] = v[1]
-#				else: missingKeys.append(k)
-#			#endif
-#		#endfor
-#		if missingKeys: raise RPLError("Missing keys: " + ", ".join(missingKeys))
-#		return True
-#	#enddef
 
 	def __unicode__(self):
 		"""
@@ -1004,7 +1093,7 @@ class RPLStruct(object):
 		elif key in self._keys and self._keys[key][1] is not None:
 			self._data[key] = self._keys[key][1]
 			return self._data[key]
-		else: raise RPLError('No key "%s"' % key)
+		else: raise RPLError('No key "%s" in "%s"' % (key, self._name))
 	#enddef
 
 	def __setitem__(self, key, value):
@@ -1014,7 +1103,6 @@ class RPLStruct(object):
 		Just please make sure it all functions logically.
 		"""
 		if key in self._keys:
-			if key not in self._data: self._orderedKeys.append(key)
 			# Reference's types are lazily checked
 			if isinstance(value, RPLRef): self._data[key] = value
 			else: self._data[key] = self._keys[key][0].verify(value)
@@ -1040,6 +1128,28 @@ class RPLStruct(object):
 		return Literal(self._name)
 	#enddef
 
+	@classmethod
+	def template(rpl=None, tabs=""):
+		"""
+		This tries to guess a template for the struct, but you should replace it.
+		Obviously, nothing will be loaded when this is called.
+		In the spirit of Python, don't worry about adding a trailing newline.
+		"""
+		ret = u"%s%s {\n" % (tabs, self.typeName)
+		tabs += "\t"
+		for x in self._keys:
+			if self._keys[x][1] is None:
+				ret += u"%s%s: fill this in...\n" % (tabs, x)
+			else:
+				ret += u"%s#%s: %s\n" % (tabs, x, unicode(self._keys[x][1]))
+			#endif
+		#endfor
+		for x in self._structs:
+			ret += self._structs[x].template(rpl, tabs) + "\n"
+		#endfor
+		return ret + tabs[0:-1] + "}"
+	#enddef
+
 	def name(self): return self._name
 	def parent(self): return self._parent
 
@@ -1051,10 +1161,10 @@ class RPLStruct(object):
 	#enddef
 
 	def __nonzero__(self): return True
+	def __iter__(self): return self._children.itervalues()
 	def child(self, name): return self._children[name]
-	def __iter__(self): return iter(self._orderedChildren)
-	def iterkeys(self): return iter(self._orderedKeys)
-	def recurse(self): return RecurseIter(self._orderedChildren)
+	def iterkeys(self): return iter(self._data)
+	def recurse(self): return RecurseIter(self._children)
 
 	def childrenByType(self, typeName):
 		"""
@@ -1096,6 +1206,252 @@ class RPLStruct(object):
 	#enddef
 #endclass
 
+# Well if that isn't a confusing name~ Sorry :(
+class StructRPL(RPLStruct):
+	"""
+	The header, as it were, for RPL files.
+	"""
+	# Caps for consistency with "ROM"
+	# Your own types should not have caps!
+	typeName = "RPL"
+
+	def __init__(self, rpl, name, parent=None):
+		RPLStruct.__init__(self, rpl, name, parent)
+		self.registerKey("lib", "[path]*", "[]")
+		self.registerKey("include", "[path]*", "[]")
+		self.registerKey("help", "[string, [string, string]]+1", "[]")
+	#enddef
+
+	def __getitem__(self, key):
+		# Some virtual redirects
+		virtuals = {"libs": "lib", "includes": "include"}
+		if key in virtuals: key = virtuals[key]
+		return RPLStruct.__getitem__(self, key)
+	#enddef
+
+	def __setitem__(self, key, value):
+		# Some virtual redirects
+		virtuals = {"libs": "lib", "includes": "include"}
+		if key in virtuals: key = virtuals[key]
+		RPLStruct.__setitem__(self, key, value)
+	#enddef
+
+	@classmethod
+	def template(rpl=None, tabs=""):
+		if rpl is None:
+			return  (
+				u"%(tabs)s%(type)s {\n"
+				"%(tabs)s\tlib: std\n"
+				"%(tabs)s\thelp: [\n"
+				'%(tabs)s\t\t"My RPL for something or other."\n'
+				'%(tabs)s\t\t#[somedef, "What it does"]\n'
+				"%(tabs)s\t]\n"
+				"}"
+			) % {
+				"tabs": tabs,
+				"type": self.typeName
+			}
+		else:
+			ret = "%sRPL {\n" % tabs
+			libs = rpl.alreadyLoaded[3:]
+			if len(libs) > 1: ret += "%s\tlibs: [%s]\n" % (tabs, ", ".join(libs))
+			elif len(libs) == 1: ret += "%s\tlib: %s\n" % (tabs, libs[0])
+			if len(rpl.alreadyIncluded) > 1:
+				ret += "%s\tincludes: [%s]\n" % (tabs, ", ".join(rpl.alreadyIncluded))
+			elif len(rpl.alreadyIncluded) == 1:
+				ret += "%s\tinclude: %s\n" % (tabs, rpl.alreadyIncluded[0])
+			#endif
+			return ret + "%s}" % tabs
+		#endif
+	#enddef
+#endclass
+
+class ROM(RPLStruct):
+	"""
+	Performs verifications against the file that you're modifying.
+	"""
+
+	# No other struct should have caps in their names
+	# You could call this a backwards compatibility thing...
+	typeName = "ROM"
+
+	def __init__(self, rpl, name, parent=None):
+		RPLStruct.__init__(self, rpl, name, parent)
+		self.registerKey("id", "[string]*", "")
+		self.registerKey("name", "[string]*", "")
+		self.registerKey("crc32", "hexnum|[[hexnum, hexnum|range]*0]*", "[]")
+		self.registerKey("text", "[[string, hexnum]]*", "[]")
+
+		self._id_location   = 0
+		self._id_format     = {
+			"length":  0,      # 0 for non-fixed length
+			"padding": "\0",   # Char to pad with
+			"align":   "left", # How to align the name, usually left
+		}
+		self._name_location = 0
+		self._name_format   = {
+			"length":  0,      # 0 for non-fixed length
+			"padding": "\0",   # Char to pad with
+			"align":   "left", # How to align the name, usually left
+		}
+	#enddef
+
+	@staticmethod
+	def _format(string, form):
+		if form["length"] == 0: return string
+		string = string[0:form["length"]]
+		padding = form["padding"] * (form["length"] - len(string))
+		if form["align"] == "left": return string + padding
+		else: return padding + string
+	#enddef
+
+	@staticmethod
+	def getCRC(stream, rang):
+		"""
+		Return CRC of data in stream referred to by the range of addresses.
+		"""
+		seek, read = None, None
+		direction, crc = 0, 0
+		stream.seek(0, 2)
+		eof = stream.tell()
+		if isinstance(rang, Number):
+			# Address to EOF
+			rang = range(rang.get(), eof)
+		else:
+			rang = [x.get() for x in rang.get()]
+			try:
+				if rang[-1] == "e":
+					if rang[-2] == "b": r = range(0, eof)
+					else: r = range(rang[-2], eof)
+					rang = rang[0:-1] + r
+				elif rang[0] == "e":
+					if rang[1] == "b": r = range(eof, -1, -1)
+					else: r = range(eof, rang[1] - 1, -1)
+					rang = r + rang[1:]
+				elif rang[-1] == "b":
+					# By the time it checks b's, e will have already handled b:e and e:b
+					rang = rang[0:-1] + range(rang[-2], -1, -1)
+				elif rang[0] == "b":
+					rang = range(0, rang[1]) + rang[1:]
+				#endif
+			except TypeError:
+				raise RPLError("e and b must only be at the beginning or "
+					"end of a CRC32 range check. Do not use other letters."
+				)
+			#endtry
+		#endif
+
+		# Adding "END" here is a bit of a trick to commit the crc creation on
+		# the last iteration.
+		for x in rang + ["END"]:
+			if read:
+				isPos = seek + read == x
+				isNeg = seek - read == x
+			#endif
+			if read and ((isPos and direction != -1) or (isNeg and direction != 1)):
+				read += 1
+				if isPos: direction = 1
+				else: direction = -1
+			else:
+				if read:
+					if direction == -1:
+						stream.seek(seek - read + 1)
+						data = stream.read(read)
+						data = data[::-1]
+					else:
+						stream.seek(seek)
+						data = stream.read(read)
+					#endif
+					crc = crc32(data, crc) & 0xFFFFFFFF
+				#endif
+				if type(x) in [int, long]: seek, read = x, 1
+				else: seek, read = None, None
+			#endif
+		#endfor
+		return crc
+	#enddef
+
+	def validate(self, rom):
+		"""
+		Validate contents of rom file
+		"""
+		failed = []
+		# Create all IDs and names. Grab max lengths
+		ids, names, max_id_len, max_name_len = [], [], 0, 0
+		for x in self["id"].get():
+			ids.append(ROM._format(x.get(), self._id_format))
+			max_id_len = max(len(ids[-1]), max_id_len)
+		#endfor
+		for x in self["name"].get():
+			names.append(ROM._format(x.get(), self._name_format))
+			max_name_len = max(len(names[-1]), max_name_len)
+		#endfor
+
+		# Verify ID
+		if ids:
+			rom.seek(self._id_location)
+			tmp = rom.read(max_id_len)
+			ok = False
+			for x in ids:
+				if tmp[0:len(x)] == x:
+					ok = True
+					break
+				#endif
+			#endfor
+			if not ok: failed.append("id")
+		#endif
+
+		# Verify name
+		if names:
+			rom.seek(self._name_location)
+			tmp = rom.read(max_name_len)
+			ok = False
+			for x in names:
+				if tmp[0:len(x)] == x:
+					ok = True
+					break
+				#endif
+			#endfor
+			if not ok: failed.append("name")
+		#endif
+
+		# Verify text
+		for idx, x in enumerate(self["text"].get()):
+			x = x.get()
+			rom.seek(x[1].get())
+			text = x[0].get()
+			if rom.read(len(text)) != text:
+				failed.append(("text", idx))
+			#endif
+		#endfor
+
+		# Verify crc32s
+		if isinstance(self["crc32"], Number):
+			rom.seek(0)
+			if crc32(rom.read()) & 0xFFFFFFFF != self["crc32"].get():
+				failed.append(("crc32", 0))
+			#endif
+		else:
+			for idx, x in enumerate(self["crc32"].get()):
+				x = x.get()
+				if getCRC(rom, x[1]) != x[0].get():
+					failed.append(("crc32", idx))
+				#endif
+			#endfor
+		#endif
+		return failed
+	#enddef
+
+	@classmethod
+	def template(rpl=None, tabs=""):
+		return (
+			"%(tabs)sROM {"
+			"%(tabs)s\t# Do some verifications here\n"
+			"%(tabs)s}" % {"tabs": tabs}
+		)
+	#enddef
+#endclass
+
 class Static(RPLStruct):
 	"""
 	A generic struct that accepts all keys. Used to store static information.
@@ -1115,7 +1471,6 @@ class Static(RPLStruct):
 		#endif
 		new = self._rpl.structs[sType](self._rpl, name, self)
 		self._children[name] = new
-		self._orderedChildren.append(new)
 		return new
 	#enddef
 
@@ -1130,7 +1485,6 @@ class Static(RPLStruct):
 		"""
 		Overwrite this cause Static accepts all keys.
 		"""
-		if key not in self._data: self._orderedKeys.append(key)
 		self._data[key] = value
 	#enddef
 #endclass
@@ -1145,7 +1499,7 @@ class Serializable(RPLStruct):
 	def __init__(self, rpl, name, parent=None):
 		RPLStruct.__init__(self, rpl, name, parent)
 		self.registerKey("base", "hexnum", "$000000")
-		self.registerKey("file", "string", "")
+		self.registerKey("file", "path", "")
 		self.registerKey("ext", "string", "")
 		self.registerKey("export", "bool", "true")
 		self.registerKey("import", "bool", "true")
@@ -1564,6 +1918,24 @@ class Literal(String):
 	#enddef
 #endclass
 
+class Path(Literal):
+	"""
+	Manages slash conversion for paths.
+	Note, you should only ever use relative paths..
+	If you need something in a far off directory, add that directory to
+	the RPL_INCLUDE_PATH environement variable.
+	That variable can have all the strange system-specific crap you want.
+	"""
+	typeName = "path"
+
+	def set(self, data):
+		Literal.set(self, data)
+		if os.sep == "/": self._data = self._data.replace("\\", "/")
+		elif os.sep == "\\": self._data = self._data.replace("/", "\\")
+		else: raise RPLError("Why doesn't your system use slash separators?!")
+	#enddef
+#enddef
+
 class Number(RPLData):
 	"""
 	Number basic type.
@@ -1644,7 +2016,8 @@ class Range(List):
 		#endif
 		for x in data:
 			if not isinstance(x, Number) and (not isinstance(x, Literal)
-			or len(x.get()) != 1):
+				or len(x.get()) != 1
+			):
 				raise RPLError('Types in a "%s" must be a number or one character literal' % self.typeName)
 			#endif
 		#endfor
@@ -1656,28 +2029,37 @@ class Range(List):
 		for x in self._data:
 			d = x.get()
 			if isinstance(x, Literal): ret.append(d)
-			elif last is None: last = d
-			else:
-				isPos = (d - last == 1)
-				isNeg = (last - d == 1)
-				isSame = (last == d)
+			elif last is not None:
+				lastv = last.get()
+				isPos = (d - lastv == 1)
+				isNeg = (lastv - d == 1)
+				isSame = (lastv == d)
 				if not isNeg and negseq:
-					ret.append("%i-%i" % (negseq[0], negseq[-1]))
+					ret.append(u"%s-%s" % (negseq[0], negseq[-1]))
 					negseq = []
 				if not isPos and posseq:
-					ret.append("%i-%i" % (posseq[0], posseq[-1]))
+					ret.append(u"%s-%s" % (posseq[0], posseq[-1]))
 					posseq = []
 				if not isSame and mul:
-					ret.append("%i*%i" % (mul[0], len(mul)))
+					ret.append(u"%s*%s" % (mul[0], len(mul)))
 					mul = []
 				#endif
-				if isPos: posseq.append(d)
-				elif isNeg: negseq.append(d)
-				elif isSame: mul.append(d)
-				else: ret.append(unicode(d))
+				if isPos: apd = posseq
+				elif isNeg: apd = negseq
+				elif isSame: apd = mul
+				else:
+					ret.append(unicode(x))
+					continue
+				#endif
+				if apd: apd.append(x)
+				else: apd += [last, x]
 			#endif
+			last = x
 		#endfor
-		return ":".join(ret)
+		if negseq: ret.append(u"%i-%i" % (negseq[0], negseq[-1]))
+		elif posseq: ret.append(u"%s-%s" % (posseq[0], posseq[-1]))
+		elif mul: ret.append(u"%s*%s" % (mul[0], len(mul)))
+		return u":".join(ret)
 	#enddef
 #endclass
 
