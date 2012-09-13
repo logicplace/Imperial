@@ -1,6 +1,25 @@
 import codecs
 from sys import stderr
 
+#
+# Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
+#
+# This file is part of Imperial Exchange.
+#
+# Imperial Exchange is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Imperial Exchange is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
+#
+
 # So I can be lazy about writing errors
 def err(msg): stderr.write(unicode(msg) + "\n")
 
@@ -59,3 +78,28 @@ def list2english(l, conjunction=u"and"):
 	elif len(l) == 2: return u"%s %s %s" % (l[0], conjunction, l[1])
 	else: return u"%s, %s %s" % (", ".join(l[0:-1]), conjunction, l[-1])
 #enddef
+
+class FakeStream(object):
+	def __init__(self):
+		self.pos = 0
+	#enddef
+
+	def seek(self, pos, rel=0):
+		if rel == 1: self.pos += pos
+		else: self.pos = pos
+	#enddef
+
+	def tell(self): return self.pos
+
+	# Maybe this should be randoms :3c
+	def read(self, size): return "\0" * size
+
+	def readline(self, size): return ""
+
+	def readlines(self, size): return []
+
+	def write(self, string): pass
+	def write(self, seq): pass
+	def close(self): pass
+	def flush(self): pass
+#endclass
