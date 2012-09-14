@@ -25,11 +25,9 @@ table Table {
 	index:  0-3
 	format: [@Type_Byte, @Type_String, @Type_Int16, @Type_Int32]
 
-	head {
-		head: @Main.xcolumns
-		name: xname
-		type: xtype
-	}
+	head: @Main.xcolumns
+	name: xname
+	type: xtype
 }
 
 format Type_Byte {

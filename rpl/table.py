@@ -44,14 +44,12 @@ class Table(RPL.Cloneable):
 	Manages dynamic typing and such.
 	index:  List of indexes that map to format.
 	format: List of references to format struct.
-	head {
-	    head: Reference to key that contains the typing information.
-	          This key is contained in a format or data struct and uses a
-	          format struct as its type.
-	    type: Name of key in header struct that contains the type ID.
-	    name: Optional. Name of key in header struct that contains the column name.
-	    index: Optional. Name or ID of column that's used as the unique index.
-	}
+    head:   Reference to key that contains the typing information.
+            This key is contained in a format or data struct and uses a
+            format struct as its type.
+    type:   Name of key in header struct that contains the type ID.
+    name:   Optional. Name of key in header struct that contains the column name.
+    unique: Optional. Name or ID of column that's used as the unique index.
 	"""
 	typeName = "table"
 
@@ -59,22 +57,17 @@ class Table(RPL.Cloneable):
 		RPL.Cloneable.__init__(self, rpl, name, parent)
 		self.registerKey("index", "[number|string]+")
 		self.registerKey("format", "[string]+")
-		self.registerStruct(TableHead)
+		self.registerKey("head", "reference")
+		self.registerKey("name", "string", "")
+		self.registerKey("type", "string")
+		self.registerKey("unique", "number|string", "")
 
 		self._base = None
-		self._head = None
 		self._row = []
 	#enddef
 
 	def __getitem__(self, key):
 		if key == "row": return self._row
-		elif key == "head":
-			if self._head is None:
-				self._head = self.childrenByType(TableHead)
-				if len(self._head) == 0: raise RPL.RPLError("table structs must have a head substruct.")
-				self._head = self._head[0]
-			#endif
-			return self._head
 		elif key == "base": return self._base
 		else: return RPL.Cloneable.__getitem__(self, key)
 	#enddef
@@ -83,12 +76,10 @@ class Table(RPL.Cloneable):
 		"""
 		Called from DataFormat.importPrepare.
 		"""
-		# This will also ensure head exists
-		head = self["head"]
 
 		self._row = []
-		for idx, col in enumerate(self.get(head["head"])):
-			typeidx = col[self.get(head["type"])]
+		for idx, col in enumerate(self.get(self["head"])):
+			typeidx = col[self.get(self["type"])]
 			try: idxidx = self.get("index").index(typeidx)
 			except ValueError:
 				raise RPLError("Encountered unknown type %s when processing table." % typeidx)
@@ -117,13 +108,10 @@ class Table(RPL.Cloneable):
 			raise RPLError("format and index must have the same number of values")
 		#endif
 
-		# This will also ensure head exists
-		head = self["head"]
-
 		# Loop through each column in the head and read in the respective format
 		address = self._base.get()
-		for x in self.get(head["head"]):
-			typeidx = x[self.get(head["type"])]
+		for x in self.get(self["head"]):
+			typeidx = x[self.get(self["type"])]
 			try: idx = self.get("index").index(typeidx)
 			except ValueError:
 				raise RPLError("Encountered unknown type %s when processing table." % typeidx)
@@ -178,27 +166,6 @@ class Table(RPL.Cloneable):
 		length = 0
 		for x in self._row: length += x.len()
 		return length
-	#enddef
-#endclass
-
-class TableHead(RPL.RPLStruct):
-	"""
-	Describes the columns of a table. Only used as a substruct of table.
-	This basically acts as a map from known key names to the ones in "head".
-	head: Reference to the list of table rows. This should be a key in a data
-	      or format struct that refers to a format struct.
-	name: Key storing column name, optional.
-	type: Key storing type index.
-	index: Key storing unique index for the row, optional.
-	"""
-	typeName = "head"
-
-	def __init__(self, rpl, name, parent=None):
-		RPL.RPLStruct.__init__(self, rpl, name, parent)
-		self.registerKey("head", "reference")
-		self.registerKey("name", "string", "")
-		self.registerKey("type", "string")
-		self.registerKey("index", "number|string", "")
 	#enddef
 #endclass
 
