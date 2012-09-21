@@ -76,7 +76,7 @@ class Echo(RPL.Executable):
 
 		# Print lines
 		for x in lines:
-			data = self[x]
+			data = self[x].resolve()
 			if isinstance(data, RPL.List):
 				# Lists are considered to be tabbed in, with wrapping.
 				for x in data.get(): self.echo(tabs + self["tabs"].get())
