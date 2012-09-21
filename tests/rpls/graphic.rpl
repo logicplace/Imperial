@@ -1,0 +1,72 @@
+RPL { lib: std }
+
+iostatic File {
+	datname4:  [graphic16.rpl, test.graphic16.rpl]
+	datname8:  [graphic256.rpl, test.graphic256.rpl]
+	datname24: [graphic24b.rpl, test.graphic24b.rpl]
+	imgname4:  [graphic.png, test.graphic16.png]
+	imgname8:  [graphic.png, test.graphic256.png]
+	imgname24: [graphic.png, test.graphic24b.png]
+}
+
+static Header {
+	format PaletteEntry {
+		xcolor: [color, 4]
+	}
+
+	format Head {
+		xhead1:   [bin, 10]
+		xpixoff:  [number, 4]
+		xpaloff:  [number, 4]
+		xhead2:   [bin, expand]
+		# Lucky me that they're implemented so cleanly....
+		xpalette: [@PaletteEntry, @this.xpixoff, end, @this.xpaloff, 14]
+	}
+}
+
+static {
+	read: LRDU
+	padding: [row, 4]
+	dimensions: [71, 52]
+
+	static BMP16 {
+		data Data16 {
+			file: @File.datname4
+			format: @Head
+		}
+
+		graphic Image16 {
+			file: @File.imgname4
+			base: @Data16.xpixoff
+			pixel: '4bi'
+			palette: @PaletteEntry.xcolor
+		}
+	}
+
+	static BMP256 {
+		data Data256 {
+			file: @File.datname8
+			format: @Head
+		}
+
+		graphic Image256 {
+			file: @File.imgname8
+			base: @Data16.xpixoff
+			pixel: '8bi'
+			palette: @PaletteEntry.xcolor
+		}
+	}
+
+	static BMP24b {
+		data Data24b {
+			file: @File.datname24
+			format: @Head
+		}
+
+		graphic Image24b {
+			file: @File.imgname24
+			base: @Data24b.xpixoff
+			pixel: '0xBBGGRR'
+		}
+	}
+}

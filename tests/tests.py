@@ -31,8 +31,9 @@ run this file specifically, but the former command will discover any other test
 files in the project.
 """
 
-import codecs
 import os
+import Image
+import codecs
 import unittest
 from time import time
 
@@ -46,7 +47,7 @@ def timedTest(fn):
 		fn(self)
 		_timedTests.append((
 			self.__class__.__name__ + "." + fn.__name__,
-			time() - start
+			(self.time if hasattr(self, "time") else time()) - start
 		))
 	#enddef
 
@@ -446,6 +447,7 @@ class IOTest(RPLTestCase):
 		if direction == 0: arpl.importData(os.path.join(folder, "test." + name + ".bin"), folder)
 		else: arpl.exportData(os.path.join(folder, name + ".bin"), folder)
 
+		self.time = time()
 		for file1, file2 in compares:
 			# Compare test.bin with data.bin
 			data = read([folder, file1], "rb")
@@ -490,6 +492,66 @@ class TestTable(IOTest):
 
 	@timedTest
 	def testExport(self): self._export("table", ("table.rpl", "test.table.rpl"))
+#endclass
+
+class ImageTest(RPLTestCase):
+	"""
+	compares: Tuples of (expected data, result data) order is important because
+	          the result data is deleted before the tests.
+	"""
+	def _xxport(self, direction, name, ext, what, *compares):
+		arpl = rpl.RPL()
+		arpl.parse(os.path.join("tests", "rpls", name + ".rpl"))
+		folder = os.path.join("tests", "rpls", name.split("_", 1)[0])
+
+		# Delete files
+		for file1, file2 in compares:
+			try: os.unlink(os.path.join(folder, file2))
+			except OSError: pass
+#			except OSError as err:
+#				if err.errno == 2: pass
+#				raise
+#			#endtry
+		#endfor
+
+		if direction == 0: arpl.importData(os.path.join(folder, "test." + name + ext), folder, what)
+		else: arpl.exportData(os.path.join(folder, name + ext), folder, what)
+
+		self.time = time()
+		for file1, file2 in compares:
+			# Compare test.bin with data.bin
+			# TODO: Currently not doing alpha
+			data = Image.open(os.path.join(folder, file1))
+			test = Image.open(os.path.join(folder, file2))
+			ldata, ltest = (
+				"".join([chr(x[0]) + chr(x[1]) + chr(x[2]) for x in list(data.convert().getdata())]),
+				"".join([chr(x[0]) + chr(x[1]) + chr(x[2]) for x in list(test.convert().getdata())])
+			)
+			self.assertEqual(ldata, ltest, "Unexpected result from %s." %
+				["import", "export"][direction]
+			)
+			del data, test, ldata, ltest
+		#endfor
+	#enddef
+
+	def _import(self, name, ext, what, *compares): return self._xxport(0, name, ext, what, *compares)
+	def _export(self, name, ext, what, *compares): return self._xxport(1, name, ext, what, *compares)
+#enddef
+
+class TestGraphic(ImageTest):
+	@timedTest
+	def testImport16(self): self._import("graphic", "16.bmp", ["Header", "BMP16"], ("graphic16.bmp", "test.graphic16.bmp"))
+	@timedTest
+	def testImport256(self): self._import("graphic", "256.bmp", ["Header", "BMP256"], ("graphic256.bmp", "test.graphic256.bmp"))
+	@timedTest
+	def testImport24b(self): self._import("graphic", "24b.bmp", ["Header", "BMP24b"], ("graphic24b.bmp", "test.graphic24b.bmp"))
+
+	@timedTest
+	def testExport16(self): self._export("graphic", "16.bmp", ["Header", "BMP16"], ("graphic.png", "test.graphic16.png"))
+	@timedTest
+	def testExport156(self): self._export("graphic", "256.bmp", ["Header", "BMP256"], ("graphic.png", "test.graphic256.png"))
+	@timedTest
+	def testExport24b(self): self._export("graphic", "24b.bmp", ["Header", "BMP24b"], ("graphic.png", "test.graphic24b.png"))
 #endclass
 
 if __name__ == "__main__":
