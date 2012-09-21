@@ -401,7 +401,7 @@ class RPL(object):
 					None, None, None, None, None, None, None, None, ""
 				)
 			else:
-				try: dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = self.specification.match(data).groups()
+				try: dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = RPL.specification.match(data).groups()
 				except AttributeError: raise RPLError("Syntax error in data: %s" % data)
 			#endif
 		#endif
@@ -460,8 +460,24 @@ class RPL(object):
 			#endif
 		elif lit or (type(data) is str and data == ""):
 			add = ("literal", lit.strip())
-		# TODO: Hack, deal with this later
-		elif data == "[]": add = ("list", [])
+		elif not pp and flow == "[":
+			tmp = RPL.specification.finditer(data)
+			tmp.next() # Skip the first flow
+			lists = [[]]
+			for token in tmp:
+				token = token.groups()
+				dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = token
+				if flow == "[":
+					ls = []
+					lists[-1].append(ls)
+					lists.append(ls)
+				elif flow == "]":
+					try: last = lists.pop()
+					except IndexError: break
+				elif flow == ",": pass
+				else: lists[-1].append(self.parseData(token, currentStruct, currentKey, line, char, raw))
+			#endfor
+			add = ("list", last)
 		elif pp: raise RPLError("Invalid data.")
 		else: raise RPLError("Invalid data: %s" % data)
 
@@ -589,7 +605,7 @@ class RPL(object):
 		# Runtime may request only certain executables be run. All children of
 		# the given names are also executed. This recurses to find if it (x) or
 		# any parent was requested.
-		return x and (not what or x.name() in what or wantPort(x.parent(), what))
+		return x and (not what or x.name() in what or self.wantPort(x.parent(), what))
 	#enddef
 
 	def importData(self, rom, folder, what=[], nocreate=False):
@@ -611,7 +627,7 @@ class RPL(object):
 		for x in self.recurse():
 			if isinstance(x, Serializable):
 				if self.wantPort(x, what) and x["import"]:
-					x.importPrepare(lfolder)
+					x.importPrepare(rom, lfolder)
 					toImport.append(x)
 				#endif
 			elif isinstance(x, Executable): toProcess.append(x)
@@ -626,7 +642,7 @@ class RPL(object):
 
 		# Commit imports
 		if not nocreate:
-			for x in toImport: x.importData(rom)
+			for x in toImport: x.importData(rom, lfolder)
 		#endif
 
 		rom.close()
@@ -654,7 +670,7 @@ class RPL(object):
 		for x in self.recurse():
 			if isinstance(x, Serializable):
 				if self.wantPort(x, what) and x["export"]:
-					x.exportPrepare(rom)
+					x.exportPrepare(rom, lfolder)
 					toExport.append(x)
 			elif isinstance(x, Executable): toProcess.append(x)
 			#endif
@@ -665,12 +681,12 @@ class RPL(object):
 
 		# Write exports
 		if not nocreate:
-			for x in toExport: x.exportData(lfolder)
+			for x in toExport: x.exportData(rom, lfolder)
 			for x in self.sharedDataHandlers.itervalues(): x.write()
 		#endif
 
 		rom.close()
-		self.importing = None
+		self.importing = self.rom = None
 	#enddef
 
 	def wrap(self, typeName, value=None):
@@ -689,7 +705,12 @@ class RPL(object):
 		Structs that point to the same data should modify the same data, in the
 		order that they're listed in the RPL.
 		"""
-		if share in self.sharedDataHandlers: return self.sharedDataHandlers[share]
+		if share in self.sharedDataHandlers:
+			if isinstance(create, type) and not isinstance(self.sharedDataHandlers[share], create):
+				raise RPLError('Share of "%s" expected %s but was %s.' % (
+					share, create.__name__, self.sharedDataHandlers[share].__class__.__name__
+				))
+			return self.sharedDataHandlers[share]
 		else:
 			tmp = create(*vargs, **kwargs)
 			tmp.setup(self, share)
@@ -1507,44 +1528,40 @@ class Serializable(RPLStruct):
 		self._prepared = False
 	#enddef
 
+	def __getitem__(self, key):
+		if key == "file":
+			# Calculate filename
+			cur = self
+			filename, unk = "", ""
+			while cur:
+				if "file" in cur._data:
+					tmpname = (
+						cur._data["file"].getRaw()
+						if isinstance(cur._data["file"], Path) else
+						Path.convert(cur._data["file"].get())
+					)
+					filename = tmpname + filename
+					if tmpname[0] != "/": break
+				elif not (filename or cur._gennedName): unk = "/" + cur._name + unk
+				cur = cur._parent
+			#endwhile
+			if filename: filename = Path(filename)
+			else: filename = Path(unk[1:])
+
+			if not filename.hasExt(): filename.setExt(self["ext"].get())
+
+			return filename
+		else: return RPLStruct.__getitem__(self, key)
+	#enddef
+
 	def open(self, folder, ext="bin", retName=False, justOpen=False):
 		"""
 		Helper method for opening files.
 		"""
 		if not justOpen:
-			if type(folder) in [str, unicode]: folder = list(os.path.split(os.path.normpath(folder)))
-
-			# Function to return defined filename or struct's defined name
-			# If the filename starts with a / it is considered a subdir of parent
-			# structs.
-			def fn(x):
-				if "file" in x._data:
-					f = os.path.normpath(x._data["file"].get())
-					if f[0:len(os.sep)] == os.sep: return (True, list(os.path.split(f[len(os.sep):])))
-					else: return (False, list(os.path.split(f)))
-				else: return (True, None if x._gennedName else [x.name()])
-			#enddef
-
-			# Create the filename with extension
-			cont, f = fn(self)
-			if f[-1].find(os.extsep) != -1: path = f
-			else: path = f[0:-1] + ["%s%s%s" % (f[-1], os.extsep, self["ext"] or ext)]
-
-			# Traverse parents for directory structure while requested
-			x = self.parent()
-			while cont and x:
-				cont, name = fn(x)
-				if name: path = name + path
-				x = x.parent()
-			#endwhile
-
-			# Finalize path, make directories
-			path = os.path.normpath(os.path.join(*(folder + path)))
-			try: os.makedirs(os.path.dirname(path))
-			except OSError as err:
-				if err.errno == 17: pass
-				else: raise
-			#endif
+			path = self["file"]
+			if not path.hasExt(): path.setExt(ext)
+			path = path.get(folder)
 
 			# Return requested thing (path or handle)
 			if retName: return path
@@ -1560,30 +1577,41 @@ class Serializable(RPLStruct):
 		except AttributeError: del handle
 	#enddef
 
-	def importPrepare(self, rom):
+	def importPrepare(self, rom, folder):
 		"""
 		Stub. Fill this in to prepare struct before executables run.
 		"""
 		pass
 	#enddef
 
-	def importData(self, rom):
+	def importData(self, rom, folder):
 		"""
 		Stub. Fill this in to import appropriately.
 		"""
 		pass
 	#enddef
 
-	def exportPrepare(self, rom):
+	def exportPrepare(self, rom, folder):
 		"""
 		Stub. Fill this in to prepare struct before executables run.
+		Typically speaking you will want to lazily read from the ROM by
+		adding the reads to your __getitem__ statement. This allows things
+		to be pulled in in the order necessary, which may not be necessarily
+		predictable.
+		If the data read from the ROM should not be able to be modified by
+		executables you need not worry so much about this, but you should
+		still consider your keys potentially modifiable.
+		This function should generally just be used for prep. If you're going
+		to read anything from the ROM, be really mindful.
 		"""
 		pass
 	#enddef
 
-	def exportData(self, folder):
+	def exportData(self, rom, folder):
 		"""
 		Stub. Fill this in to export appropriately.
+		You will generally not need the ROM here, but in the event that you do,
+		you can grab it from self._rpl.rom
 		"""
 		pass
 	#enddef
@@ -1635,6 +1663,12 @@ class Cloneable(RPLStruct):
 	#enddef
 
 	def clones(self): return iter(self._clones)
+
+	def __getitem__(self, key):
+		try: self._clones
+		except AttributeError: return RPLStruct.__getitem__(self, key)
+		else: return List([x[key] for x in self._clones])
+	#enddef
 #endclass
 
 ################################################################################
@@ -1789,6 +1823,8 @@ class RPLRef:
 		#endif
 	#enddef
 
+	def resolve(self): return self.get(retCl=True)
+
 	def proc(self, func, callers=[], clone=None):
 		"""
 		Used by executables. Runs a procedure over every instance of a clone.
@@ -1851,6 +1887,8 @@ class RPLData(object):
 			return d1 == d2
 		else: return False
 	#enddef
+
+	def resolve(self): return self
 #endclass
 
 class String(RPLData):
@@ -1881,13 +1919,13 @@ class String(RPLData):
 		# TODO: This can split a utf8 sequence at the end. Need to fix..
 		rstr = rstr[0:min(kwargs["size"], len(rstr))]
 		rpad = kwargs["padchar"] * (kwargs["size"] - len(rstr))
-		if rpad == "": return rstr
+		if not rpad: return rstr
 		padside = kwargs["padside"]
-		if padside == "left": return rpad + rtsr
-		elif padside[1:] == "center":
+		if padside[-6:] == "center":
 			split = (ceil if padside[0] == "r" else int)(len(rpad) / 2)
-			return rpad[0:split] + rtsr + rpad[split:0]
-		elif padside == "right": return rtsr + rpad
+			return rpad[0:split] + rstr + rpad[split:0]
+		elif padside == "right": return rstr + rpad
+		else: return rpad + rstr
 	#enddef
 
 	def unserialize(self, data, **kwargs): self._data = data.decode("utf8")
@@ -1921,19 +1959,42 @@ class Literal(String):
 class Path(Literal):
 	"""
 	Manages slash conversion for paths.
-	Note, you should only ever use relative paths..
+	Note, you can only use relative paths..
 	If you need something in a far off directory, add that directory to
 	the RPL_INCLUDE_PATH environement variable.
 	That variable can have all the strange system-specific crap you want.
+	The path standard for RPL is suspiciously Windows-like: you may use
+	either / or \ separators, and . as the extension separator.
+	If you use a system that doesn't use theses, that's fine, your system's
+	will be used in the return value. But you must enter it in the above form.
 	"""
 	typeName = "path"
 
+	@staticmethod
+	def convert(path): return path.replace("\\", "/")
+
 	def set(self, data):
 		Literal.set(self, data)
-		if os.sep == "/": self._data = self._data.replace("\\", "/")
-		elif os.sep == "\\": self._data = self._data.replace("/", "\\")
-		else: raise RPLError("Why doesn't your system use slash separators?!")
+		if not self._data:
+			self._data = []
+			return
+		#endif
+		tmp = self._data.replace("\\", "/")
+		self._startingSlash = (tmp[0] == "/")
+		tmp = tmp.split("/")
+		if "." in tmp[-1]: tmp[-1], self._ext = tuple(tmp[-1].rsplit(".", 1))
+		else: self._ext = None
+		self._data = tmp
 	#enddef
+
+	def get(self, folder=[]):
+		return os.path.join(*(folder + self._data)) + (os.extsep + self._ext if self._ext else "")
+	#enddef
+
+	def getRaw(self): return "/".join(self._data) + ("." + self._ext if self._ext else "")
+
+	def hasExt(self): return bool(self._ext)
+	def setExt(self, ext): self._ext = ext
 #enddef
 
 class Number(RPLData):
@@ -1955,7 +2016,7 @@ class Number(RPLData):
 
 	def serialize(self, **kwargs):
 		big, ander, ret = (kwargs["endian"] == "big"), 0xff, r''
-		for i in range(kwargs["size"]):
+		for i in xrange(kwargs["size"]):
 			c = chr((self._data & ander) >> (i*8))
 			if big: ret = c + ret
 			else: ret += c
@@ -2067,7 +2128,7 @@ class Enum(RPLData):
 	def set(self, data):
 		for x in self._enum:
 			if data in x[0]:
-				self._data = data
+				self._data = x[1]
 				return
 			#endif
 		#endfor
@@ -2140,7 +2201,7 @@ class Named(RPLData):
 	#enddef
 #endclass
 
-class Size(Named, Literal, Number):
+class Size(Named, Number, Literal):
 	typeName = "size"
 
 	_names = {
