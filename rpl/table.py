@@ -72,7 +72,7 @@ class Table(RPL.Cloneable):
 		else: return RPL.Cloneable.__getitem__(self, key)
 	#enddef
 
-	def importPrepare(self, folder, filename, data):
+	def importPrepare(self, rom, folder, filename, data):
 		"""
 		Called from DataFormat.importPrepare.
 		"""
@@ -95,12 +95,12 @@ class Table(RPL.Cloneable):
 			clone = ref.clone()
 			if one: tmp = [data[idx]]
 			else: tmp = data[idx].get()
-			clone.importPrepare(folder, filename, tmp)
+			clone.importPrepare(rom, folder, filename, tmp)
 			self._row.append(clone)
 		#endfor
 	#enddef
 
-	def exportPrepare(self, rom):
+	def exportPrepare(self, rom, folder):
 		"""
 		Called after the clone is set up for it to grab the data from the ROM.
 		"""
