@@ -431,7 +431,7 @@ class RPL(object):
 						lt, l = RPL.numOrHex(bounds[0])
 						rt, r = RPL.numOrHex(bounds[1])
 						numList += [(lt, l)] + map(lambda(x): ("number", x), (
-							range(l + 1, r) if l < r else range(l - 1, r, -1)
+							list(range(l + 1, r)) if l < r else list(range(l - 1, r, -1))
 						)) + [(rt, r)]
 					elif len(times) == 2:
 						lt, l = RPL.numOrHex(times[0])
@@ -440,11 +440,11 @@ class RPL(object):
 					elif len(inc) == 2:
 						lt, l = RPL.numOrHex(inc[0])
 						rt, r = RPL.numOrHex(inc[1])
-						numList += map(lambda(x): (lt, x), range(l, l + r))
+						numList += map(lambda(x): (lt, x), list(range(l, l + r)))
 					elif len(dec) == 2:
 						lt, l = RPL.numOrHex(dec[0])
 						rt, r = RPL.numOrHex(dec[1])
-						numList += map(lambda(x): (lt, x), range(l, l - r, -1))
+						numList += map(lambda(x): (lt, x), list(range(l, l - r, -1)))
 					elif r in "abcdefghijklmnopqrstuvwxyz":
 						numList.append(("literal", r))
 					else: numList.append(RPL.numOrHex(r))
@@ -1109,7 +1109,15 @@ class RPLStruct(object):
 		"""
 		x = self
 		while x and key not in x._data: x = x.parent()
-		if x: return x._data[key]
+		if x:
+			# Verify that typing is the same between this ancestor and itself
+			# This is just a quick check for speed.
+			if (key not in self._keys or (key in x._keys and
+				x._keys[key][0]._source == self._keys[key][0]._source
+			)): return x._data[key]
+
+			# Otherwise, run the verification
+			return self._keys[key][0].verify(x._data[key])
 		elif key in self._keys and self._keys[key][1] is not None:
 			self._data[key] = self._keys[key][1]
 			return self._data[key]
@@ -1338,23 +1346,23 @@ class ROM(RPLStruct):
 		eof = stream.tell()
 		if isinstance(rang, Number):
 			# Address to EOF
-			rang = range(rang.get(), eof)
+			rang = list(range(rang.get(), eof))
 		else:
 			rang = [x.get() for x in rang.get()]
 			try:
 				if rang[-1] == "e":
-					if rang[-2] == "b": r = range(0, eof)
-					else: r = range(rang[-2], eof)
+					if rang[-2] == "b": r = list(range(0, eof))
+					else: r = list(range(rang[-2], eof))
 					rang = rang[0:-1] + r
 				elif rang[0] == "e":
-					if rang[1] == "b": r = range(eof, -1, -1)
-					else: r = range(eof, rang[1] - 1, -1)
+					if rang[1] == "b": r = list(range(eof, -1, -1))
+					else: r = list(range(eof, rang[1] - 1, -1))
 					rang = r + rang[1:]
 				elif rang[-1] == "b":
 					# By the time it checks b's, e will have already handled b:e and e:b
-					rang = rang[0:-1] + range(rang[-2], -1, -1)
+					rang = rang[0:-1] + list(range(rang[-2], -1, -1))
 				elif rang[0] == "b":
-					rang = range(0, rang[1]) + rang[1:]
+					rang = list(range(0, rang[1])) + rang[1:]
 				#endif
 			except TypeError:
 				raise RPLError("e and b must only be at the beginning or "
@@ -2039,7 +2047,7 @@ class Number(RPLData):
 
 	def serialize(self, **kwargs):
 		big, ander, ret = (kwargs["endian"] == "big"), 0xff, r''
-		for i in xrange(kwargs["size"]):
+		for i in helper.range(kwargs["size"]):
 			c = chr((self._data & ander) >> (i*8))
 			if big: ret = c + ret
 			else: ret += c
