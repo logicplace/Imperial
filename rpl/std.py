@@ -373,7 +373,6 @@ class DataFormat(object):
 		self._len = None
 		self._count = None
 		self.importing = False
-		#endif
 	#enddef
 
 	def _parseFormat(self, key):

@@ -549,7 +549,7 @@ class TestGraphic(ImageTest):
 	@timedTest
 	def testExport16(self): self._export("graphic", "16.bmp", ["Header", "BMP16"], ("graphic.png", "test.graphic16.png"))
 	@timedTest
-	def testExport156(self): self._export("graphic", "256.bmp", ["Header", "BMP256"], ("graphic.png", "test.graphic256.png"))
+	def testExport256(self): self._export("graphic", "256.bmp", ["Header", "BMP256"], ("graphic.png", "test.graphic256.png"))
 	@timedTest
 	def testExport24b(self): self._export("graphic", "24b.bmp", ["Header", "BMP24b"], ("graphic.png", "test.graphic24b.png"))
 #endclass
