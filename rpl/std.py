@@ -39,6 +39,7 @@ def register(rpl):
 	rpl.registerType(Bin)
 	rpl.registerType(Pixel)
 	rpl.registerType(Color)
+	rpl.registerType(ReadDir)
 #endclass
 
 def printHelp(more_info=[]):
@@ -526,7 +527,7 @@ class DataFormat(object):
 							fmt["size"] = RPL.Number(count)
 						else:
 							# Size is count
-							for i in xrange(size): address = tmpfunc(address)
+							for i in helper.range(size): address = tmpfunc(address)
 						#endif
 						self._data[key] = RPL.List(tmp)
 					else:
@@ -911,9 +912,7 @@ class GenericGraphic(Graphic):
 
 	def __init__(self, rpl, name, parent=None):
 		Graphic.__init__(self, rpl, name, parent)
-		self.registerKey("read", "string:(LRUD, LRDU, RLUD, RLDU, UDLR, UDRL, "
-			"DULR, DURL, LU, LD, RU, RD, UL, UR, DL, DR)", "LRUD"
-		)
+		self.registerKey("read", "readdir", "LRUD")
 		self.registerKey("pixel", "[pixel]*")
 		self.registerKey("palette", "[color]+", "[]")
 		self.registerKey("padding", "[string:(none, row, pixel, column), number]", "[none, 0]")
@@ -924,17 +923,6 @@ class GenericGraphic(Graphic):
 	def importData(self, rom, folder):
 		read = self["read"].get()
 		width, height = tuple([x.get() for x in self["dimensions"].get()])
-		# Vertical First, Range 0, Range 1
-		vf = False
-		primary, secondary = "LRUD".index(read[0]), "LRUD".index(read[1 if len(read) == 2 else 2])
-		if   primary == 0: r0 = (width,)
-		elif primary == 1: r0 = (width - 1, -1, -1)
-		elif primary == 2: vf, r0 = True, (height,)
-		elif primary == 3: vf, r0 = True, (height - 1, -1, -1)
-		if   secondary == 0: r1 = (width,)
-		elif secondary == 1: r1 = (width - 1, -1, -1)
-		elif secondary == 2: r1 = (height,)
-		elif secondary == 3: r1 = (height - 1, -1, -1)
 
 		# Create padding function...
 		prev = 0
@@ -983,24 +971,17 @@ class GenericGraphic(Graphic):
 		#endif
 
 		# Prepare data
-		idx, leftover = 0, 0
+		leftover = 0
 		data = self._image.load()
 		pixels = self["pixel"].get()
 		stream = StringIO()
-		for i1 in xrange(*r1):
-			if vf: x = i1
-			else: y = i1
-			for i0 in xrange(*r0):
-				if vf: y = i0
-				else: x = i0
-				leftover = pixels[idx % len(pixels)].write(stream, palette, leftover, data[x, y])
-				skip, leftover = padfunc(idx, prev, leftover, stream)
-				if skip is not None:
-					if skip: stream.write("\x00" * skip)
-					prev = stream.tell()
-				#endif
-				idx += 1
-			#endfor
+		for idx, x, y in self["read"].rect(width, height):
+			leftover = pixels[idx % len(pixels)].write(stream, palette, leftover, data[x, y])
+			skip, leftover = padfunc(idx, prev, leftover, stream)
+			if skip is not None:
+				if skip: stream.write("\x00" * skip)
+				prev = stream.tell()
+			#endif
 		#endfor
 
 		# Commit to ROM
@@ -1050,7 +1031,7 @@ class GenericGraphic(Graphic):
 		bytes, leftovers = 0, ["", 0]
 		pixels = self["pixel"].get()
 		# TODO: Make more efficient for repeated rows or uniform pixel size...
-		for i in xrange(numPixels):
+		for i in helper.range(numPixels):
 			pixel = pixels[i % len(pixels)]
 			bytes += pixel._bytes
 			leftovers[1] += pixel._extraBits
@@ -1081,7 +1062,7 @@ class GenericGraphic(Graphic):
 		self._rpl.rom.seek(self["base"].get())
 		stream = StringIO(self._rpl.rom.read(bytes))
 		leftovers, data, prev = ["", 0], [], 0
-		for i in xrange(numPixels):
+		for i in helper.range(numPixels):
 			data.append(pixels[i % len(pixels)].read(stream, palette, leftovers))
 			tmp = padfunc(i, prev, leftovers, stream=stream)
 			if tmp is not None:
@@ -1104,8 +1085,7 @@ class GenericGraphic(Graphic):
 		# UDRL: ROTATE_90
 		# DULR: ROTATE_270
 		# DURL: ROTATE_90, FLIP_TOP_BOTTOM
-		read = self["read"].get()
-		primary, secondary = "LRUD".index(read[0]), "LRUD".index(read[1 if len(read) == 2 else 2])
+		primary, secondary = self["read"].ids()
 		# if xxDU
 		if secondary == 3: self._image = self._image.transpose(Image.FLIP_TOP_BOTTOM)
 		# if xxLR
@@ -1266,7 +1246,7 @@ class Bin(RPL.String):
 		RPL.String.set(self, data)
 		data = re.sub(r'\s', "", self._data)
 		self._data = ""
-		for i in xrange(0, len(data), 2):
+		for i in helper.range(0, len(data), 2):
 			self._data += chr(int(data[i:i+2], 16))
 		#endfor
 	#endif
@@ -1557,3 +1537,63 @@ class Color(RPL.Named, RPL.Number, RPL.Literal):
 		return RPL.Named.__unicode__(self, "$%06x")
 	#enddef
 #endclass
+
+class ReadDir(RPL.Literal):
+	typeName = "readdir"
+
+	valid = [
+		"LRUD", "LRDU", "RLUD", "RLDU", "UDLR", "UDRL", "DULR",
+		"DURL", "LU", "LD", "RU", "RD", "UL", "UR", "DL", "DR"
+	]
+
+	def set(self, data):
+		RPL.Literal.set(self, data)
+		if self._data in ReadDir.valid:
+			self.primary, self.secondary = (
+				"LRUD".index(self._data[0]),
+				"LRUD".index(self._data[1 if len(self._data) == 2 else 2])
+			)
+		else:
+			raise RPLError("Reading direction must be one of: %s." %
+				helper.list2english(ReadDir.valid, "or")
+			)
+		#endif
+	#endif
+
+	def ids(self): return self.primary, self.secondary
+
+	def rect(self, width, height):
+		self._index, self._width, self._height = 0, width, height
+		# Inner is Vertical, Inner Range, Outer Range
+		self._iv = False
+		if   self.primary == 0: self._ir = helper.range(self._width,)
+		elif self.primary == 1: self._ir = helper.range(self._width - 1, -1, -1)
+		elif self.primary == 2: self._iv, self._ir = True, helper.range(self._height,)
+		elif self.primary == 3: self._iv, self._ir = True, helper.range(self._height - 1, -1, -1)
+		if   self.secondary == 0: self._ori = iter(helper.range(self._width,))
+		elif self.secondary == 1: self._ori = iter(helper.range(self._width - 1, -1, -1))
+		elif self.secondary == 2: self._ori = iter(helper.range(self._height,))
+		elif self.secondary == 3: self._ori = iter(helper.range(self._height - 1, -1, -1))
+		if self._iv: self._x = self._ori.next()
+		else: self._y = self._ori.next()
+		self._iri = iter(self._ir)
+		return self
+	#enddef
+
+	def __iter__(self): return self
+
+	def next(self):
+		try: ii = self._iri.next()
+		except StopIteration:
+			# Let this raise stop iteration when it's done
+			if self._iv: self._x = self._ori.next()
+			else: self._y = self._ori.next()
+			self._iri = iter(self._ir)
+			return self.next()
+		else:
+			if self._iv: i, x, y = self._index, self._x, ii
+			else: i, x, y = self._index, ii, self._y
+			self._index += 1
+			return i, x, y
+		#endif
+	#enddef
