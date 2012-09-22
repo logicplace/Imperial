@@ -103,3 +103,42 @@ class FakeStream(object):
 	def close(self): pass
 	def flush(self): pass
 #endclass
+
+# Python 2.7/3.x compatibility
+try: range(0).next
+except AttributeError:
+	class rangeiter(object):
+		def __init__(self, start, end, step):
+			self.cur, self.start, self.end, self.step = start, start, end, step
+		#enddef
+
+		def __iter__(self): return self
+
+		def next(self):
+			if ((self.step > 0 and self.cur < self.end) or
+				(self.step < 0 and self.cur > self.end)
+			):
+				next = self.cur
+				self.cur += self.step
+				return next
+			else: raise StopIteration
+		#enddef
+	#endclass
+
+	class range(object):
+		def __init__(self, start, end=None, step=1):
+			if end is None: start, end = 0, start
+			if ((step > 0 and start > end) or
+				(step < 0 and start < end)
+			): self.invalid = True
+			else: self.invalid = False
+			self.start, self.end, self.step = start, end, step
+		#enddef
+
+		def __iter__(self):
+			return self if self.invalid else rangeiter(self.start, self.end, self.step)
+		#enddef
+
+		def next(self): raise StopIteration
+	#endclass
+else: range = range
