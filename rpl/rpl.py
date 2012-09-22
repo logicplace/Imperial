@@ -1052,8 +1052,7 @@ class RPLStruct(object):
 		self._structs = {}
 		self._children = odict()
 
-		#try: self.typeName
-		#except AttributeError: self.typeName = self.__class__.__name__.lower()
+		self._nocopy = ["_rpl", "_parent", "_keys"]
 	#enddef
 
 	def addChild(self, sType, name):
@@ -1219,10 +1218,12 @@ class RPLStruct(object):
 		else: return data.set(val)
 	#endif
 
-	def __getstate__(self):
-		ret = self.__dict__.copy()
-		if "_rpl" in ret: del ret["_rpl"]
-		if "_parent" in ret: del ret["_parent"]
+	def __deepcopy__(self, memo={}):
+		ret = object.__new__(self.__class__)
+		for k, x in self.__dict__.iteritems():
+			if k in self._nocopy or callable(x): setattr(ret, k, x)
+			else: setattr(ret, k, copy.deepcopy(x))
+		#endfor
 		return ret
 	#enddef
 #endclass
@@ -1647,6 +1648,7 @@ class Cloneable(RPLStruct):
 		RPLStruct.__init__(self, rpl, name, parent)
 
 		self._clones = []
+		self._nocopy.append("_clones")
 	#enddef
 
 	def clone(self):
@@ -1656,9 +1658,9 @@ class Cloneable(RPLStruct):
 		return new
 	#enddef
 
-	def __getstate__(self):
-		ret = RPLStruct.__getstate__(self)
-		if "_clones" in ret: del ret["_clones"]
+	def __deepcopy__(self, memo={}):
+		ret = RPLStruct.__deepcopy__(self)
+		delattr(ret, "_clones")
 		return ret
 	#enddef
 
@@ -1674,7 +1676,7 @@ class Cloneable(RPLStruct):
 ################################################################################
 #################################### RPLRef ####################################
 ################################################################################
-class RPLRef:
+class RPLRef(object):
 	"""
 	Manages references to other fields.
 	"""
@@ -1690,6 +1692,7 @@ class RPLRef:
 		self._container = container
 		self._mykey = mykey
 		self._pos = (line, char)
+		self._nocopy = ["_rpl", "_container", "_pos", "_idxs"]
 
 		self._struct, self._key, idxs = self.specification.match(ref).groups()
 		if idxs: self._idxs = map(int, idxs[1:-1].split("]["))
@@ -1843,6 +1846,15 @@ class RPLRef:
 			self.getFromIndex(point[self._key], callers).proc(func, callers + [self])
 		#endif
 	#enddef
+
+	def __deepcopy__(self, memo={}):
+		ret = object.__new__(self.__class__)
+		for k, x in self.__dict__.iteritems():
+			if k in self._nocopy or callable(x): setattr(ret, k, x)
+			else: setattr(ret, k, copy.deepcopy(x))
+		#endfor
+		return ret
+	#enddef
 #endclass
 
 ################################################################################
@@ -1851,6 +1863,8 @@ class RPLRef:
 
 class RPLData(object):
 	def __init__(self, data=None):
+		self._nocopy = []
+
 		if data is not None: self.set(data)
 	#enddef
 
@@ -1889,6 +1903,15 @@ class RPLData(object):
 	#enddef
 
 	def resolve(self): return self
+
+	def __deepcopy__(self, memo={}):
+		ret = object.__new__(self.__class__)
+		for k, x in self.__dict__.iteritems():
+			if k in self._nocopy or callable(x): setattr(ret, k, x)
+			else: setattr(ret, k, copy.deepcopy(x))
+		#endfor
+		return ret
+	#enddef
 #endclass
 
 class String(RPLData):
