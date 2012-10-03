@@ -217,6 +217,25 @@ class ImageFile(RPL.Share):
 	#enddef
 #endclass
 
+class ColorScan(object):
+	"""
+	In the future, this will handle scanning for nearest colors.
+	At the moment, I don't care.
+	"""
+	def __init__(self, palette):
+		try: obj = palette.iterkeys()
+		except AttributeError: obj = enumerate(palette)
+
+		# Convert to HSL and sort
+		self._palette = {}
+		for k, v in obj: self._palette[v] = Graphic.hex(k)
+	#enddef
+
+	def scan(self, color):
+		return self._palette[Graphic.hex(color)]
+	#enddef
+#endclass
+
 ################################################################################
 ############################# Media Parent Structs #############################
 ################################################################################
@@ -261,6 +280,7 @@ class Graphic(RPL.Serializable):
 		self._owm, self._ohm = 1, 1
 		# Width/Height Multipliers
 		self._wm, self._hm = 1, 1
+		self._palette = None
 	#enddef
 
 	def importTransform(self):
@@ -341,6 +361,82 @@ class Graphic(RPL.Serializable):
 		"""
 		if not self.importing: self.prepareImage()
 		return RPL.String(self._name)
+	#enddef
+
+	def definePalette(self, palette):
+		"""
+		palette is an object keyed by palette index with value of the color.
+		"""
+		self._palette = ColorScan(palette)
+	#enddef
+
+	def indexOf(self, color):
+		"""
+		Return palette index of most similar color.
+		color is form: 0xaaRRGGBB
+		"""
+		return self._palette.scan(color)
+	#enddef
+
+	@staticmethod
+	def col(color):
+		"""
+		color can be: (r, g, b), (r, g, b, a), or 0xaaRRGGBB
+		"""
+		if type(color) is tuple:
+			if len(color) == 3: return color + (255,)
+			else: return color
+		#endif
+		return (
+			(color & 0x00FF0000) >> 16,
+			(color & 0x0000FF00) >> 8,
+			(color & 0x000000FF),
+			255 - ((color & 0xFF000000) >> 24),
+		)
+	#enddef
+
+	@staticmethod
+	def hex(color):
+		if type(color) is tuple:
+			if len(color) == 3: r, g, b, a = color + (255,)
+			else: r, g, b, a = color
+			return (
+				(255 - (a & 0xff)) << 24 |
+				(r & 0xff) << 16 |
+				(g & 0xff) << 8 |
+				b & 0xff
+			)
+		#endif
+		return color
+	#enddef
+
+	@staticmethod
+	def rgb2rgbMmhc(color):
+		r, g, b, a = Graphic.col(color)
+		r, g, b = r / 255.0, g / 255.0, b / 255.0
+		M, m = max(r, g, b), min(r, g, b)
+		c = M - m
+		if c == 0: h = 0
+		elif M == r: h = 60 * ((g - b) / c % 6)
+		elif M == g: h = 60 * ((b - r) / c + 2)
+		elif M == b: h = 60 * ((r - g) / c + 4)
+		return r, g, b, a, M, m, h, c
+	#enddef
+
+	@staticmethod
+	def rgb2hsl(color):
+		r, g, b, a, M, m, h, c = Graphic.rgb2rgbMmhc(color)
+		l = (M + m) / 2
+		s = 0 if c == 0 else c * 100 / (1 - abs(2 * l - 1))
+		return int(h), int(s), int(round(l * 100)), a
+	#enddef
+
+	@staticmethod
+	def rgb2hsv(color):
+		r, g, b, a, M, m, h, c = Graphic.rgb2rgbMmhc(color)
+		v = M
+		s = 0 if c == 0 else c * 100 / v
+		return int(h), int(s), int(round(v * 100)), a
 	#enddef
 #endclass
 
@@ -491,8 +587,7 @@ class DataFormat(object):
 					raise RPLError("Somehow have not read data for %s." % key)
 				else:
 					offset = self.offsetOf(key)
-					address = base = self["base"].get() + offset
-					self._rpl.rom.seek(address, 0)
+					address = base = self.base(offset=offset)
 					typeName = self.get(fmt["type"])
 					size, expand = self.get(fmt["size"]), False
 					if size == "expand":
@@ -559,7 +654,7 @@ class DataFormat(object):
 				if ":" not in typeName:
 					# Recast... TODO: Should this generate a validatation or
 					# is this enough?
-					self._data[key] = self._rpl.types[typeName](value.get())
+					self._data[key] = self._rpl.wrap(typeName, value.get())
 				else: self._data[key] = value
 		else:
 			self._parentClass.__setitem__(self, key, value)
@@ -610,7 +705,8 @@ class DataFormat(object):
 		"""
 		Initially called from Data.importData
 		"""
-		base = self["base"].get()
+		base = self.base(rom=rom)
+
 		for k in self._format:
 			fmt = self._format[k]
 			data = self[k]
@@ -724,7 +820,7 @@ class DataFormat(object):
 		if fmt["offset"] is not None: return fmt["offset"]
 		keys = self._format.keys()
 		idx = keys.index(key)
-		if idx == 0: fmt["offset"] = self["base"].get()
+		if idx == 0: fmt["offset"] = self.base()
 		else:
 			prevKey = keys[idx - 1]
 			prevFmt = self._parseFormat(prevKey)
@@ -801,6 +897,12 @@ class Format(DataFormat, RPL.Cloneable):
 		Returns the name with a prefix, used for referencing this as a type.
 		"""
 		return RPL.Literal("Format:" + self._name)
+	#enddef
+
+	def base(self, value=None, rom=None, offset=0):
+		if rom is None: rom = self._rpl.rom
+		rom.seek(self._base.get() + offset)
+		return rom.tell()
 	#enddef
 
 	def __getitem__(self, key):
@@ -955,20 +1057,7 @@ class GenericGraphic(Graphic):
 		#endif
 
 		# Prepare palette
-		palette = {}
-		tmppal = self["palette"].get()
-		# If there's no alpha data in the palette...
-		hasAlpha = False
-		for i, x in enumerate(tmppal):
-			tmppal[i] = x = x.get()
-			if x & 0xff000000: hasAlpha = True
-		#endfor
-		# ...set all of the alpha to fully visible
-		if hasAlpha:
-			for i, x in enumerate(tmppal): palette[x] = i
-		else:
-			for i, x in enumerate(tmppal): palette[x | 0xff000000] = i
-		#endif
+		self.definePalette([x.get() for x in self["palette"].get()])
 
 		# Prepare data
 		leftover = 0
@@ -976,7 +1065,7 @@ class GenericGraphic(Graphic):
 		pixels = self["pixel"].get()
 		stream = StringIO()
 		for idx, x, y in self["read"].rect(width, height):
-			leftover = pixels[idx % len(pixels)].write(stream, palette, leftover, data[x, y])
+			leftover = pixels[idx % len(pixels)].write(stream, self, leftover, data[x, y])
 			skip, leftover = padfunc(idx, prev, leftover, stream)
 			if skip is not None:
 				if skip: stream.write("\x00" * skip)
@@ -985,7 +1074,7 @@ class GenericGraphic(Graphic):
 		#endfor
 
 		# Commit to ROM
-		rom.seek(self["base"].get())
+		self.base(rom=rom)
 		rom.write(stream.getvalue())
 	#enddef
 
@@ -1048,18 +1137,10 @@ class GenericGraphic(Graphic):
 		#bytes = bytes * numPixels + int(ceil(extraBits * numPixels / 8))
 
 		# Prepare palette
-		palette = self["palette"].get()
-		# If there's no alpha data in the palette...
-		hasAlpha = False
-		for i, x in enumerate(palette):
-			palette[i] = x = x.get()
-			if x & 0xff000000: hasAlpha = True
-		#endfor
-		# ...set all of the alpha to fully visible
-		if not hasAlpha: palette = [x | 0xff000000 for x in palette]
+		palette = [x.get() for x in self["palette"].get()]
 
 		# Read pixels
-		self._rpl.rom.seek(self["base"].get())
+		self.base()
 		stream = StringIO(self._rpl.rom.read(bytes))
 		leftovers, data, prev = ["", 0], [], 0
 		for i in helper.range(numPixels):
@@ -1383,9 +1464,9 @@ class Pixel(RPL.String):
 			"A": int(round(a * 255 / self._max["A"])) if self._max["A"] else 0,
 		}
 		if self._max["I"]:
-			try: val["I"] = palette[a << 24 | r << 16 | g << 8 | b]
+			try: val["I"] = palette.indexOf((r, g, b, a))
 			except KeyError:
-				try: val["I"] = palette[0xff000000 | r << 16 | g << 8 | b]
+				try: val["I"] = palette.indexOf((r, g, b, 0xff))
 				except KeyError:
 					# TODO: Search for most similar color
 					raise RPLError("No entry in palette for #%02x%02x%02x.%i%%." % (r, g, b, a * 100 / 255))
@@ -1500,7 +1581,7 @@ class Pixel(RPL.String):
 		if self._alpha: a = values["A"]
 
 		#print "#%02x%02x%02x.%i%%" % (r, g, b, a * 100 / 255)
-		return a << 24 | b << 16 | g << 8 | r
+		return (r, g, b, a)
 	#enddef
 
 	@staticmethod
@@ -1510,31 +1591,48 @@ class Pixel(RPL.String):
 	#enddef
 #endclass
 
-class Color(RPL.Named, RPL.Number, RPL.Literal):
+class Color(RPL.Named, RPL.HexNum, RPL.Literal, RPL.List):
 	typeName = "color"
 
 	_names = {
-		"black":   0x000000,
-		"white":   0xffffff,
-		"red":     0xff0000,
-		"blue":    0x00ff00,
-		"green":   0x0000ff,
-		"yellow":  0xffff00,
-		"magenta": 0xff00ff,
-		"pink":    0xff00ff,
-		"cyan":    0x00ffff,
-		"gray":    0xa5a5a5,
+		"black":       0x00000000,
+		"white":       0x00ffffff,
+		"red":         0x00ff0000,
+		"blue":        0x0000ff00,
+		"green":       0x000000ff,
+		"yellow":      0x00ffff00,
+		"magenta":     0x00ff00ff,
+		"pink":        0x00ff00ff,
+		"cyan":        0x0000ffff,
+		"gray":        0x00a5a5a5,
+		"transparent": 0xff000000,
 	}
 
 	def set(self, data):
 		if type(data) in [int, long]:
 			if data & ~0xffffffff: raise RPLError("Colors must be 3-4 byte values.")
 			else: self._data = data
+		elif type(data) in [list, tuple]:
+			self._data = (
+				(data[0] & 0xff) << 16 |
+				(data[1] & 0xff) << 8 |
+				(data[2] & 0xff)
+			)
+			if len(data) == 4: self._data |= (255 - (data[3] & 0xff)) << 24
 		else: RPL.Named.set(self, data, ["int", "long"])
 	#enddef
 
 	def __unicode__(self):
 		return RPL.Named.__unicode__(self, "$%06x")
+	#enddef
+
+	def tuple(self):
+		return (
+			(self._data & 0x00ff0000) >> 16,
+			(self._data & 0x0000ff00) >> 8,
+			(self._data & 0x000000ff),
+			255 - ((self._data & 0xff000000) >> 24),
+		)
 	#enddef
 #endclass
 
