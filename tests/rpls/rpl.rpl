@@ -21,4 +21,5 @@ static AndAnotherStatic {
 
 static regression {
 	endoflistnospacenumber: [lit, 1]
+	oneletter: a
 }

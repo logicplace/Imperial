@@ -130,6 +130,7 @@ class TestParse(RPLTestCase):
 		self.comp(regression, "endoflistnospacenumber", "list", [
 			("literal", "lit"), ("number", 1)
 		])
+		self.check(regression, "oneletter", "literal", "a")
 	#enddef
 
 	def testAndAnotherStatic(self):
