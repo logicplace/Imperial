@@ -104,7 +104,7 @@ class RPL(object):
 			# Between these parts, one can add more things to this set.
 			# It's used above to add :\-*+~ in one portion.
 			# Range part 2
-			"r2": r']|(?<![a-zA-Z])[a-z](?![a-zA-Z])|\$[0-9a-fA-F]+)',
+			"r2": r']|(?<!\w)[a-z](?=:)|(?<=:)[a-z](?!\w)|\$[0-9a-fA-F]+)',
 			# Invalid characters for a Literal
 			"lit": r'{}\[\],\$@"#\r\n' r"'",
 			# Valid key name
@@ -1528,7 +1528,7 @@ class Serializable(RPLStruct):
 
 	def __init__(self, rpl, name, parent=None):
 		RPLStruct.__init__(self, rpl, name, parent)
-		self.registerKey("base", "hexnum", "$000000")
+		self.registerKey("base", "[string:(b, s, e, begin, start, end), hexnum].", "$000000")
 		self.registerKey("file", "path", "")
 		self.registerKey("ext", "string", "")
 		self.registerKey("export", "bool", "true")
@@ -1561,6 +1561,27 @@ class Serializable(RPLStruct):
 
 			return filename
 		else: return RPLStruct.__getitem__(self, key)
+	#enddef
+
+	def base(self, value=None, rom=None, offset=0):
+		if value is None: value = self["base"]
+		if rom is None: rom = self._rpl.rom
+
+		v = value.get()
+		if isinstance(value, List):
+			rel, base = {
+				"b": 0, "begin": 0, "s": 0, "start": 0,
+				#"c": 1, "cur": 1, "current": 1,
+				"e": 2, "end": 2
+			}[v[0].get()], v[1].get()
+		elif v in ["b", "s", "begin", "start"]: rel, base = 0, 0
+		#elif v in ["c", "cur", "current"]: rel, base = 1, 0
+		elif v in ["e", "end"]: rel, base = 2, 0
+		else: rel, base = 0, v
+
+		if rom is False: return base, rel
+		rom.seek(base + offset, rel)
+		return rom.tell()
 	#enddef
 
 	def open(self, folder, ext="bin", retName=False, justOpen=False):
