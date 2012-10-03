@@ -28,11 +28,11 @@ def printHelp(more_info=[]):
 		"The table library aids in dealing with table or database formats that "
 		"use a table head for dynamic typing and such.\n"
 		"It offers the structs:\n"
-		"  table  head\n"
+		"  table\n"
 	)
 	if not more_info: print "Use --help table [structs...] for more info"
 	infos = {
-		"table": Table, "head": TableHead,
+		"table": Table
 	}
 	for x in more_info:
 		if x in infos: print dedent(infos[x].__doc__)
