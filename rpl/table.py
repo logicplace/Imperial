@@ -129,8 +129,8 @@ class Table(RPL.Cloneable):
 		#endfor
 	#enddef
 
-	def importDataLoop(self, rom):
-		for x in self._row: x.importDataLoop(rom)
+	def importDataLoop(self, rom, base=None):
+		for x in self._row: x.importDataLoop(rom, rom.tell())
 	#enddef
 
 	def exportDataLoop(self, datafile=None):
