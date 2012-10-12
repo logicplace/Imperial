@@ -59,8 +59,12 @@ def stream(etc):
 	Helper class to open a file as a stream
 	"""
 	if type(etc) in [str, unicode]:
-		try: etc = open(etc, "r+b")
-		except IOError: etc = open(etc, "a+b")
+		try: etc = OverSeek(etc, "r+b")
+		except IOError:
+			tmp = open(etc, "w")
+			tmp.close()
+			etc = OverSeek(etc, "r+b")
+		#endtry
 	#endif
 	return etc
 #enddef
@@ -72,12 +76,38 @@ def oneOfIn(l1, l2):
 	return False
 #enddef
 
+def allIn(l1, l2):
+	for x in l1:
+		if x not in l2: return False
+	#endfor
+	return True
+#enddef
+
 def list2english(l, conjunction=u"and"):
 	l = map(unicode, l)
 	if len(l) == 1: return l[0]
 	elif len(l) == 2: return u"%s %s %s" % (l[0], conjunction, l[1])
 	else: return u"%s, %s %s" % (", ".join(l[0:-1]), conjunction, l[-1])
 #enddef
+
+class OverSeek(file):
+	def seek(self, offset, whence=0, byte="\x00"):
+		if whence == 0:
+			file.seek(self, offset, 0)
+			if offset > 0:
+				diff = self.tell() - offset
+				if diff > 0: self.write(byte * diff)
+			#endif
+		elif whence == 1:
+			start = self.tell()
+			file.seek(self, offset, 1)
+			if offset > 0:
+				diff = self.tell() - start - offset
+				if diff > 0: self.write(byte * diff)
+			#endif
+		elif whence == 2: file.seek(self, offset, 2)
+	#enddef
+#endclass
 
 class FakeStream(object):
 	def __init__(self):
