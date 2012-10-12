@@ -11,7 +11,7 @@ But the important part is that this is now usable.
 Next up is the cleaning process, and I'm going to do a slight redesign based
  on what I've learned is better from writing this. There will likely be breaking
  but not major changes to the internal code (RPL as a language will not be
- affected (oops that's a lie, map struct will change). However, there is one
+ affected (oops that's a lie, map struct will change)). However, there is one
  major thing: I plan to remove executables.
  This was a bad idea based on a spur-of-the-moment decision that I've learned
  will give more headache for lib developers than it would help anyone. I also
