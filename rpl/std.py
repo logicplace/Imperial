@@ -172,6 +172,9 @@ class ImageFile(RPL.Share):
 
 	def write(self):
 		if self._image is None: return # Maybe throw an exception?
+		ext = os.path.splitext(self._path)[1][1:].lower()
+		# Cannot save alpha..
+		if ext == "bmp": self._image = self._image.convert("RGB")
 		self._image.save(self._path)
 	#enddef
 
@@ -183,12 +186,15 @@ class ImageFile(RPL.Share):
 
 	def ensureSize(self, width, height):
 		# Only necessary when writing, remember!
-		if self._image is None: self.newImage(width, height)
-		elif self._image.size[0] < width or self._image.size[1] < height:
+		if self._image is None: return self.newImage(width, height)
+		curWidth, curHeight = self._image.size
+		if curWidth < width or curHeight < height:
+			width = max(curWidth, width)
+			height = max(curHeight, height)
 			region = self._image.crop((0, 0, width, height))
 			region.load()
-			self._image.paste(0xffffff, (0, 0))
-			self._image.resize((width, height))
+			self._image = self._image.resize((width, height))
+			self._image.paste(0xffffff, (0, 0, width, height))
 			self._image.paste(region, (0, 0))
 		#endif
 	#enddef
@@ -197,7 +203,7 @@ class ImageFile(RPL.Share):
 		if self._image is None: self.newImage()
 		region = Image.new("RGBA", (width, height))
 		region.putdata(data)
-		self._image.paste(region, (left, top, left + width, top + height))
+		self._image.paste(region, (left, top))
 	#enddef
 
 	def addImage(self, image, left, top):
@@ -228,7 +234,7 @@ class ColorScan(object):
 
 		# Convert to HSL and sort
 		self._palette = {}
-		for k, v in obj: self._palette[v] = Graphic.hex(k)
+		for k, v in obj: self._palette[Graphic.hex(v)] = k
 	#enddef
 
 	def scan(self, color):
@@ -283,6 +289,13 @@ class Graphic(RPL.Serializable):
 		self._palette = None
 	#enddef
 
+	def dimensions(self):
+		try:
+			dimens = self["dimensions"].get()
+			return dimens[0].get() * self._wm, dimens[1].get() * self._hm
+		except RPLError: return self._wm, self._hm
+	#enddef
+
 	def importTransform(self):
 		if self._image is None: return False
 		if self["rotate"].get() != 0:
@@ -317,10 +330,11 @@ class Graphic(RPL.Serializable):
 		filename = self.open(folder, "png", True)
 		image = self._rpl.share(filename, ImageFile)
 		image.read()
-		offs, dimens = self["offset"].get(), self["dimensions"].get()
+		offs = self["offset"].get()
+		width, height = self.dimensions()
 		self._image = image.getImage(
 			offs[0].get() * self._owm, offs[1].get() * self._ohm,
-			dimens[0].get() * self._wm, dimens[1].get() * self._hm
+			width, height
 		)
 		# Do this here because export does it last
 		self.importTransform()
@@ -330,8 +344,7 @@ class Graphic(RPL.Serializable):
 		"""
 		Should override this with reading method.
 		"""
-		dimens = self["dimensions"].get()
-		width, height = dimens[0].get() * self._wm, dimens[1].get() * self._hm
+		width, height = self.dimensions()
 		# Palettes can't have per-color transparency? ;~;
 		self._image = Image.new("RGBA", (width, height))
 		self._image.paste(self["blank"].get(), (0, 0, width, height))
@@ -344,9 +357,9 @@ class Graphic(RPL.Serializable):
 		"""
 		if self._image is None: self.prepareImage()
 		self.exportTransform()
-		offs, dimens = self["offset"].get(), self["dimensions"].get()
+		offs = self["offset"].get()
 		offx, offy = offs[0].get() * self._owm, offs[1].get() * self._ohm
-		width, height = dimens[0].get() * self._wm, dimens[1].get() * self._hm
+		width, height = self.dimensions()
 		filename = self.open(folder, "png", True)
 		image = self._rpl.share(filename, ImageFile)
 		image.ensureSize(offx + width, offy + height)
@@ -701,11 +714,11 @@ class DataFormat(object):
 		#endfor
 	#enddef
 
-	def importDataLoop(self, rom):
+	def importDataLoop(self, rom, base=None):
 		"""
 		Initially called from Data.importData
 		"""
-		base = self.base(rom=rom)
+		if base is None: base = self.base(rom=rom)
 
 		for k in self._format:
 			fmt = self._format[k]
@@ -716,13 +729,19 @@ class DataFormat(object):
 				# If this was len, it's currently the size of the serialized data.
 				# However, if the key it's for is end type, it needs to be adjusted
 				# to the ending address instead.
+				# TODO: This currently enforces that if one needs to reference
+				# something with the end tag, it needs to be done after that
+				# data struct, so that that data struct will be imported first.
+				# I don't like this, but moving all this to __getitem__ means
+				# that the data can't be changed.. There must be a nicer way to
+				# get around this but it might take severe redesigning.
 				if com[0] == "len" and self._format[com[1]]["end"]:
-					data = RPL.Number(data.get() + self._format[com[1]]["offset"])
+					self[k] = data = RPL.Number(data.get() + self._format[com[1]]["offset"])
 				elif com[0] == "count" and self._format[com[1]]["end"]:
 					# This was actually a count, not a size..
 					size = 0
 					for x in self.get(com[1]): size += x.len()
-					data = RPL.Number(size + self._format[com[1]]["offset"])
+					self[k] = data = RPL.Number(size + self._format[com[1]]["offset"])
 				#endif
 			#endif
 			if ":" in typeName:
@@ -1074,7 +1093,6 @@ class GenericGraphic(Graphic):
 		#endfor
 
 		# Commit to ROM
-		self.base(rom=rom)
 		rom.write(stream.getvalue())
 	#enddef
 
@@ -1605,6 +1623,7 @@ class Color(RPL.Named, RPL.HexNum, RPL.Literal, RPL.List):
 		"pink":        0x00ff00ff,
 		"cyan":        0x0000ffff,
 		"gray":        0x00a5a5a5,
+		"grey":        0x00a5a5a5,
 		"transparent": 0xff000000,
 	}
 
