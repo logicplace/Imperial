@@ -1084,6 +1084,14 @@ class RPLStruct(object):
 		self._keys[name] = [check, default]
 	#enddef
 
+	def unregisterKey(self, name):
+		"""
+		Unregisters a key. Please, only call this in init functions!
+		"""
+		try: del self._keys[name]
+		except KeyError: pass
+	#enddef
+
 	def registerStruct(self, classRef):
 		"""
 		Method to register a struct as allowable for being a substruct of this.
@@ -1107,21 +1115,26 @@ class RPLStruct(object):
 		You're allowed to replace this if you require special functionality.
 		Just please make sure it all functions logically.
 		"""
-		x = self
-		while x and key not in x._data: x = x.parent()
-		if x:
-			# Verify that typing is the same between this ancestor and itself
-			# This is just a quick check for speed.
-			if (key not in self._keys or (key in x._keys and
-				x._keys[key][0]._source == self._keys[key][0]._source
-			)): return x._data[key]
+		# I'm iffy about this, but really, it just means that virual
+		# key handling needs an override.
+		if key in self._data or key in self._keys:
+			x = self
+			while x and key not in x._data: x = x.parent()
+			if x:
+				# Verify that typing is the same between this ancestor and itself
+				# This is just a quick check for speed.
+				if (key not in self._keys or (key in x._keys and
+					x._keys[key][0]._source == self._keys[key][0]._source
+				)): return x._data[key]
 
-			# Otherwise, run the verification
-			return self._keys[key][0].verify(x._data[key])
-		elif key in self._keys and self._keys[key][1] is not None:
-			self._data[key] = self._keys[key][1]
-			return self._data[key]
-		else: raise RPLError('No key "%s" in "%s"' % (key, self._name))
+				# Otherwise, run the verification
+				return self._keys[key][0].verify(x._data[key])
+			elif key in self._keys and self._keys[key][1] is not None:
+				self._data[key] = self._keys[key][1]
+				return self._data[key]
+			#endif
+		#endif
+		raise RPLError('No key "%s" in "%s"' % (key, self._name))
 	#enddef
 
 	def __setitem__(self, key, value):
@@ -1567,7 +1580,8 @@ class Serializable(RPLStruct):
 		if value is None: value = self["base"]
 		if rom is None: rom = self._rpl.rom
 
-		v = value.get()
+		try: v = value.get()
+		except AttributeError: v = value
 		if isinstance(value, List):
 			rel, base = {
 				"b": 0, "begin": 0, "s": 0, "start": 0,
