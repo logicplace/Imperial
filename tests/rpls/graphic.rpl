@@ -51,7 +51,7 @@ static {
 
 		graphic Image256 {
 			file: @File.imgname8
-			base: @Data16.xpixoff
+			base: @Data256.xpixoff
 			pixel: '8bi'
 			palette: @PaletteEntry.xcolor
 		}
