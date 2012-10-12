@@ -430,7 +430,12 @@ class IOTest(RPLTestCase):
 	compares: Tuples of (expected data, result data) order is important because
 	          the result data is deleted before the tests.
 	"""
-	def _xxport(self, direction, name, *compares):
+	def _xxport(self, direction, name, ext, what, compares):
+		if type(what) is not list:
+			compares = [what] + list(compares)
+			what = None
+		#endif
+
 		arpl = rpl.RPL()
 		arpl.parse(os.path.join("tests", "rpls", name + ".rpl"))
 		folder = os.path.join("tests", "rpls", name.split("_", 1)[0])
@@ -438,81 +443,10 @@ class IOTest(RPLTestCase):
 		# Delete files
 		for file1, file2 in compares:
 			try: os.unlink(os.path.join(folder, file2))
-			except OSError: pass
-#			except OSError as err:
-#				if err.errno == 2: pass
-#				raise
-#			#endtry
-		#endfor
-
-		if direction == 0: arpl.importData(os.path.join(folder, "test." + name + ".bin"), folder)
-		else: arpl.exportData(os.path.join(folder, name + ".bin"), folder)
-
-		self.time = time()
-		for file1, file2 in compares:
-			# Compare test.bin with data.bin
-			data = read([folder, file1], "rb")
-			test = read([folder, file2], "rb")
-			self.assertEqual(data, test, "Unexpected result from %s." %
-				["import", "export"][direction]
-			)
-		#endfor
-	#enddef
-
-	def _import(self, name, *compares): return self._xxport(0, name, *compares)
-	def _export(self, name, *compares): return self._xxport(1, name, *compares)
-#enddef
-
-class TestData(IOTest):
-	@timedTest
-	def testImport(self): self._import("data", ("data.bin", "test.data.bin"))
-
-	@timedTest
-	def testExport(self): self._export("data", ("data.rpl", "test.data.rpl"))
-#endclass
-
-class TestMapString(IOTest):
-	@timedTest
-	def testImport(self): self._import("map_string", ("map_string.bin", "test.map_string.bin"))
-
-	@timedTest
-	def testExport(self): self._export("map_string", ("map_string.rpl", "test.map_string.rpl"))
-#endclass
-
-class TestMapList(IOTest):
-	@timedTest
-	def testImport(self): self._import("map_list", ("map_list.bin", "test.map_list.bin"))
-
-	@timedTest
-	def testExport(self): self._export("map_list", ("map_list.rpl", "test.map_list.rpl"))
-#endclass
-
-class TestTable(IOTest):
-	@timedTest
-	def testImport(self): self._import("table", ("table.bin", "test.table.bin"))
-
-	@timedTest
-	def testExport(self): self._export("table", ("table.rpl", "test.table.rpl"))
-#endclass
-
-class ImageTest(RPLTestCase):
-	"""
-	compares: Tuples of (expected data, result data) order is important because
-	          the result data is deleted before the tests.
-	"""
-	def _xxport(self, direction, name, ext, what, *compares):
-		arpl = rpl.RPL()
-		arpl.parse(os.path.join("tests", "rpls", name + ".rpl"))
-		folder = os.path.join("tests", "rpls", name.split("_", 1)[0])
-
-		# Delete files
-		for file1, file2 in compares:
-			try: os.unlink(os.path.join(folder, file2))
-			except OSError: pass
-#			except OSError as err:
-#				if err.errno == 2: pass
-#				raise
-#			#endtry
+			except OSError as err:
+				if err.errno == 2: pass
+				else: raise
+			#endtry
 		#endfor
 
 		if direction == 0: arpl.importData(os.path.join(folder, "test." + name + ext), folder, what)
@@ -521,25 +455,64 @@ class ImageTest(RPLTestCase):
 		self.time = time()
 		for file1, file2 in compares:
 			# Compare test.bin with data.bin
-			# TODO: Currently not doing alpha
-			data = Image.open(os.path.join(folder, file1))
-			test = Image.open(os.path.join(folder, file2))
-			ldata, ltest = (
-				"".join([chr(x[0]) + chr(x[1]) + chr(x[2]) for x in list(data.convert().getdata())]),
-				"".join([chr(x[0]) + chr(x[1]) + chr(x[2]) for x in list(test.convert().getdata())])
+			exts = map(lambda x: x[1:].lower(),
+				[os.path.splitext(file1)[1], os.path.splitext(file2)[1]]
 			)
-			self.assertEqual(ldata, ltest, "Unexpected result from %s." %
+			# PIL supports a few other formats for r/w but I'm not too concerned.
+			if helper.allIn(exts, ["bmp", "jpg", "jpeg", "png", "gif", "tif", "tiff"]):
+				data = Image.open(os.path.join(folder, file1))
+				test = Image.open(os.path.join(folder, file2))
+				data, test = (
+					"".join([chr(x[0]) + chr(x[1]) + chr(x[2]) for x in list(data.convert().getdata())]),
+					"".join([chr(x[0]) + chr(x[1]) + chr(x[2]) for x in list(test.convert().getdata())])
+				)
+			else:
+				data = read([folder, file1], "rb")
+				test = read([folder, file2], "rb")
+			#endif
+			self.assertEqual(data, test, "Unexpected result from %s." %
 				["import", "export"][direction]
 			)
-			del data, test, ldata, ltest
 		#endfor
 	#enddef
 
-	def _import(self, name, ext, what, *compares): return self._xxport(0, name, ext, what, *compares)
-	def _export(self, name, ext, what, *compares): return self._xxport(1, name, ext, what, *compares)
+	def _import(self, name, ext, what=None, *compares): return self._xxport(0, name, ext, what, compares)
+	def _export(self, name, ext, what=None, *compares): return self._xxport(1, name, ext, what, compares)
 #enddef
 
-class TestGraphic(ImageTest):
+class TestData(IOTest):
+	@timedTest
+	def testImport(self): self._import("data", ".bin", ("data.bin", "test.data.bin"))
+
+	@timedTest
+	def testExport(self): self._export("data", ".bin", ("data.rpl", "test.data.rpl"))
+#endclass
+
+class TestMapString(IOTest):
+	@timedTest
+	def testImport(self): self._import("map_string", ".bin", ("map_string.bin", "test.map_string.bin"))
+
+	@timedTest
+	def testExport(self): self._export("map_string", ".bin", ("map_string.rpl", "test.map_string.rpl"))
+#endclass
+
+class TestMapList(IOTest):
+	@timedTest
+	def testImport(self): self._import("map_list", ".bin", ("map_list.bin", "test.map_list.bin"))
+
+	@timedTest
+	def testExport(self): self._export("map_list", ".bin", ("map_list.rpl", "test.map_list.rpl"))
+#endclass
+
+class TestTable(IOTest):
+	@timedTest
+	def testImport(self): self._import("table", ".bin", ("table.bin", "test.table.bin"))
+
+	@timedTest
+	def testExport(self): self._export("table", ".bin", ("table.rpl", "test.table.rpl"))
+#endclass
+
+class TestGraphic(IOTest):
 	@timedTest
 	def testImport16(self): self._import("graphic", "16.bmp", ["Header", "BMP16"], ("graphic16.bmp", "test.graphic16.bmp"))
 	@timedTest
@@ -548,11 +521,19 @@ class TestGraphic(ImageTest):
 	def testImport24b(self): self._import("graphic", "24b.bmp", ["Header", "BMP24b"], ("graphic24b.bmp", "test.graphic24b.bmp"))
 
 	@timedTest
-	def testExport16(self): self._export("graphic", "16.bmp", ["Header", "BMP16"], ("graphic.png", "test.graphic16.png"))
+	def testExport16(self): self._export("graphic", "16.bmp", ["Header", "BMP16"], ("graphic.png", "test.graphic16.png"), ("graphic16.rpl", "test.graphic16.rpl"))
 	@timedTest
-	def testExport256(self): self._export("graphic", "256.bmp", ["Header", "BMP256"], ("graphic.png", "test.graphic256.png"))
+	def testExport256(self): self._export("graphic", "256.bmp", ["Header", "BMP256"], ("graphic.png", "test.graphic256.png"), ("graphic256.rpl", "test.graphic256.rpl"))
 	@timedTest
-	def testExport24b(self): self._export("graphic", "24b.bmp", ["Header", "BMP24b"], ("graphic.png", "test.graphic24b.png"))
+	def testExport24b(self): self._export("graphic", "24b.bmp", ["Header", "BMP24b"], ("graphic.png", "test.graphic24b.png"), ("graphic24b.rpl", "test.graphic24b.rpl"))
+#endclass
+
+class TestMin(IOTest):
+	@timedTest
+	def testImport(self): self._import("min", ".bin", ("min.bin", "test.min.bin"))
+
+	@timedTest
+	def testExport(self): self._export("min", ".bin", ("tile.bmp", "test.tile.bmp"), ("tilemap1.bmp", "test.tilemap1.bmp"), ("tilemap2.bmp", "test.tilemap2.bmp"))
 #endclass
 
 if __name__ == "__main__":

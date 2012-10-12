@@ -1,0 +1,76 @@
+RPL { lib: [std, min] }
+
+iostatic File {
+	tile: [tile.bmp, test.tile.bmp]
+	tilemap1: [tilemap1.bmp, test.tilemap1.bmp]
+	tilemap2: [tilemap2.bmp, test.tilemap2.bmp]
+	gtile: [gtile.bmp, test.gtile.bmp]
+	gtilemap: [gtilemap.bmp, test.gtilemap.bmp]
+	sprite: [sprite.bmp, test.sprite.bmp]
+	spritemap: [spritemap.bmp, test.spritemap.bmp]
+	gsprite: [gsprite.bmp, test.gsprite.bmp]
+	gspritemap: [gspritemap.bmp, test.gspritemap.bmp]
+}
+
+tile Tile {
+	base: $000000
+	file: @File.tile
+}
+
+tilemap Tilemap1 {
+	base: $000008
+	file: @File.tilemap1
+	dimensions: [2, 3]
+	map: 1-2:4-5:7-8
+}
+
+tilemap Tilemap2 {
+	base: $000008
+	file: @File.tilemap2
+	dimensions: [2, 3]
+	map: 0-5
+
+	tile { offset: [2, 0] }
+	tile { offset: [2, 1] }
+	tile { offset: [2, 2] }
+}
+
+tile3 Tile3 {
+	base1: $0000e0
+	base2: $0000e8
+	file: @File.gtile
+}
+
+tilemap3 Tilemap3 {
+	base1: $000050
+	base2: $000098
+	file: @File.gtilemap
+	dimensions: [3, 3]
+	map: 0-8
+}
+
+sprite Sprite {
+	base: $0005f0
+	file: @File.sprite
+}
+
+spritemap Spritemap {
+	base: $000630
+	file: @File.spritemap
+	dimensions: [2, 1]
+	map: 0-1
+}
+
+sprite3 Sprite3 {
+	base1: $0000f0
+	base2: $000370
+	file: @File.gsprite
+}
+
+spritemap3 Spritemap3 {
+	base1: $000130
+	base2: $0003b0
+	file: @File.gspritemap
+	dimensions: [3, 3]
+	map: 0-8
+}
