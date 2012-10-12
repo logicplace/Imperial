@@ -148,8 +148,8 @@ def main():
 				filehelp.print_help()
 			else:
 				# Load a lib's help
-				tmp = __import__(args.args[0], globals(), locals())
-				tmp.print_help(args.args[1:])
+				tmp = getattr(__import__("rpl." + args.args[0], globals(), locals()), args.args[0])
+				tmp.printHelp(args.args[1:])
 			#endif
 		#endif
 	elif args.template:
