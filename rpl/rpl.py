@@ -35,6 +35,10 @@ from collections import OrderedDict as odict
 #    otherwise return the already loaded/modified data to be further modified.
 #  * Add referencing multiline strs with @` ` form.
 
+################################################################################
+#################################### Helpers ###################################
+################################################################################
+
 class RPLError(Exception): pass
 
 class RecurseIter(object):
@@ -62,9 +66,123 @@ class RecurseIter(object):
 	#enddef
 #endclass
 
+class Share(object):
+	# Store the path and RPL for later, called by share function
+	def setup(self, rpl, path): self._rpl, self._path = rpl, path
+	# If we're importing, it should read in the file
+	# Parsing and distrubution is handled after it's contained in the class
+	def read(self): pass
+	# Writes the data to the file, as the final stage of exporting.
+	def write(self): pass
+	# How the data is read in from the ROM is not relevant to this class.
+	# Such things should be handled by the struct class. But this should contain
+	# whatever it needs to add the data to this class. I suggest an add function
+	# specific to this data type.
+	#def add(self, *args): pass
+	# How the data is writen into the ROM is also handled by the struct class.
+	# That is done right away. As opposed to needing to be queued like writing
+	# for exporting. This class contains nothing relating to this process.
+#endclass
+
+class SharedRegistry(Share):
+	def __init__(self): self.ks, self.new = (odict(), {}), True
+
+	def register(self, func):
+		if self.new:
+			func()
+			self.new = False
+		#endif
+	#enddef
+#endclass
+
+################################################################################
+##################################### Main #####################################
+################################################################################
+
+class RPLObject(object):
+	"""
+	Base class for RPL (file/root) and RPLStruct.
+	"""
+	def __init__(self, top=None, name=None, parent=None):
+		self.rpl = top or self
+		self.children = odict()
+		self.name = name
+		self.parent = parent
+
+		tmp = top.share("?INTERNAL:%s" % self.typeName, SharedRegistry)
+		self.keys, self.structs = tmp.ks
+		tmp.register(self.register)
+
+		self.nocopy = ["rpl", "parent", "structs"]
+	#enddef
+
+	def addChild(self, structType, name):
+		"""
+		Create a new struct and add it as a child of this one.
+		"""
+		if structType not in self.structs:
+			raise RPLError("%s isn't allowed as a substruct of %s." % (
+				sType, self.typeName
+			))
+		#endif
+		new = self.structs[sType](self.rpl, name, self)
+		self.children[name] = new
+		return new
+	#enddef
+
+	def registerStruct(self, classRef):
+		"""
+		Method to register a struct as allowable for being a substruct of this.
+		"""
+		try: classRef.typeName
+		except AttributeError:
+			raise RPLError(
+				"You may not register a struct (%s) without a typeName."
+				% classRef.__class__.__name__
+			)
+		#endtry
+		self.structs[classRef.typeName] = classRef
+	#enddef
+
+	def unregisterStruct(self, classRef):
+		"""
+		Unregisters a struct. Please, only call this in register functions!
+		"""
+		try: del self.structs[name]
+		except KeyError: pass
+	#enddef
+
+	def __nonzero__(self): return True
+	def __iter__(self): return self.children.itervalues()
+	def child(self, name): return self.children[name]
+	def recurse(self): return RecurseIter(self.children)
+
+	def childrenByType(self, typeName):
+		"""
+		Return list of children that fit the given typeName
+		typeName may be a string or the class that it will grab the string from
+		"""
+		if issubclass(typeName, RPLStruct): typeName = typeName.typeName
+		ret = []
+		for x in self.children.itervalues():
+			if x.typeName == typeName: ret.append(x)
+		#endfor
+		return ret
+	#enddef
+
+	def __deepcopy__(self, memo={}):
+		ret = object.__new__(self.__class__)
+		for k, x in self.__dict__.iteritems():
+			if k in self.nocopy or callable(x): setattr(ret, k, x)
+			else: setattr(ret, k, copy.deepcopy(x))
+		#endfor
+		return ret
+	#enddef
+#enddef
+
 # TODO: Sometime I need to make RPL and RPLStruct inherit the same class
 # for their redundant functions..
-class RPL(object):
+class RPL(RPLObject):
 	"""
 	The base type for loading and interpreting RPL files.
 	Also handles "execution" and what not.
@@ -140,16 +258,18 @@ class RPL(object):
 	isRange = re.compile(r'[:\-*+~]')
 
 	def __init__(self):
+		RPLObject.__init__()
+		del self.keys
 		self.types = {}              # Registered data types
-		self.structs = {}            # Structs allowed in the root
-		self.root = odict()          # Top-level structs in the rpl file
 		self.structsByName = {}      # All structs in the file
 		self.sharedDataHandlers = {} # Used by RPL.share
 		self.importing = None        # Used by RPL.share, NOTE: I would like to remove this..
 		self.alreadyLoaded   = ["helper", "__init__", "rpl"]
 		self.alreadyIncluded = []    # These are used by RPL.load
 		self.defaultTemplateStructs = ["RPL", "ROM"] # What to include in the default template
+	#enddef
 
+	def register(self):
 		# Registrations
 		self.registerStruct(StructRPL)
 		self.registerStruct(ROM)
@@ -546,21 +666,6 @@ class RPL(object):
 		defs[key] = self.parseData(value, defs, key)
 	#enddef
 
-	def addChild(self, structType, name):
-		"""
-		Add a new struct to the root "element"
-		Note that this currently does not add things to structsByName, making
-		structs only added to the root by this method unreferenceable.
-		I'm not sure if this should be adjusted or not, yet.
-		"""
-		if structType not in self.structs:
-			raise RPLError("%s isn't allowed as a substruct of root." % structType)
-		#endif
-		new = self.structs[structType](self, name)
-		self.root[name] = new
-		return new
-	#enddef
-
 	def __unicode__(self):
 		"""
 		Write self as an RPL file.
@@ -575,19 +680,6 @@ class RPL(object):
 		Method to register a custom type.
 		"""
 		self.types[classRef.typeName] = classRef
-	#enddef
-
-	def registerStruct(self, classRef):
-		"""
-		Method to register a custom struct as allowable in the root.
-		"""
-		try: classRef.typeName
-		except AttributeError:
-			raise RPLError(
-				"You may not register a struct "
-				"(%s) without a typeName." % classRef.__class__.__name__
-			)
-		self.structs[classRef.typeName] = classRef
 	#enddef
 
 	def template(self, structs=[]):
@@ -718,25 +810,6 @@ class RPL(object):
 			self.sharedDataHandlers[share] = tmp
 			return tmp
 		#endif
-	#enddef
-
-	def child(self, name): return self.root[name]
-	def __iter__(self): return self.root.itervalues()
-	def recurse(self): return RecurseIter(self.root)
-
-	def childrenByType(self, typeName):
-		"""
-		Return list of children that fit the given typeName
-		typeName may be a string or the class that it will grab the string from
-		"""
-		if type(typeName) not in [str, unicode] and issubclass(typeName, RPLStruct):
-			typeName = typeName.typeName
-		#endif
-		ret = []
-		for x in self.root.itervalues():
-			if x.typeName == typeName: ret.append(x)
-		#endfor
-		return ret
 	#enddef
 #endclass
 
@@ -1032,7 +1105,7 @@ class RPLTCOr(object):
 ################################################################################
 ################################### RPLStruct ##################################
 ################################################################################
-class RPLStruct(object):
+class RPLStruct(RPLObject):
 	"""
 	Base class for a struct.
 	When making your own struct type, inherit from this, or a subclass of it.
@@ -1044,61 +1117,52 @@ class RPLStruct(object):
 
 	def __init__(self, rpl, name, parent=None):
 		# Be sure to call this in your own subclasses!
-		self._rpl = rpl
-		self._name = name
-		self._parent = parent
-		self._data = {}
-		self._keys = odict()
-		self._structs = {}
-		self._children = odict()
-
-		self._nocopy = ["_rpl", "_parent", "_keys"]
+		RPLObject.__init__(rpl, name, parent)
+		self.keys = odict()
+		self.virtuals = {}
+		self.data = odict()
+		self.nocopy.append("keys")
 	#enddef
 
-	def addChild(self, sType, name):
+	def register(self):
 		"""
-		Add a new struct as a child of this one.
+		Fill this in with key and substruct un/registrations.
+		Call the parent struct's register function to use its registrations.
 		"""
-		if sType not in self._structs:
-			raise RPLError("%s isn't allowed as a substruct of %s." % (
-				sType, self.typeName
-			))
-		#endif
-		new = self._structs[sType](self._rpl, name, self)
-		self._children[name] = new
-		return new
+		pass
 	#enddef
 
 	def registerKey(self, name, typeStr, default=None):
 		"""
 		Register a key by name with type and default.
 		"""
-		check = RPLTypeCheck(self._rpl, name, typeStr)
+		check = RPLTypeCheck(self.rpl, name, typeStr)
 		if default is not None:
-			default = self._rpl.parseData(default)
+			default = self.rpl.parseData(default)
 			# Try to verify, so it can adjust typing
 			try: default = check.verify(default)
 			# But if it fails, we should trust the programmer knows what they want..
 			except RPLError: pass
 		#endif
-		self._keys[name] = [check, default]
+		self.keys[name] = [check, default]
 	#enddef
 
 	def unregisterKey(self, name):
 		"""
-		Unregisters a key. Please, only call this in init functions!
+		Unregisters a key. Please, only call this in register functions!
 		"""
-		try: del self._keys[name]
+		try: del self.keys[name]
+		except KeyError: pass
+
+		try: del self.virtuals[name]
 		except KeyError: pass
 	#enddef
 
-	def registerStruct(self, classRef):
+	def registerVirtual(self, virutalName, realName):
 		"""
-		Method to register a struct as allowable for being a substruct of this.
+		Register a key by name with type and default.
 		"""
-		try: classRef.typeName
-		except AttributeError: classRef.typeName = classRef.__name__.lower()
-		self._structs[classRef.typeName] = classRef
+		self.virtuals[virtualName] = realName
 	#enddef
 
 	def __unicode__(self):
@@ -1115,23 +1179,24 @@ class RPLStruct(object):
 		You're allowed to replace this if you require special functionality.
 		Just please make sure it all functions logically.
 		"""
+		if key in self.viruals: key = self.virtuals[key]
 		# I'm iffy about this, but really, it just means that virual
 		# key handling needs an override.
-		if key in self._data or key in self._keys:
+		if key in self.data or key in self.keys:
 			x = self
-			while x and key not in x._data: x = x.parent()
+			while x and key not in x.data: x = x.parent()
 			if x:
 				# Verify that typing is the same between this ancestor and itself
 				# This is just a quick check for speed.
-				if (key not in self._keys or (key in x._keys and
-					x._keys[key][0]._source == self._keys[key][0]._source
-				)): return x._data[key]
+				if (key not in self.keys or (key in x.keys and
+					x.keys[key][0].source == self.keys[key][0].source
+				)): return x.data[key]
 
 				# Otherwise, run the verification
-				return self._keys[key][0].verify(x._data[key])
-			elif key in self._keys and self._keys[key][1] is not None:
-				self._data[key] = self._keys[key][1]
-				return self._data[key]
+				return self.keys[key][0].verify(x.data[key])
+			elif key in self.keys and self.keys[key][1] is not None:
+				self.data[key] = self.keys[key][1]
+				return self.data[key]
 			#endif
 		#endif
 		raise RPLError('No key "%s" in "%s"' % (key, self._name))
@@ -1143,21 +1208,12 @@ class RPLStruct(object):
 		You're allowed to replace this if you require special functionality.
 		Just please make sure it all functions logically.
 		"""
-		if key in self._keys:
+		if key in self.viruals: key = self.virtuals[key]
+		if key in self.keys:
 			# Reference's types are lazily checked
-			if isinstance(value, RPLRef): self._data[key] = value
-			else: self._data[key] = self._keys[key][0].verify(value)
+			if isinstance(value, RPLRef): self.data[key] = value
+			else: self.data[key] = self.keys[key][0].verify(value)
 		else: raise RPLError('"%s" has no key "%s".' % (self.typeName, key))
-	#enddef
-
-	def prepareForProc(self, cloneName, cloneKey, cloneRef):
-		"""
-		Stub: If the struct is going to deal in cloneables, it should implement this.
-		When a proc is called, this will be called on every struct telling it
-		what cloneable (by name and key) it needs to make preparations for. This
-		function should make those preparations.
-		"""
-		pass
 	#enddef
 
 	def basic(self, callers=[]):
@@ -1166,7 +1222,7 @@ class RPLStruct(object):
 		In your documentation, please state if this will always return the name
 		by some necessity, or if in the future it may change to an actual value.
 		"""
-		return Literal(self._name)
+		return Literal(self.name)
 	#enddef
 
 	@classmethod
@@ -1178,47 +1234,27 @@ class RPLStruct(object):
 		"""
 		ret = u"%s%s {\n" % (tabs, self.typeName)
 		tabs += "\t"
-		for x in self._keys:
-			if self._keys[x][1] is None:
+		for x in self.keys:
+			if self.keys[x][1] is None:
 				ret += u"%s%s: fill this in...\n" % (tabs, x)
 			else:
-				ret += u"%s#%s: %s\n" % (tabs, x, unicode(self._keys[x][1]))
+				ret += u"%s#%s: %s\n" % (tabs, x, unicode(self.keys[x][1]))
 			#endif
 		#endfor
-		for x in self._structs:
-			ret += self._structs[x].template(rpl, tabs) + "\n"
+		for x in self.structs:
+			ret += self.structs[x].template(rpl, tabs) + "\n"
 		#endfor
 		return ret + tabs[0:-1] + "}"
 	#enddef
-
-	def name(self): return self._name
-	def parent(self): return self._parent
 
 	def __len__(self):
 		"""
 		Return number of children (including keys).
 		"""
-		return len(self._data) + len(self._children)
+		return len(self.data) + len(self.children)
 	#enddef
 
-	def __nonzero__(self): return True
-	def __iter__(self): return self._children.itervalues()
-	def child(self, name): return self._children[name]
-	def iterkeys(self): return iter(self._data)
-	def recurse(self): return RecurseIter(self._children)
-
-	def childrenByType(self, typeName):
-		"""
-		Return list of children that fit the given typeName
-		typeName may be a string or the class that it will grab the string from
-		"""
-		if issubclass(typeName, RPLStruct): typeName = typeName.typeName
-		ret = []
-		for x in self._children.itervalues():
-			if x.typeName == typeName: ret.append(x)
-		#endfor
-		return ret
-	#enddef
+	def iterkeys(self): return iter(self.data)
 
 	def get(self, data):
 		"""
@@ -1238,15 +1274,6 @@ class RPLStruct(object):
 		if isinstance(data, RPLRef): return data.set(val, this=self)
 		else: return data.set(val)
 	#endif
-
-	def __deepcopy__(self, memo={}):
-		ret = object.__new__(self.__class__)
-		for k, x in self.__dict__.iteritems():
-			if k in self._nocopy or callable(x): setattr(ret, k, x)
-			else: setattr(ret, k, copy.deepcopy(x))
-		#endfor
-		return ret
-	#enddef
 #endclass
 
 # Well if that isn't a confusing name~ Sorry :(
@@ -1656,26 +1683,6 @@ class Serializable(RPLStruct):
 		Stub. Fill this in to export appropriately.
 		You will generally not need the ROM here, but in the event that you do,
 		you can grab it from self._rpl.rom
-		"""
-		pass
-	#enddef
-#endclass
-
-class Executable(RPLStruct):
-	"""
-	Inherit this class for structs that do processing on data, rather than
-	directly importing or exporting.
-	"""
-	def importProcessing(self):
-		"""
-		Stub. Fill this in to process data before importing.
-		"""
-		pass
-	#enddef
-
-	def exportProcessing(self):
-		"""
-		Stub. Fill this in to process data before exporting.
 		"""
 		pass
 	#enddef
@@ -2291,26 +2298,4 @@ class Size(Named, Number, Literal):
 	def unserialize(self, data, **kwargs):
 		Number.unserialize(self, data, **kwargs)
 	#enddef
-#endclass
-
-################################################################################
-##################################### Share ####################################
-################################################################################
-
-class Share(object):
-	# Store the path and RPL for later, called by share function
-	def setup(self, rpl, path): self._rpl, self._path = rpl, path
-	# If we're importing, it should read in the file
-	# Parsing and distrubution is handled after it's contained in the class
-	def read(self): pass
-	# Writes the data to the file, as the final stage of exporting.
-	def write(self): pass
-	# How the data is read in from the ROM is not relevant to this class.
-	# Such things should be handled by the struct class. But this should contain
-	# whatever it needs to add the data to this class. I suggest an add function
-	# specific to this data type.
-	#def add(self, *args): pass
-	# How the data is writen into the ROM is also handled by the struct class.
-	# That is done right away. As opposed to needing to be queued like writing
-	# for exporting. This class contains nothing relating to this process.
 #endclass
