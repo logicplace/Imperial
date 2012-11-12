@@ -40,21 +40,25 @@ def register(rpl):
 	rpl.registerType(Pixel)
 	rpl.registerType(Color)
 	rpl.registerType(ReadDir)
+	rpl.registerType(Math)
 #endclass
 
 def printHelp(more_info=[]):
 	print(
 		"std is the standard library for RPL.\n"
 		"It offers the structs:\n"
-		"  data  format  map  iostatic\n\n"
+		"  data  format  map  iostatic  graphic\n\n"
 		"And the types:\n"
-		"  bin\n"
+		"  bin  pixel  color  readdir  math\n"
 	)
 	if not more_info: print "Use --help std [structs...] for more info"
 	infos = {
 		"data": Data, "format": Format,
 		"map": Map, "iostatic": IOStatic,
-		"bin": Bin,
+		"graphic": GenericGraphic,
+		"bin": Bin, "pixel": Pixel,
+		"color": Color, "readdir": ReadDir,
+		"math": Math,
 	}
 	for x in more_info:
 		if x in infos: print dedent(infos[x].__doc__)
@@ -1015,6 +1019,10 @@ class Data(DataFormat, RPL.Serializable):
 	#enddef
 #endclass
 
+def reverseEvery(data, x):
+	return "".join(["".join(reversed(data[i:i+x])) for i in helper.range(0, len(data), x)])
+#enddef
+
 class GenericGraphic(Graphic):
 	"""
 	Manage generic graphical content.
@@ -1028,6 +1036,10 @@ class GenericGraphic(Graphic):
 	       only be one pixel format. It will loop through these when it
 	       reaches the end.
 	palette: 0-based palette. Use i form in palette to index against this.
+	reverse: Reverse the order of the bytes every X bytes. Example:
+	         Data is: 0x01 23 45 67
+	         reverse: 2
+	         Final data is: 0x23 01 67 45
 	"""
 	typeName = "graphic"
 
@@ -1037,6 +1049,7 @@ class GenericGraphic(Graphic):
 		self.registerKey("pixel", "[pixel]*")
 		self.registerKey("palette", "[color]+", "[]")
 		self.registerKey("padding", "[string:(none, row, pixel, column), number]", "[none, 0]")
+		self.registerKey("reverse", "math", "0")
 
 		self._image = None
 	#enddef
@@ -1093,7 +1106,12 @@ class GenericGraphic(Graphic):
 		#endfor
 
 		# Commit to ROM
-		rom.write(stream.getvalue())
+		reverse = self["reverse"].get({
+			"w": width, "width": width,
+			"h": height, "height": height,
+		})
+		if reverse: rom.write(reverseEvery(stream.getvalue(), reverse))
+		else: rom.write(stream.getvalue())
 	#enddef
 
 	def prepareImage(self):
@@ -1159,7 +1177,12 @@ class GenericGraphic(Graphic):
 
 		# Read pixels
 		self.base()
-		stream = StringIO(self._rpl.rom.read(bytes))
+		reverse = self["reverse"].get({
+			"w": width, "width": width,
+			"h": height, "height": height,
+		})
+		if reverse: stream = StringIO(reverseEvery(bytes, reverse))
+		else: stream = StringIO(self._rpl.rom.read(bytes))
 		leftovers, data, prev = ["", 0], [], 0
 		for i in helper.range(numPixels):
 			data.append(pixels[i % len(pixels)].read(stream, palette, leftovers))
@@ -1601,12 +1624,6 @@ class Pixel(RPL.String):
 		#print "#%02x%02x%02x.%i%%" % (r, g, b, a * 100 / 255)
 		return (r, g, b, a)
 	#enddef
-
-	@staticmethod
-	def little(val, length):
-		length /= 8
-		# TODO: blahhhhh idec
-	#enddef
 #endclass
 
 class Color(RPL.Named, RPL.HexNum, RPL.Literal, RPL.List):
@@ -1714,3 +1731,61 @@ class ReadDir(RPL.Literal):
 			return i, x, y
 		#endif
 	#enddef
+#endclass
+
+class Math(RPL.Literal, RPL.Number):
+	"""
+	Handles mathematics.
+	TODO: Currently does not handle Order of Operations or parenthesis.
+	Available operators: + - * / ^ %
+	Division is integer. ^ is power of.
+	Variables may be passed, see respective key for details.
+	"""
+	typeName = "math"
+
+	specification = re.compile(r'([+\-*/^%()])')
+
+	def set(self, data):
+		if type(data) in [int, long]: data = str(data)
+		RPL.Literal.set(self, data)
+		self.tokens = Math.specification.split(self._data.replace(" ", ""))
+	#enddef
+
+	def get(self, var={}):
+		# Simple math for now...
+		# TODO: Currently does not handle OoO or parens
+		num, pos, nextop = None, True, None
+		for i, x in enumerate(self.tokens):
+			try: xn = int(x)
+			except:
+				if x in var: xn = var[x]
+				else: xn = None
+			#endif
+
+			if x == "+":
+				if num is None: pos = True
+				else: nextop = "+"
+			elif x == "-":
+				if num is None: pos = False
+				else: nextop = "-"
+			elif xn is not None:
+				if num is None: num = xn
+				elif nextop is None:
+					raise RPLError("Two sequential numbers with no operator.")
+				elif nextop == "+": num += xn
+				elif nextop == "-": num -= xn
+				elif nextop == "*": num *= xn
+				elif nextop == "/": num /= xn
+				elif nextop == "^": num **= xn
+				elif nextop == "%": num %= xn
+				nextop = None
+			elif x in "*/^%":
+				if num is None:
+					raise RPLError("Cannot have %s as first operation in a group." % x)
+				else: nextop = x
+			else: raise RPLError("Unknown variable or operator.")
+		#endfor
+
+		return num
+	#enddef
+#endclass
