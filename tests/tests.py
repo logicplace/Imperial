@@ -23,21 +23,13 @@
 """
 Test cases for RPL.
 
-NOTE: Timed test results only shown with "python -m tests.tests" Will fix later
-
-The easiest way to run this is via "python -m unittest discover" from the
-project root directory. Alternatively, you can use "python -m tests.tests" to
-run this file specifically, but the former command will discover any other test
-files in the project.
+Usage: python -m tests.tests [tests...]
+For a list of tests see python -m tests.tests --help
 """
 
-import os
-import Image
-import codecs
-import unittest
-from time import time
-
+import os, sys, Image, codecs, unittest
 from rpl import rpl, helper
+from time import time
 
 _timedTests = []
 
@@ -94,7 +86,7 @@ class RPLTestCase(unittest.TestCase):
 	#enddef
 
 	def check(self, data, key, exType, exVal):
-		return self.subCheck(data[key], "%s.%s" % (data.name(), key), exType, exVal)
+		return self.subCheck(data[key], "%s.%s" % (data.name, key), exType, exVal)
 
 	def subComp(self, l1, l2, heir):
 		self.assertEqual(len(l1), len(l2),
@@ -112,9 +104,9 @@ class RPLTestCase(unittest.TestCase):
 		tName, val = data[key].typeName, data[key].get()
 		if tName == "reference": tName = data[key].get(retCl=True).typeName
 		self.assertEqual(tName, exType,
-			'Unexpected datatype for "%s.%s" Got: %s' % (data.name(), key, tName)
+			'Unexpected datatype for "%s.%s" Got: %s' % (data.name, key, tName)
 		)
-		self.subComp(val, ex, "%s.%s" % (data.name(), key))
+		self.subComp(val, ex, "%s.%s" % (data.name, key))
 	#enddef
 #endclass
 
@@ -126,7 +118,7 @@ class TestParse(RPLTestCase):
 	#enddef
 
 	def testRegressions(self):
-		regression = TestParse.basic.root["regression"]
+		regression = TestParse.basic.child("regression")
 		self.comp(regression, "endoflistnospacenumber", "list", [
 			("literal", "lit"), ("number", 1)
 		])
@@ -134,13 +126,13 @@ class TestParse(RPLTestCase):
 	#enddef
 
 	def testAndAnotherStatic(self):
-		AndAnotherStatic = TestParse.basic.root["AndAnotherStatic"]
+		AndAnotherStatic = TestParse.basic.child("AndAnotherStatic")
 		self.checkLen(AndAnotherStatic, 1)
 		self.check(AndAnotherStatic, "just", "literal", "because")
 	#enddef
 
 	def testStatic0(self):
-		static0 = TestParse.basic.root["static0"]
+		static0 = TestParse.basic.child("static0")
 		self.checkLen(static0, 8)
 		self.check(static0, "string", "string", "hi")
 		self.check(static0, "literal", "literal", "bye")
@@ -160,7 +152,7 @@ class TestParse(RPLTestCase):
 		])
 
 		for y in static0:
-			self.assertEqual(y.name(), "sub", 'Unexpected sub "%s"' % y.name())
+			self.assertEqual(y.name, "sub", 'Unexpected sub "%s"' % y.name)
 			self.checkLen(y, 1)
 			self.check(y, "lit", "literal", ":D")
 		#endfor
@@ -537,8 +529,56 @@ class TestMin(IOTest):
 #endclass
 
 if __name__ == "__main__":
+	run = sys.argv[1:]
+	if not run: run = ["all"]
+	elif run[0] in ["-?", "-h", "--help", "/?"]:
+		print "\n".join((
+			"all        - Run all tests (default).",
+			"rpl        - Run all basic tests.",
+			"std        - Run all std lib tests.",
+			"min        - Run all min lib tests.",
+			"parse      - Run .rpl parsing test.",
+			"typecheck  - Run typechecking tests.",
+			"references - Run reference tests.",
+			"ROM        - Run ROM struct tests.",
+			"RPL        - Run RPL struct tests.",
+			"data       - Run data struct tests.",
+			"graphic    - Run graphic struct tests.",
+			"map        - Run map struct tests.",
+			"maplist    - Run only map's list-type test.",
+			"mapstring  - Run only map's string-type test.",
+			"table      - Run table struct tests.",
+		))
+		sys.exit(0)
+	#endif
+
+	suite = []
+	if helper.oneOfIn(["all", "rpl", "parse"], run): suite.append(TestParse)
+	if helper.oneOfIn(["all", "rpl", "typecheck"], run): suite.append(TestTypeCheck)
+	if helper.oneOfIn(["all", "rpl", "references"], run): suite.append(TestReferences)
+	if helper.oneOfIn(["all", "rpl", "RPL"], run): suite.append(TestRPL)
+	if helper.oneOfIn(["all", "rpl", "ROM"], run): suite.append(TestROM)
+	if helper.oneOfIn(["all", "std", "data"], run): suite.append(TestData)
+	if helper.oneOfIn(["all", "std", "map", "mapstring"], run): suite.append(TestMapString)
+	if helper.oneOfIn(["all", "std", "map", "maplist"], run): suite.append(TestMapList)
+	if helper.oneOfIn(["all", "std", "table"], run): suite.append(TestTable)
+	if helper.oneOfIn(["all", "std", "graphic"], run): suite.append(TestGraphic)
+	if helper.oneOfIn(["all", "min"], run): suite.append(TestMin)
 	try:
-		unittest.main()
+		if suite:
+			for x in suite:
+				print "===== Tests for %s =====" % x.__name__.replace("Test", "")
+				unittest.TextTestRunner().run(
+					unittest.defaultTestLoader.loadTestsFromTestCase(x)
+				)
+			#endfor
+		else: unittest.main()
 	finally:
+		total = 0.0
 		for test, time in _timedTests:
 			print "Time for %s: %.3fs" % (test, time)
+			total += time
+		#endfor
+		print "Total time for all tests: %.3fs" % total
+	#endtry
+#endif

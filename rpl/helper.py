@@ -1,5 +1,6 @@
 import codecs
 from sys import stderr
+from textwrap import dedent
 
 #
 # Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
@@ -88,6 +89,72 @@ def list2english(l, conjunction=u"and"):
 	if len(l) == 1: return l[0]
 	elif len(l) == 2: return u"%s %s %s" % (l[0], conjunction, l[1])
 	else: return u"%s, %s %s" % (", ".join(l[0:-1]), conjunction, l[-1])
+#enddef
+
+def printDox(struct, context):
+	"""
+	Supports the markup:
+	{snip} {/snip} - To remove a sections from the docstring before printing.
+	                 Each tag may be used alone as if the \A and \Z were anchors.
+	{imp ClassName} - Import docstring from another class.
+	"""
+	tmp, dox = dedent(struct.__doc__), u""
+
+	imp = tmp.find("{imp ")
+	while imp != -1:
+		impEnd = tmp.find("}", imp)
+		tmp = tmp[:imp] + dedent(context[tmp[imp + 5:impEnd]].__doc__) + tmp[impEnd + 1:]
+		imp = tmp.find("{imp ")
+	#endwhile
+
+	bsnip, esnip = tmp.find("{snip}"), tmp.find("{/snip}")
+	while bsnip != -1 or esnip != -1:
+		if bsnip != -1:
+			if bsnip < esnip:
+				dox += tmp[:bsnip]
+				tmp = tmp[esnip + 7:]
+			elif esnip != -1:
+				dox += tmp[esnip + 7:bsnip]
+				tmp = tmp[bsnip:]
+			else:
+				dox += tmp[:bsnip]
+				break
+			#endif
+		else:
+			tmp = tmp[esnip + 7:]
+		#endif
+		bsnip, esnip = tmp.find("{snip}"), tmp.find("{/snip}")
+	#endwhile
+
+	print dox + tmp
+#enddef
+
+def genericHelp(context, desc, structs, types=None):
+	if types:
+		if not more_info:
+			print ("%s\n"
+				"It offers the structs:\n  %s\n\n"
+				"And the types:\n  %s\n\n"
+			) % (desc, "  ".join(structs), "  ".join(types))
+			print "Use --help std [structs...] for more info"
+		else:
+			for x in more_info:
+				if x in structs: printDox(structs[x], context)
+				elif x in types: printDox(types[x], context)
+			#endfor
+		#endif
+	else:
+		if not more_info:
+			print ("%s\n"
+				"It offers the structs:\n  %s\n\n"
+			) % (desc, "  ".join(structs))
+			print "Use --help std [structs...] for more info"
+		else:
+			for x in more_info:
+				if x in structs: printDox(structs[x], context)
+			#endfor
+		#endif
+	#endif
 #enddef
 
 class OverSeek(file):

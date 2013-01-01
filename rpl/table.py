@@ -23,23 +23,17 @@ def register(rpl):
 	rpl.registerStruct(Table)
 #enddef
 
-def printHelp(more_info=[]):
-	print(
+def printHelp(moreInfo=[]):
+	helper.genericHelp(locals(),
 		"The table library aids in dealing with table or database formats that "
-		"use a table head for dynamic typing and such.\n"
-		"It offers the structs:\n"
-		"  table\n"
+		"use a table head for dynamic typing and such.\n", {
+			# Structs
+			"table": Table,
+		}
 	)
-	if not more_info: print "Use --help table [structs...] for more info"
-	infos = {
-		"table": Table
-	}
-	for x in more_info:
-		if x in infos: print dedent(infos[x].__doc__)
-	#endfor
 #enddef
 
-class Table(RPL.Cloneable):
+class Table(RPL.Serializable):
 	"""
 	Manages dynamic typing and such.
 	index:  List of indexes that map to format.
@@ -54,30 +48,41 @@ class Table(RPL.Cloneable):
 	typeName = "table"
 
 	def __init__(self, rpl, name, parent=None):
-		RPL.Cloneable.__init__(self, rpl, name, parent)
+		RPL.Serializable.__init__(self, rpl, name, parent)
 		self.registerKey("index", "[number|string]+")
-		self.registerKey("format", "[string]+")
+		self.registerKey("format", "[reference]+")
 		self.registerKey("head", "reference")
 		self.registerKey("name", "string", "")
 		self.registerKey("type", "string")
 		self.registerKey("unique", "number|string", "")
 
-		self._base = None
-		self._row = []
+		self.row = []
+	#enddef
+
+	def __setitem__(self, key, value):
+		if key == "format":
+			for x in value.list():
+				# Try to manage this
+				try: x.pointer().unmanaged = False
+				# Does not exist yet... will need to be set in preparation.
+				except RPL.RPLError: pass
+			#endfor
+		#endif
+		RPL.Serializable.__setitem__(self, key, value)
 	#enddef
 
 	def __getitem__(self, key):
-		if key == "row": return self._row
-		elif key == "base": return self._base
-		else: return RPL.Cloneable.__getitem__(self, key)
+		if key == "row": return self.row
+		else: return RPL.Serializable.__getitem__(self, key)
 	#enddef
 
-	def importPrepare(self, rom, folder, filename, data):
+	def importPrepare(self, rom, folder, filename=None, data=None, callers=[]):
 		"""
 		Called from DataFormat.importPrepare.
 		"""
 
-		self._row = []
+		self.row = []
+		data = data.get()
 		for idx, col in enumerate(self.get(self["head"])):
 			typeidx = col[self.get(self["type"])]
 			try: idxidx = self.get("index").index(typeidx)
@@ -85,22 +90,16 @@ class Table(RPL.Cloneable):
 				raise RPLError("Encountered unknown type %s when processing table." % typeidx)
 			#endtry
 
-			tmp = self.get(self.get("format")[idxidx]).split(":", 1)
-			if len(tmp) == 1: struct, name = "Format", tmp[0]
-			else: struct, name = tuple(tmp)
-			# TODO: Verify struct somehow?
-
-			ref = self._rpl.child(name)
-			one = ref.countExported() == 1
+			ref = self.get("format")[idxidx].pointer()
+			ref.unmanaged = False
 			clone = ref.clone()
-			if one: tmp = [data[idx]]
-			else: tmp = data[idx].get()
-			clone.importPrepare(rom, folder, filename, tmp)
-			self._row.append(clone)
+			try: clone.importPrepare(rom, folder, filename, data[idx], callers + [self])
+			except TypeError: clone.importPrepare(rom, folder)
+			self.row.append(clone)
 		#endfor
 	#enddef
 
-	def exportPrepare(self, rom, folder):
+	def exportPrepare(self, rom, folder, callers=[]):
 		"""
 		Called after the clone is set up for it to grab the data from the ROM.
 		"""
@@ -109,7 +108,7 @@ class Table(RPL.Cloneable):
 		#endif
 
 		# Loop through each column in the head and read in the respective format
-		address = self._base.get()
+		address = self["base"].number()
 		for x in self.get(self["head"]):
 			typeidx = x[self.get(self["type"])]
 			try: idx = self.get("index").index(typeidx)
@@ -117,54 +116,57 @@ class Table(RPL.Cloneable):
 				raise RPLError("Encountered unknown type %s when processing table." % typeidx)
 			#endtry
 
-			tmp = self.get(self.get("format")[idx]).split(":", 1)
-			if len(tmp) == 1: struct, name = "Format", tmp[0]
-			else: struct, name = tuple(tmp)
-			# TODO: Verify struct somehow?
-			clone = self._rpl.child(name).clone()
-			clone._base = RPL.Number(address)
-			if hasattr(clone, "exportPrepare"): clone.exportPrepare(rom)
-			self._row.append(clone)
+			ref = self.get("format")[idx].pointer()
+			ref.unmanaged = False
+			clone = ref.clone()
+			try: clone["base"] = RPL.Number(address)
+			except RPL.RPLError: clone.base = RPL.Number(address)
+			try: clone.exportPrepare
+			except AttributeError: pass
+			else:
+				try: clone.exportPrepare(rom, folder, callers + [self])
+				except TypeError: clone.exportPrepare(rom, folder)
+			self.row.append(clone)
 			address += clone.len()
 		#endfor
 	#enddef
 
-	def importDataLoop(self, rom, base=None):
-		for x in self._row: x.importDataLoop(rom, rom.tell())
+	def importDataLoop(self, rom, folder, base=None, callers=[]):
+		for x in self.row: x.importDataLoop(rom, folder, rom.tell(), callers + [self])
 	#enddef
 
-	def exportDataLoop(self, datafile=None):
+	def exportDataLoop(self, rom, folder, datafile=None, callers=[]):
 		ret = []
-		for x in self._row: ret.append(x.exportDataLoop(datafile))
+		for x in self.row: ret.append(x.exportDataLoop(rom, folder, datafile))
 		return RPL.List(ret)
 	#enddef
 
 	def calculateOffsets(self):
 		calcedOffset = 0
-		for x in self._row:
-			x._base = RPL.Number(calcedOffset)
+		for x in self.row:
+			x.base = RPL.Number(calcedOffset)
 			calcedOffset += x.calculateOffsets()
 		#endfor
 		return calcedOffset
 	#enddef
 
-	def countExported(self):
-		return len(self._row)
-	#enddef
+#	def countExported(self):
+#		return len(self.row)
+#	#enddef
 
-	def basic(self, callers=[]):
-		"""
-		Returns the name with a prefix, used for referencing this as a type.
-		"""
-		return RPL.Literal("Table:" + self._name)
-	#enddef
+#	def basic(self, callers=[]):
+#		"""
+#		Returns the name with a prefix, used for referencing this as a type.
+#		"""
+#		return RPL.Literal("Table:" + self.name)
+#	#enddef
 
 	def len(self):
 		"""
 		Used by DataFormat exportPrepare to determine size of struct in bytes.
 		"""
 		length = 0
-		for x in self._row: length += x.len()
+		for x in self.row: length += x.len()
 		return length
 	#enddef
 #endclass
