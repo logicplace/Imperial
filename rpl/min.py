@@ -81,23 +81,26 @@ class Tile(std.Graphic):
 	"""
 	typeName = "tile"
 
-	def __init__(self, _rpl, name, parent=None, tilemap=False):
+	def __init__(self, _rpl, name, parent=None):
 		std.Graphic.__init__(self, _rpl, name, parent)
 
+		self.owm = self.ohm = self.wm = self.hm = 8
+		self.baseOffset = None
+	#enddef
+
+	def register(self, tilemap=False):
+		std.Graphic.register(self)
 		self.registerKey("white", "color", "white")
 		self.registerKey("black", "color", "black")
 		self.registerKey("invert", "bool", "false")
-
-		self._owm = self._ohm = self._wm = self._hm = 8
-		self._baseOffset = None
 
 		if not tilemap: self.unregisterKey("dimensions")
 	#enddef
 
 	def __getitem__(self, key):
-		if key == "base" and "base" not in self._data and self._baseOffset is not None:
+		if key == "base" and "base" not in self.data and self.baseOffset is not None:
 			return rpl.Number(
-				self._parent.base() + self._parent.mapSize() + self._baseOffset
+				self.parent["base"].number() + self.parent.mapSize() + self.baseOffset
 			)
 		else: return std.Graphic.__getitem__(self, key)
 	#enddef
@@ -125,8 +128,8 @@ class Tile(std.Graphic):
 
 	def importData(self, rom, folder):
 		self.definePalette(self.getPalette())
-		self.base(rom=rom)
-		self.importTile(rom, self._image.load())
+		rom.seek(self["base"].number())
+		self.importTile(rom, self.image.load())
 	#enddef
 
 	@staticmethod
@@ -145,8 +148,8 @@ class Tile(std.Graphic):
 
 	def prepareImage(self):
 		std.Graphic.prepareImage(self)
-		self.base()
-		self._image.putdata(Tile.prepareTile(self._rpl.rom.read(8), self.getPalette()))
+		self.rpl.rom.seek(self["base"].number())
+		self.image.putdata(Tile.prepareTile(self.rpl.rom.read(8), self.getPalette()))
 	#enddef
 #endclass
 
@@ -159,18 +162,21 @@ class Tilemap(Tile):
 	typeName = "tilemap"
 
 	def __init__(self, _rpl, name, parent=None):
-		Tile.__init__(self, _rpl, name, parent, True)
+		Tile.__init__(self, _rpl, name, parent)
+		self.curBase = None
+	#enddef
+
+	def register(self):
+		Tile.register(self, True)
 		self.registerKey("map", "range", "[]")
 		self.registerKey("dir", "readdir", "LRUD")
 
 		self.registerStruct(Tile)
-
-		self._curBase, self._mapSize = None, None
 	#enddef
 
 	def addChild(self, sType, name):
 		new = Tile.addChild(self, sType, name)
-		new._baseOffset = (len(self._children) - 1) * 8
+		new.baseOffset = (len(self.children) - 1) * 8
 		return new
 	#enddef
 
@@ -183,15 +189,16 @@ class Tilemap(Tile):
 	#enddef
 
 	def importData(self, rom, folder):
-		tilemap, base = self["map"].get(), self.base()
+		tilemap, base = self["map"].get(), self["base"].number()
+		#rom.seek(base)
 		self.definePalette(self.getPalette())
 		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
 				t, x, y = t.get(), x * 8, y * 8
-				self.base(offset=t * 8)
+				rom.seek(base + t * 8)
 				self.importTile(rom,
-					self._image.crop((x, y, x + 8, y + 8)).load()
+					self.image.crop((x, y, x + 8, y + 8)).load()
 				)
 			#endif
 		#endfor
@@ -202,20 +209,20 @@ class Tilemap(Tile):
 		tilemap, blank = self["map"].get(), self["blank"].tuple()
 
 		# Loop through map and export each tile.
-		self.base()
-		bytes = self._rpl.rom.read(self.mapSize())
+		self.rpl.rom.seek(self["base"].number())
+		bytes = self.rpl.rom.read(self.mapSize())
 		palette = self.getPalette()
 		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 8, y * 8
-				cut = self._image.crop((x, y, x + 8, y + 8))
+				cut = self.image.crop((x, y, x + 8, y + 8))
 				if t == "x": cut.putdata([blank] * 64)
 				else:
 					t *= 8
 					cut.putdata(Tile.prepareTile(bytes[t:t + 8], palette))
 				#endif
-				self._image.paste(cut, (x, y))
+				self.image.paste(cut, (x, y))
 			#endif
 		#endfor
 	#enddef
@@ -230,23 +237,25 @@ class Tile3(Tile):
 	"""
 	typeName = "tile3"
 
-	def __init__(self, _rpl, name, parent=None, tilemap=False):
-		Tile.__init__(self, _rpl, name, parent, tilemap)
+	def __init__(self, _rpl, name, parent=None):
+		Tile.__init__(self, _rpl, name, parent)
+	#enddef
 
+	def register(self, tilemap=False):
+		Tile.register(self, tilemap)
 		self.registerKey("gray", "color", "gray")
-		self.registerKey("base1", self._keys["base"][0]._source, "$000000")
-		self.registerKey("base2", self._keys["base"][0]._source, "$000000")
-
+		self.registerKey("base1", self.keys["base"][0].source, "$000000")
+		self.registerKey("base2", self.keys["base"][0].source, "$000000")
 		self.unregisterKey("base")
 	#enddef
 
 	def __getitem__(self, key):
-		if (key in ["base1", "base2"] and key not in self._data and
-			self._baseOffset[idx] is not None
+		if (key in ["base1", "base2"] and key not in self.data and
+			self.baseOffset[idx] is not None
 		):
 			return rpl.Number(
-				self._parent.base(self._parent[key]) +
-				self._parent.mapSize() + self._baseOffset
+				self.parent[key] +
+				self.parent.mapSize() + self.baseOffset
 			)
 		elif key == "grey": return std.Graphic.__getitem__(self, "gray")
 		else: return std.Graphic.__getitem__(self, key)
@@ -284,15 +293,15 @@ class Tile3(Tile):
 				shift, pixel1, pixel2 = 7, 0, 0
 			#endif
 		#endfor
-		self.base(base1)
+		rom.seek(base1)
 		rom.write(pixels1)
-		self.base(base2)
+		rom.seek(base2)
 		rom.write(pixels2)
 	#enddef
 
 	def importData(self, rom, folder):
 		self.definePalette(self.getPalette())
-		self.importTile(rom, self["base1"], self["base2"], self._image.load())
+		self.importTile(rom, self["base1"].number(), self["base2"].number(), self.image.load())
 	#enddef
 
 	@staticmethod
@@ -313,11 +322,11 @@ class Tile3(Tile):
 
 	def prepareImage(self):
 		std.Graphic.prepareImage(self)
-		self.base(self["base1"])
-		data1 = self._rpl.rom.read(8)
-		self.base(self["base2"])
-		data2 = self._rpl.rom.read(8)
-		self._image.putdata(Tile3.prepareTile(data1, data2, self.getPalette()))
+		self.rpl.rom.seek(self["base1"].number())
+		data1 = self.rpl.rom.read(8)
+		self.rpl.rom.seek(self["base2"].number())
+		data2 = self.rpl.rom.read(8)
+		self.image.putdata(Tile3.prepareTile(data1, data2, self.getPalette()))
 	#enddef
 #endclass
 
@@ -332,24 +341,28 @@ class Tilemap3(Tile3, Tilemap):
 	typeName = "tilemap3"
 
 	def __init__(self, _rpl, name, parent=None):
-		Tile3.__init__(self, _rpl, name, parent, True)
+		Tile3.__init__(self, _rpl, name, parent)
+		self.curBase = None
+	#enddef
+
+	def register(self):
+		Tile3.register(self, True)
 		self.registerKey("map", "range", "[]")
 		self.registerKey("dir", "readdir", "LRUD")
 
 		self.registerStruct(Tile3)
-
-		self._curBase, self._mapSize = None, None
 	#enddef
 
 	def importData(self, rom, folder):
-		tilemap, base1, base2 = self["map"].get(), self.base(self["base1"]), self.base(self["base2"])
+		tilemap, base1, base2 = self["map"].get(), self["base1"].number(), self["base2"].number()
 		self.definePalette(self.getPalette())
 		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
+			if i >= len(tilemap): break
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
 				t, x, y = t.get() * 8, x * 8, y * 8
 				self.importTile(rom, base1 + t, base2 + t,
-					self._image.crop((x, y, x + 8, y + 8)).load()
+					self.image.crop((x, y, x + 8, y + 8)).load()
 				)
 			#endif
 		#endfor
@@ -361,22 +374,22 @@ class Tilemap3(Tile3, Tilemap):
 
 		# Loop through map and export each tile.
 		mapSize = self.mapSize()
-		self.base(self["base1"])
-		bytes1 = self._rpl.rom.read(mapSize)
-		self.base(self["base2"])
-		bytes2 = self._rpl.rom.read(mapSize)
+		self.rpl.rom.seek(self["base1"].number())
+		bytes1 = self.rpl.rom.read(mapSize)
+		self.rpl.rom.seek(self["base2"].number())
+		bytes2 = self.rpl.rom.read(mapSize)
 		palette = self.getPalette()
 		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 8, y * 8
-				cut = self._image.crop((x, y, x + 8, y + 8))
+				cut = self.image.crop((x, y, x + 8, y + 8))
 				if t == "x": cut.putdata([blank] * 64)
 				else:
 					t *= 8
 					cut.putdata(Tile3.prepareTile(bytes1[t:t + 8], bytes2[t:t + 8], palette))
 				#endif
-				self._image.paste(cut, (x, y))
+				self.image.paste(cut, (x, y))
 			#endif
 		#endfor
 	#enddef
@@ -392,26 +405,27 @@ class Sprite(std.Graphic):
 	"""
 	typeName = "sprite"
 
-	def __init__(self, _rpl, name, parent=None, spritemap=False):
+	def __init__(self, _rpl, name, parent=None):
 		std.Graphic.__init__(self, _rpl, name, parent)
+		self.owm = self.ohm = self.wm = self.hm = 16
+		self.baseOffset = None
+	#enddef
 
+	def register(self, spritemap=False):
+		std.Graphic.register(self)
 		self.registerKey("white", "color", "white")
 		self.registerKey("black", "color", "black")
 		self.registerKey("alpha", "color", "cyan")
 		self.registerKey("setalpha", "color", "magenta")
 		self.registerKey("invert", "bool", "false")
 		self.registerKey("inverta", "bool", "false")
-
-		self._owm = self._ohm = self._wm = self._hm = 16
-		self._baseOffset = None
-
 		if not spritemap: self.unregisterKey("dimensions")
 	#enddef
 
 	def __getitem__(self, key):
-		if key == "base" and "base" not in self._data and self._baseOffset is not None:
+		if key == "base" and "base" not in self.data and self.baseOffset is not None:
 			return rpl.Number(
-				self._parent.base() + self._parent.mapSize() + self._baseOffset
+				self.parent["base"].number() + self.parent.mapSize() + self.baseOffset
 			)
 		else: return std.Graphic.__getitem__(self, key)
 	#enddef
@@ -459,8 +473,8 @@ class Sprite(std.Graphic):
 
 	def importData(self, rom, folder):
 		self.definePalette(self.getPalette())
-		self.base(rom=rom)
-		self.importSprite(rom, self._image.load())
+		rom.seek(self["base"].number())
+		self.importSprite(rom, self.image.load())
 	#enddef
 
 	@staticmethod
@@ -484,8 +498,8 @@ class Sprite(std.Graphic):
 
 	def prepareImage(self):
 		std.Graphic.prepareImage(self)
-		self.base()
-		self._image.putdata(Sprite.prepareSprite(self._rpl.rom.read(64), self.getPalette()))
+		self.rpl.rom.seek(self["base"].number())
+		self.image.putdata(Sprite.prepareSprite(self.rpl.rom.read(64), self.getPalette()))
 	#enddef
 #endclass
 
@@ -500,18 +514,21 @@ class Spritemap(Sprite):
 	typeName = "spritemap"
 
 	def __init__(self, _rpl, name, parent=None):
-		Sprite.__init__(self, _rpl, name, parent, True)
+		Sprite.__init__(self, _rpl, name, parent)
+		self.curBase = None
+	#enddef
+
+	def register(self):
+		Sprite.register(self, True)
 		self.registerKey("map", "range", "[]")
 		self.registerKey("dir", "readdir", "LRUD")
 
 		self.registerStruct(Sprite)
-
-		self._curBase, self._mapSize = None, None
 	#enddef
 
 	def addChild(self, sType, name):
 		new = Sprite.addChild(self, sType, name)
-		new._baseOffset = (len(self._children) - 1) * 8
+		new.baseOffset = (len(self.children) - 1) * 8
 		return new
 	#enddef
 
@@ -524,15 +541,15 @@ class Spritemap(Sprite):
 	#enddef
 
 	def importData(self, rom, folder):
-		tilemap, base = self["map"].get(), self.base()
+		tilemap, base = self["map"].get(), self["base"].number()
 		self.definePalette(self.getPalette())
 		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
 				x, y = x * 16, y * 16
-				self.base(offset=t.get() * 64)
+				rom.seek(base + t.get() * 64)
 				self.importSprite(rom,
-					self._image.crop((x, y, x + 16, y + 16)).load()
+					self.image.crop((x, y, x + 16, y + 16)).load()
 				)
 			#endif
 		#endfor
@@ -544,20 +561,20 @@ class Spritemap(Sprite):
 		secx = [blank] * 256
 
 		# Loop through map and export each sprite.
-		self.base()
-		bytes = self._rpl.rom.read(self.mapSize())
+		self.rpl.rom.seek(self["base"].number())
+		bytes = self.rpl.rom.read(self.mapSize())
 		palette = self.getPalette()
 		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 16, y * 16
-				cut = self._image.crop((x, y, x + 16, y + 16))
+				cut = self.image.crop((x, y, x + 16, y + 16))
 				if t == "x": cut.putdata(secx)
 				else:
 					t *= 64
 					cut.putdata(Sprite.prepareSprite(bytes[t:t + 64], palette))
 				#endif
-				self._image.paste(cut, (x, y))
+				self.image.paste(cut, (x, y))
 			#endif
 		#endfor
 	#enddef
@@ -573,23 +590,25 @@ class Sprite3(Sprite):
 	"""
 	typeName = "sprite3"
 
-	def __init__(self, _rpl, name, parent=None, spritemap=False):
-		Sprite.__init__(self, _rpl, name, parent, spritemap)
+	def __init__(self, _rpl, name, parent=None):
+		Sprite.__init__(self, _rpl, name, parent)
+	#enddef
 
+	def register(self, spritemap=False):
+		Sprite.register(self, spritemap)
 		self.registerKey("gray", "color", "gray")
-		self.registerKey("base1", self._keys["base"][0]._source, "$000000")
-		self.registerKey("base2", self._keys["base"][0]._source, "$000000")
-
+		self.registerKey("base1", self.keys["base"][0].source, "$000000")
+		self.registerKey("base2", self.keys["base"][0].source, "$000000")
 		self.unregisterKey("base")
 	#enddef
 
 	def __getitem__(self, key):
-		if (key in ["base1", "base2"] and key not in self._data and
-			self._baseOffset[idx] is not None
+		if (key in ["base1", "base2"] and key not in self.data and
+			self.baseOffset[idx] is not None
 		):
 			return rpl.Number(
-				self._parent.base(self._parent[key]) +
-				self._parent.mapSize() + self._baseOffset
+				self.parent[key] +
+				self.parent.mapSize() + self.baseOffset
 			)
 		elif key == "grey": return std.Graphic.__getitem__(self, "gray")
 		else: return std.Graphic.__getitem__(self, key)
@@ -648,15 +667,15 @@ class Sprite3(Sprite):
 				mask, draw1, draw2  = r"", r"", r""
 			#endif
 		#endfer
-		self.base(base1)
+		rom.seek(base1)
 		rom.write(pixels1)
-		self.base(base2)
+		rom.seek(base2)
 		rom.write(pixels2)
 	#enddef
 
 	def importData(self, rom, folder):
 		self.definePalette(self.getPalette())
-		self.importSprite(rom, self["base1"], self["base2"], self._image.load())
+		self.importSprite(rom, self["base1"].number(), self["base2"].number(), self.image.load())
 	#enddef
 
 	@staticmethod
@@ -685,11 +704,11 @@ class Sprite3(Sprite):
 
 	def prepareImage(self):
 		std.Graphic.prepareImage(self)
-		self.base(self["base1"])
-		data1 = self._rpl.rom.read(64)
-		self.base(self["base2"])
-		data2 = self._rpl.rom.read(64)
-		self._image.putdata(Sprite3.prepareSprite(data1, data2, self.getPalette()))
+		self.rpl.rom.seek(self["base1"].number())
+		data1 = self.rpl.rom.read(64)
+		self.rpl.rom.seek(self["base2"].number())
+		data2 = self.rpl.rom.read(64)
+		self.image.putdata(Sprite3.prepareSprite(data1, data2, self.getPalette()))
 	#enddef
 #endclass
 
@@ -704,24 +723,28 @@ class Spritemap3(Sprite3, Spritemap):
 	typeName = "spritemap3"
 
 	def __init__(self, _rpl, name, parent=None):
-		Sprite3.__init__(self, _rpl, name, parent, True)
+		Sprite3.__init__(self, _rpl, name, parent)
+
+		self.curBase = None
+	#enddef
+
+	def register(self):
+		Sprite3.register(self, True)
 		self.registerKey("map", "range", "[]")
 		self.registerKey("dir", "readdir", "LRUD")
 
 		self.registerStruct(Sprite3)
-
-		self._curBase, self._mapSize = None, None
 	#enddef
 
 	def importData(self, rom, folder):
-		tilemap, base1, base2 = self["map"].get(), self.base(self["base1"]), self.base(self["base2"])
+		tilemap, base1, base2 = self["map"].get(), self["base1"].number(), self["base2"].number()
 		self.definePalette(self.getPalette())
 		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
 				t, x, y = t.get() * 64, x * 16, y * 16
 				self.importSprite(rom, base1 + t, base2 + t,
-					self._image.crop((x, y, x + 16, y + 16)).load()
+					self.image.crop((x, y, x + 16, y + 16)).load()
 				)
 			#endif
 		#endfor
@@ -734,22 +757,22 @@ class Spritemap3(Sprite3, Spritemap):
 
 		# Loop through map and export each sprite.
 		mapSize = self.mapSize()
-		self.base(self["base1"])
-		bytes1 = self._rpl.rom.read(mapSize)
-		self.base(self["base2"])
-		bytes2 = self._rpl.rom.read(mapSize)
+		self.rpl.rom.seek(self["base1"].number())
+		bytes1 = self.rpl.rom.read(mapSize)
+		self.rpl.rom.seek(self["base2"].number())
+		bytes2 = self.rpl.rom.read(mapSize)
 		palette = self.getPalette()
 		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 16, y * 16
-				cut = self._image.crop((x, y, x + 16, y + 16))
+				cut = self.image.crop((x, y, x + 16, y + 16))
 				if t == "x": cut.putdata(secx)
 				else:
 					t *= 64
 					cut.putdata(Sprite3.prepareSprite(bytes1[t:t + 64], bytes2[t:t + 64], palette))
 				#endif
-				self._image.paste(cut, (x, y))
+				self.image.paste(cut, (x, y))
 			#endif
 		#endfor
 	#enddef
@@ -817,7 +840,7 @@ class Pokestr(rpl.Literal):
 
 	def unserialize(self, data, **kwargs):
 		new = u"".join(map(lambda x: Pokestr.raw[ord(x)], data))
-		self._data = convUnserialize.sub(Pokestr.joinKatakana, new)
+		self.data = convUnserialize.sub(Pokestr.joinKatakana, new)
 	#enddef
 
 	@staticmethod

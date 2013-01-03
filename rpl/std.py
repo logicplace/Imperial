@@ -6,7 +6,6 @@ import rpl as RPL
 from rpl import RPLError
 from copy import deepcopy
 from math import ceil
-from textwrap import dedent
 from StringIO import StringIO
 from collections import OrderedDict as odict
 
@@ -43,26 +42,20 @@ def register(rpl):
 	rpl.registerType(Math)
 #endclass
 
-def printHelp(more_info=[]):
-	print(
-		"std is the standard library for RPL.\n"
-		"It offers the structs:\n"
-		"  data  format  map  iostatic  graphic\n\n"
-		"And the types:\n"
-		"  bin  pixel  color  readdir  math\n"
+def printHelp(moreInfo=[]):
+	helper.genericHelp(locals(),
+		"std is the standard library for RPL.", {
+			# Structs
+			"data": Data, "format": Format,
+			"map": Map, "iostatic": IOStatic,
+			"graphic": GenericGraphic,
+		}, {
+			# Types
+			"bin": Bin, "pixel": Pixel,
+			"color": Color, "readdir": ReadDir,
+			"math": Math,
+		}
 	)
-	if not more_info: print "Use --help std [structs...] for more info"
-	infos = {
-		"data": Data, "format": Format,
-		"map": Map, "iostatic": IOStatic,
-		"graphic": GenericGraphic,
-		"bin": Bin, "pixel": Pixel,
-		"color": Color, "readdir": ReadDir,
-		"math": Math,
-	}
-	for x in more_info:
-		if x in infos: print dedent(infos[x].__doc__)
-	#endfor
 #enddef
 
 class DataFile(RPL.Share):
@@ -70,7 +63,7 @@ class DataFile(RPL.Share):
 	.rpl export for data structs.
 	"""
 	def __init__(self, inFile=None):
-		self._base = []
+		self.base = []
 		self.comment = ""
 		if inFile is not None: self.read(inFile)
 	#enddef
@@ -79,8 +72,8 @@ class DataFile(RPL.Share):
 		"""
 		Read from .rpl data file.
 		"""
-		rpl = self._rpl
-		raw = helper.readFrom(self._path)
+		rpl = self.rpl
+		raw = helper.readFrom(self.path)
 
 		base = []
 		parents = []
@@ -123,7 +116,7 @@ class DataFile(RPL.Share):
 			#endtry
 		#endfor
 
-		self._base = base
+		self.base = base
 	#enddef
 
 	def write(self):
@@ -132,7 +125,7 @@ class DataFile(RPL.Share):
 		"""
 		# TODO: Prettyprinting
 		comment = "# " + self.comment if self.comment else ""
-		helper.writeTo(self._path, comment + os.linesep.join(map(unicode, self._base)))
+		helper.writeTo(self.path, comment + os.linesep.join(map(unicode, self.base)))
 	#enddef
 
 	def add(self, item):
@@ -142,86 +135,86 @@ class DataFile(RPL.Share):
 		if not isinstance(item, RPL.RPLData):
 			raise RPLError("Tried to add non-data to rpl data file.")
 		#endif
-		self._base.append(item)
+		self.base.append(item)
 	#enddef
 
-	def __getitem__(self, key): return self._base[key]
-	def __len__(self): return len(self._base)
+	def __getitem__(self, key): return self.base[key]
+	def __len__(self): return len(self.base)
 
 	def __iter__(self):
-		try: self._iter
-		except AttributeError: self._iter = -1
+		try: self.iter
+		except AttributeError: self.iter = -1
 		return self
 	#enddef
 
 	# Atypical implementation of next I think, but it makes the code look nicer.
 	def next(self):
-		try: self._iter += 1
-		except AttributeError: self._iter = 0
-		try: return self[self._iter]
+		try: self.iter += 1
+		except AttributeError: self.iter = 0
+		try: return self[self.iter]
 		except IndexError: raise StopIteration
 	#enddef
 #endclass
 
 class ImageFile(RPL.Share):
 	def __init__(self, width=0, height=0):
-		self._dimensions = (width, height)
-		self._image = None
-		self._pixels = None
+		self.dimensions = (width, height)
+		self.image = None
+		self.pixels = None
 	#enddef
 
 	def read(self):
-		if self._image is None: self._image = Image.open(self._path).convert("RGBA")
+		if self.image is None: self.image = Image.open(self.path).convert("RGBA")
 	#enddef
 
 	def write(self):
-		if self._image is None: return # Maybe throw an exception?
-		ext = os.path.splitext(self._path)[1][1:].lower()
+		if self.image is None: return # Maybe throw an exception?
+		ext = os.path.splitext(self.path)[1][1:].lower()
 		# Cannot save alpha..
-		if ext == "bmp": self._image = self._image.convert("RGB")
-		self._image.save(self._path)
+		if ext == "bmp": self.image = self.image.convert("RGB")
+		self.image.save(self.path)
 	#enddef
 
 	def newImage(self, width=1, height=1, blank=0xffffff):
-		self._image = Image.new("RGBA", (width, height))
-		self._image.paste(blank, (0, 0, width, height))
-		self._pixels = self._image.load()
+		self.image = Image.new("RGBA", (width, height))
+		self.image.paste(blank, (0, 0, width, height))
+		self.pixels = self.image.load()
 	#endif
 
 	def ensureSize(self, width, height):
 		# Only necessary when writing, remember!
-		if self._image is None: return self.newImage(width, height)
-		curWidth, curHeight = self._image.size
+		if self.image is None: return self.newImage(width, height)
+		curWidth, curHeight = self.image.size
 		if curWidth < width or curHeight < height:
 			width = max(curWidth, width)
 			height = max(curHeight, height)
-			region = self._image.crop((0, 0, width, height))
+			region = self.image.crop((0, 0, width, height))
 			region.load()
-			self._image = self._image.resize((width, height))
-			self._image.paste(0xffffff, (0, 0, width, height))
-			self._image.paste(region, (0, 0))
+			self.image = self.image.resize((width, height))
+			self.image.paste(0xffffff, (0, 0, width, height))
+			self.image.paste(region, (0, 0))
 		#endif
 	#enddef
 
 	def addRect(self, data, left, top, width, height):
-		if self._image is None: self.newImage()
+		if self.image is None: self.newImage()
 		region = Image.new("RGBA", (width, height))
 		region.putdata(data)
-		self._image.paste(region, (left, top))
+		self.image.paste(region, (left, top))
 	#enddef
 
 	def addImage(self, image, left, top):
-		if self._image is None: self.newImage()
-		self._image.paste(image, (left, top))
+		if self.image is None: self.newImage()
+		self.image.paste(image, (left, top))
 	#enddef
 
 	def addPixel(self, rgba, x, y):
-		if self._image is None: self.newImage()
-		self._pixels[x, y] = rgba
+		if self.image is None: self.newImage()
+		self.pixels[x, y] = rgba
 	#enddef
 
 	def getImage(self, left, top, width, height):
-		img = self._image.crop((left, top, left + width, top + height))
+		img = self.image.crop((left, top, left + width, top + height))
 		img.load()
 		return img
 	#enddef
@@ -237,12 +230,12 @@ class ColorScan(object):
 		except AttributeError: obj = enumerate(palette)
 
 		# Convert to HSL and sort
-		self._palette = {}
-		for k, v in obj: self._palette[Graphic.hex(v)] = k
+		self.palette = {}
+		for k, v in obj: self.palette[Graphic.hex(v)] = k
 	#enddef
 
 	def scan(self, color):
-		return self._palette[Graphic.hex(color)]
+		return self.palette[Graphic.hex(color)]
 	#enddef
 #endclass
 
@@ -257,6 +250,7 @@ class Graphic(RPL.Serializable):
 	it would currently inherit this as well, but have to add a lot of
 	functionality. This, however, should not be used for anything using more
 	than two dimensions.
+	{/snip}
 	Transformations are handled in the order: rotate -> mirror -> flip
 	And this is reversed for exporting. But they are spoken about in regards
 	to importing throughout the documentation.
@@ -277,47 +271,51 @@ class Graphic(RPL.Serializable):
 
 	def __init__(self, rpl, name, parent=None):
 		RPL.Serializable.__init__(self, rpl, name, parent)
+
+		self.image = None
+		self.importing = False
+		# Offset Width/Height Multipliers
+		self.owm, self.ohm = 1, 1
+		# Width/Height Multipliers
+		self.wm, self.hm = 1, 1
+		self.palette = None
+	#enddef
+
+	def register(self):
+		RPL.Serializable.register(self)
 		self.registerKey("rotate", "number", "0")
 		self.registerKey("mirror", "bool", "false")
 		self.registerKey("flip", "bool", "false")
 		self.registerKey("blank", "color", "white")
 		self.registerKey("dimensions", "[number, number]")
 		self.registerKey("offset", "[number, number]", "[0, 0]")
-
-		self._image = None
-		self.importing = False
-		# Offset Width/Height Multipliers
-		self._owm, self._ohm = 1, 1
-		# Width/Height Multipliers
-		self._wm, self._hm = 1, 1
-		self._palette = None
 	#enddef
 
 	def dimensions(self):
 		try:
 			dimens = self["dimensions"].get()
-			return dimens[0].get() * self._wm, dimens[1].get() * self._hm
-		except RPLError: return self._wm, self._hm
+			return dimens[0].get() * self.wm, dimens[1].get() * self.hm
+		except RPLError: return self.wm, self.hm
 	#enddef
 
 	def importTransform(self):
-		if self._image is None: return False
+		if self.image is None: return False
 		if self["rotate"].get() != 0:
-			self._image = self._image.transpose([
+			self.image = self.image.transpose([
 				Image.ROTATE_90, Image.ROTATE_180, Image.ROTATE_270
 			][self["rotate"].get() - 1])
 		#endif
-		if self["mirror"].get(): self._image = self._image.transpose(Image.FLIP_LEFT_RIGHT)
-		if self["flip"].get(): self._image = self._image.transpose(Image.FLIP_TOP_BOTTOM)
+		if self["mirror"].get(): self.image = self.image.transpose(Image.FLIP_LEFT_RIGHT)
+		if self["flip"].get(): self.image = self.image.transpose(Image.FLIP_TOP_BOTTOM)
 		return True
 	#enddef
 
 	def exportTransform(self):
-		if self._image is None: return False
-		if self["flip"].get(): self._image = self._image.transpose(Image.FLIP_TOP_BOTTOM)
-		if self["mirror"].get(): self._image = self._image.transpose(Image.FLIP_LEFT_RIGHT)
+		if self.image is None: return False
+		if self["flip"].get(): self.image = self.image.transpose(Image.FLIP_TOP_BOTTOM)
+		if self["mirror"].get(): self.image = self.image.transpose(Image.FLIP_LEFT_RIGHT)
 		if self["rotate"].get() != 0:
-			self._image = self._image.transpose([
+			self.image = self.image.transpose([
 				Image.ROTATE_270, Image.ROTATE_180, Image.ROTATE_90
 			][self["rotate"].get() - 1])
 		#endif
@@ -327,17 +325,17 @@ class Graphic(RPL.Serializable):
 	def importPrepare(self, rom, folder):
 		"""
 		More often than not you won't have to overwrite this.
-		Just set self._owm, self._ohm, self._wm, and self._hm
+		Just set self.owm, self.ohm, self.wm, and self.hm
 		"""
 		# Read in image
 		self.importing = True
 		filename = self.open(folder, "png", True)
-		image = self._rpl.share(filename, ImageFile)
+		image = self.rpl.share(filename, ImageFile)
 		image.read()
 		offs = self["offset"].get()
 		width, height = self.dimensions()
-		self._image = image.getImage(
-			offs[0].get() * self._owm, offs[1].get() * self._ohm,
+		self.image = image.getImage(
+			offs[0].get() * self.owm, offs[1].get() * self.ohm,
 			width, height
 		)
 		# Do this here because export does it last
@@ -350,24 +348,24 @@ class Graphic(RPL.Serializable):
 		"""
 		width, height = self.dimensions()
 		# Palettes can't have per-color transparency? ;~;
-		self._image = Image.new("RGBA", (width, height))
-		self._image.paste(self["blank"].get(), (0, 0, width, height))
+		self.image = Image.new("RGBA", (width, height))
+		self.image.paste(self["blank"].get(), (0, 0, width, height))
 	#enddef
 
 	def exportData(self, rom, folder):
 		"""
 		More often than not you won't have to overwrite this.
-		Just set self._owm, self._ohm, self._wm, and self._hm
+		Just set self.owm, self.ohm, self.wm, and self.hm
 		"""
-		if self._image is None: self.prepareImage()
+		if self.image is None: self.prepareImage()
 		self.exportTransform()
 		offs = self["offset"].get()
-		offx, offy = offs[0].get() * self._owm, offs[1].get() * self._ohm
+		offx, offy = offs[0].get() * self.owm, offs[1].get() * self.ohm
 		width, height = self.dimensions()
 		filename = self.open(folder, "png", True)
-		image = self._rpl.share(filename, ImageFile)
+		image = self.rpl.share(filename, ImageFile)
 		image.ensureSize(offx + width, offy + height)
-		image.addImage(self._image, offx, offy)
+		image.addImage(self.image, offx, offy)
 	#enddef
 
 	def basic(self):
@@ -377,14 +375,14 @@ class Graphic(RPL.Serializable):
 		the class to prepare the image (during exporting).
 		"""
 		if not self.importing: self.prepareImage()
-		return RPL.String(self._name)
+		return RPL.String(self.name)
 	#enddef
 
 	def definePalette(self, palette):
 		"""
 		palette is an object keyed by palette index with value of the color.
 		"""
-		self._palette = ColorScan(palette)
+		self.palette = ColorScan(palette)
 	#enddef
 
 	def indexOf(self, color):
@@ -392,7 +390,7 @@ class Graphic(RPL.Serializable):
 		Return palette index of most similar color.
 		color is form: 0xaaRRGGBB
 		"""
-		return self._palette.scan(color)
+		return self.palette.scan(color)
 	#enddef
 
 	@staticmethod
@@ -465,6 +463,30 @@ class Sound(RPL.Serializable):
 	pass
 #endclass
 
+class Model(RPL.Serializable):
+	"""
+	Structs that handle 3D models should inherit this.
+	"""
+	# TODO: Learn about models.
+	pass
+#endclass
+
+class Markup(RPL.Serializable):
+	"""
+	Structs that handle formatted text should inherit this.
+	"""
+	# TODO: Implement this.
+	pass
+#endclass
+
+class Assembly(RPL.Serializable):
+	"""
+	Structs that handle bytecode should inherit this.
+	"""
+	# TODO: Implement this.
+	pass
+#endclass
+
 ################################################################################
 #################################### Structs ###################################
 ################################################################################
@@ -473,24 +495,28 @@ class DataFormat(object):
 	"""
 	The mutual parent for Data and Format
 	"""
-	def __init__(self):
+	def __init__(self, rpl, name, parent):
+		self.parentClass = RPL.Serializable if isinstance(self, RPL.Serializable) else RPL.RPLStruct
+		self.parentClass.__init__(self, rpl, name, parent)
+		self.format = odict()
+		self.command = {}
+		self._len = None
+		self.count = None
+		self.importing = False
+	#enddef
+
+	def register(self):
 		# String only uses default data size. Number only uses bin as type
+		self.parentClass.register(self)
 		self.registerKey("endian", "string:(little, big)", "little")
 		self.registerKey("pad", "string", "\x00")
 		self.registerKey("padside", "string:(left, right, center, rcenter)", "right")
 		self.registerKey("sign", "string:(unsigned, signed)", "unsigned")
-		self.registerKey("x", "string|[string, number|string:(expand), string|number]+1", "")
-
-		self._parentClass = RPL.Cloneable if isinstance(self, RPL.Cloneable) else RPL.Serializable
-		self._format = odict()
-		self._command = {}
-		self._len = None
-		self._count = None
-		self.importing = False
+		self.registerKey("x", "string|[string|reference, number|string:(expand), string|number]+1", "")
 	#enddef
 
-	def _parseFormat(self, key):
-		fmt = self._format[key]
+	def parseFormat(self, key):
+		fmt = self.format[key]
 		if fmt is None: raise RPLError("No format for key %s." % key)
 		if type(fmt) is list:
 			# Let's parse and cache this
@@ -501,22 +527,21 @@ class DataFormat(object):
 				"offsetRefs": [],
 				"end": False,
 			}
-			if isinstance(fmt[1], RPL.RPLRef):
+			if fmt[1].reference():
 				refKey = self.refersToSelf(fmt[1])
 				if refKey:
-					if ":" in self.get(tmp["type"]):
-						self._command[refKey] = ["count", key]
-					else: self._command[refKey] = ["len", key]
+					if DataFormat.isCounted(tmp["type"]): self.command[refKey] = ["count", key]
+					else: self.command[refKey] = ["len", key]
 				#endif
 			#endif
 			for x in fmt[2:]:
 				refKey = None
-				if isinstance(x, RPL.RPLRef):
+				if x.reference():
 					refKey = self.refersToSelf(x)
 					if refKey and self.importing:
 						try: self.get(x)
 						except RPLError:
-							self._command[refKey] = ["offset", key]
+							self.command[refKey] = ["offset", key]
 							tmp["offsetRefs"].append(x)
 							continue
 						#endtry
@@ -524,7 +549,7 @@ class DataFormat(object):
 				#endif
 				val = x.get()
 				if type(val) in [int, long]:
-					if refKey: self._command[refKey] = ["offset", key]
+					if refKey: self.command[refKey] = ["offset", key]
 					if tmp["offset"] is None: tmp["offset"] = val
 					else: tmp["offset"] += val
 				# We can assume it's str, otherwise
@@ -533,9 +558,6 @@ class DataFormat(object):
 				elif val in ["signed", "unsigned"]: tmp["sign"] = val
 				elif val in ["left", "right", "center", "rcenter"]: tmp["padside"] = val
 				elif val in ["end"]: tmp["end"] = True
-				#elif val.find(":") != -1:
-				#	pos = val.find(":")
-				#	tmp["command"] = [val[0:pos], val[pos+1:]]
 				elif len(val) == 1: tmp["padchar"] = val
 			#endfor
 			if "endian" not in tmp: tmp["endian"] = self["endian"].get()
@@ -547,13 +569,13 @@ class DataFormat(object):
 			# it must be specified!)
 			if tmp["offset"] is None:
 				first = True
-				for k in self._format:
+				for k in self.format:
 					if k != key: first = False
 					break
 				#endfor
 				if first: tmp["offset"] = 0
 			#endif
-			fmt = self._format[key] = tmp
+			fmt = self.format[key] = tmp
 		#endif
 		return fmt
 	#enddef
@@ -566,66 +588,99 @@ class DataFormat(object):
 
 	def prepOpts(self, opts, size=True):
 		tmp = dict(opts)
-		tmp["type"] = self.get(tmp["type"])
+		#tmp["type"] = self.get(tmp["type"])
 		if size: tmp["size"] = self.get(tmp["size"])
 		else: del tmp["size"]
 		return tmp
 	#endif
 
+	@staticmethod
+	def setBase(cls, val):
+		try: cls["base"] = val
+		except RPLError: cls.base = val
+	#enddef
+
+	@staticmethod
+	def setLen(cls, val):
+		try: cls["size"] = val
+		except RPLError: cls.size = val
+	#enddef
+
+	@staticmethod
+	def isCounted(ref, keylessRefOnly=False):
+		return ref.reference() and ref.keyless() and (keylessRefOnly or ref.pointer().sizeFieldType != "len")
+	#enddef
+
 	def __getitem__(self, key):
-		try: return self._parentClass.__getitem__(self, key)
+		if key in self.data and isinstance(self.data[key], RPL.RPLStruct):
+			return self.data[key].basic()
+		#endif
+		try: return self.parentClass.__getitem__(self, key)
 		except RPLError:
 			if key[0] == "x":
 				# If the key doesn't exist yet, we should attempt to retrieve it
-				fmt = self._parseFormat(key)
+				fmt = self.parseFormat(key)
 				if self.importing:
-					if key in self._command:
-						com = self._command[key]
+					if key in self.command:
+						com = self.command[key]
 						if com[0] == "len":
-							# TODO: Grab size of serialized data for Format types
-							self._data[key] = RPL.Number(len(
-								self[com[1]].serialize(**self.prepOpts(
-									self._format[com[1]], size=False
+							if DataFormat.isCounted(fmt["type"], True):
+								# Grab projected size of referenced struct.
+								self.data[key] = RPL.Number(fmt["type"].pointer().len())
+							else:
+								# Grab size of serialized data.
+								# TODO: Should this rather be a projected size?
+								self.data[key] = RPL.Number(len(
+									self[com[1]].serialize(**self.prepOpts(
+										self.format[com[1]], size=False
+									))
 								))
-							))
+							#endif
 						elif com[0] == "count":
-							typeName = self.get(self._parseFormat(com[1])["type"])
-							if ":" in typeName:
-								self._data[key] = RPL.Number(len(self.get(self[com[1]])))
-							else: raise RPLError("Tried to count non-Format type.")
+							try:
+								typeName = self.pointer(self.parseFormat(com[1])["type"])
+								self.data[key] = RPL.Number(len(self.get(self[com[1]])))
+							except RPLBadType: raise RPLError("Tried to count basic type.")
 						elif com[0] == "offset":
 							return None
-							#offset = self._format[com[1]]["offset"]
+							#offset = self.format[com[1]]["offset"]
 							#if offset is None: return None
-							#self._data[key] = RPL.Number(offset)
-						#endif
-						return self._data[key]
+							#self.data[key] = RPL.Number(offset)
+						return self.data[key]
 					#endif
 					raise RPLError("Somehow have not read data for %s." % key)
 				else:
 					offset = self.offsetOf(key)
-					address = base = self.base(offset=offset)
-					typeName = self.get(fmt["type"])
+					address = base = self.get("base") + offset
+					self.rpl.rom.seek(address)
 					size, expand = self.get(fmt["size"]), False
 					if size == "expand":
 						expand = True
-						keys = self._format.keys()
+						keys = self.format.keys()
 						size = self.offsetOf(keys[
 							keys.index(key) + 1
 						]) - offset
 						fmt["size"] = RPL.Number(size)
 					#endif
-					if ":" in typeName:
+					if DataFormat.isCounted(fmt["type"], True):
 						tmp = []
-						ref = self._rpl.structsByName[typeName[typeName.index(":") + 1:]]
+						ref = self.pointer(fmt["type"])
 						def tmpfunc(address):
 							t = ref.clone()
-							t._base = RPL.Number(address)
-							if hasattr(t, "exportPrepare"): t.exportPrepare(self._rpl.rom, [])
+							DataFormat.setBase(t, RPL.Number(address))
+							if t.sizeFieldType == "len": DataFormat.setLen(t, fmt["size"])
+							try: t.exportPrepare
+							except AttributeError: pass
+							else:
+								try: t.exportPrepare(self.rpl.rom, [], [self])
+								except TypeError: t.exportPrepare(self.rpl.rom, [])
+							#endif
 							tmp.append(t)
 							return address + t.len()
 						#enddef
-						if expand: size += base # Change this to end address to just use end's functionality
+
+						# Change this to end address to just use end's functionality
+						if expand: size += base
 						if fmt["end"] or expand:
 							count = 0
 							while address < size:
@@ -633,23 +688,29 @@ class DataFormat(object):
 								count += 1
 							#endwhile
 							if address > size:
-								raise RPLError("Couldn't fit %s.%s into the available space perfectly." % (self._name, key))
+								raise RPLError("Couldn't fit %s.%s into the available space perfectly." % (self.name, key))
 							#endif
 							# Adjust to the actual value..
 							fmt["size"] = RPL.Number(count)
+							self.data[key] = RPL.List(tmp)
+						elif ref.sizeFieldType == "len":
+							# Size is length.
+							address = tmpfunc(address)
+							self.data[key] = tmp[0]
 						else:
-							# Size is count
+							# Size is count.
 							for i in helper.range(size): address = tmpfunc(address)
+							self.data[key] = RPL.List(tmp)
 						#endif
-						self._data[key] = RPL.List(tmp)
 					else:
-						self._data[key] = self._rpl.wrap(typeName)
-						self._data[key].unserialize(
-							self._rpl.rom.read(size),
+						typeName = self.get(fmt["type"])
+						self.data[key] = self.rpl.wrap(typeName)
+						self.data[key].unserialize(
+							self.rpl.rom.read(size),
 							**self.prepOpts(fmt)
 						)
 					#endif
-					return self._data[key]
+					return self.data[key]
 				#endif
 			else: raise
 		#endtry
@@ -659,77 +720,107 @@ class DataFormat(object):
 		# Special handling for keys starting with x
 		# Note: What you set here is NOT the data, so it CANNOT be referenced
 		if key[0] == "x":
-			if key not in self._format:
-				self._parentClass.__setitem__(self, "x", value)
-				tmp = self._data["x"]
+			if key not in self.format:
+				self.parentClass.__setitem__(self, "x", value)
+				tmp = self.data["x"]
 				if isinstance(tmp, RPL.String):
-					self._format[key] = map(self._rpl.parseData, tmp.get().split())
-				else: self._format[key] = tmp.get()
-				del self._data["x"]
+					self.format[key] = map(self.rpl.parseData, tmp.get().split())
+				else: self.format[key] = tmp.get()
+				if DataFormat.isCounted(self.format[key][0], True):
+					# If it's a reference, it needs to be set as managed.
+					try: self.format[key][0].pointer().unmanaged = False
+					# Does not exist yet... will need to be set in preparation.
+					except RPLError: pass
+				del self.data["x"]
 			else:
-				typeName = self.get(self._parseFormat(key)["type"])
-				if ":" not in typeName:
+				typeName = self.parseFormat(key)["type"]
+				if not DataFormat.isCounted(typeName, True):
 					# Recast... TODO: Should this generate a validatation or
 					# is this enough?
-					self._data[key] = self._rpl.wrap(typeName, value.get())
-				else: self._data[key] = value
+					self.data[key] = self.rpl.wrap(self.get(typeName), value.get())
+				else: self.data[key] = value
 		else:
-			self._parentClass.__setitem__(self, key, value)
+			self.parentClass.__setitem__(self, key, value)
 		#endif
 	#enddef
 
-	def importPrepare(self, rom, folder, filename=None, data=None):
+	def importPrepare(self, rom, folder, filename=None, data=None, callers=[]):
 		self.importing = True
-		filename = filename or self.open(folder, "rpl", True)
-		data = data or self._rpl.share(filename, DataFile)
-		keys = [x for x in self._format]
-		for k in keys: self._parseFormat(k)
+		if filename is None:
+			# Should not initially prepare anything if Format type.
+			if self.parentClass != RPL.Serializable: return
+			filename = self.open(folder, "rpl", True)
+		#endif
+		if data:
+			if self.countExported() == 1: data = [data]
+			else: data = data.get()
+		else: data = self.rpl.share(filename, DataFile)
+		keys = [x for x in self.format]
+		for k in keys: self.parseFormat(k)
 		for k in keys:
-			if k in self._command: continue
-			typeName = self.get(self._format[k]["type"])
+			if k in self.command: continue
+			typeName = self.format[k]["type"]
 			if type(data) is list:
 				try: self[k] = data.pop(0)
 				except IndexError:
 					raise RPL.RPLError("Not enough data for %s. Cannot set %s." % (
-						self._name, k
+						self.name, k
 					))
 				#endtry
 			else:
 				try: self[k] = data.next()
 				except StopIteration:
 					raise RPL.RPLError("Not enough data for %s. Cannot set %s." % (
-						self._name, k
+						self.name, k
 					))
 				#endtry
 			#endif
-			if ":" in typeName:
-				tmp = []
-				ref = self._rpl.structsByName[typeName[typeName.index(":") + 1:]]
-				one = ref.countExported() == 1
-				for x in self.get(self[k]):
-					t = ref.clone()
-					if one: x = [x]
-					else: x = x.get()
-					t.importPrepare(rom, folder, filename, x)
-					tmp.append(t)
-				#endfor
-				self[k] = RPL.List(tmp)
+			if DataFormat.isCounted(typeName, True):
+				typeName = typeName.pointer()
+				typeName.unmanaged = False
+				if typeName.sizeFieldType == "len":
+					t = typeName.clone()
+					DataFormat.setLen(t, self.format[k]["size"])
+					try: t.importPrepare(rom, folder, filename, self[k], callers + [self])
+					except TypeError: t.importPrepare(rom, folder)
+					self[k] = t
+				else:
+					tmp = []
+					for x in self.get(self[k]):
+						t = typeName.clone()
+						try: t.importPrepare(rom, folder, filename, x, callers + [self])
+						except TypeError: t.importPrepare(rom, folder)
+						tmp.append(t)
+					#endfor
+					self[k] = RPL.List(tmp)
+				#endif
 			#endif
 		#endfor
 	#enddef
 
-	def importDataLoop(self, rom, base=None):
+	def exportPrepare(self, rom, folder, callers=[]):
+		keys = [x for x in self.format]
+		for k in keys:
+			# Set all referenced structs to managed.
+			typeName = self.parseFormat(k)["type"]
+			if DataFormat.isCounted(typeName, True):
+				typeName.pointer().unmanaged = False
+			#endif
+		#endfor
+	#enddef
+
+	def importDataLoop(self, rom, folder, base=None, callers=[]):
 		"""
 		Initially called from Data.importData
 		"""
-		if base is None: base = self.base(rom=rom)
+		if base is None: base = self.get("base")
 
-		for k in self._format:
-			fmt = self._format[k]
+		for k in self.format:
+			fmt = self.format[k]
 			data = self[k]
-			typeName = self.get(self._format[k]["type"])
-			if k in self._command:
-				com = self._command[k]
+			typeName = self.format[k]["type"]
+			if k in self.command:
+				com = self.command[k]
 				# If this was len, it's currently the size of the serialized data.
 				# However, if the key it's for is end type, it needs to be adjusted
 				# to the ending address instead.
@@ -739,17 +830,33 @@ class DataFormat(object):
 				# I don't like this, but moving all this to __getitem__ means
 				# that the data can't be changed.. There must be a nicer way to
 				# get around this but it might take severe redesigning.
-				if com[0] == "len" and self._format[com[1]]["end"]:
-					self[k] = data = RPL.Number(data.get() + self._format[com[1]]["offset"])
-				elif com[0] == "count" and self._format[com[1]]["end"]:
-					# This was actually a count, not a size..
-					size = 0
-					for x in self.get(com[1]): size += x.len()
-					self[k] = data = RPL.Number(size + self._format[com[1]]["offset"])
+				if com[0] in ["len", "count"]:
+					fmtc1 = self.format[com[1]]
+					if com[0] == "len" and fmtc1["end"]:
+						self[k] = data = RPL.Number(data.get() + fmtc1["offset"])
+					elif com[0] == "count" and fmtc1["end"]:
+						# This was actually a count, not a size..
+						size = 0
+						for x in self.get(com[1]): size += x.len()
+						self[k] = data = RPL.Number(size + fmtc1["offset"])
+					#endif
 				#endif
 			#endif
-			if ":" in typeName:
-				for x in self.get(data): x.importDataLoop(rom)
+			if DataFormat.isCounted(typeName):
+				for x in self.list(data):
+					try: x.importDataLoop
+					# Handle things not specifically meant to be used as data types.
+					except AttributeError: x.importData(rom, folder)
+					# Handle things that are.
+					else: x.importDataLoop(rom, folder, callers=callers + [self])
+				#endfor
+			elif DataFormat.isCounted(typeName, True):
+				x = self.data[k]
+				try: x.importDataLoop
+				# Handle things not specifically meant to be used as data types.
+				except AttributeError: x.importData(rom, folder)
+				# Handle things that are.
+				else: x.importDataLoop(rom, folder, callers=callers + [self])
 			else:
 				data = data.serialize(**self.prepOpts(fmt))
 				size = self.get(fmt["size"])
@@ -764,7 +871,7 @@ class DataFormat(object):
 		#endfor
 	#enddef
 
-	def exportDataLoop(self, datafile=None):
+	def exportDataLoop(self, rom, folder, datafile=None, callers=[]):
 		"""
 		Initially called from Data.exportData
 		Returns RPLData to write to the file
@@ -772,18 +879,40 @@ class DataFormat(object):
 		ret = []
 		# Ensures everything is loaded and tagged with commands, so nothing
 		# is accidentally exported.. Not optimal I don't think?
-		for k in self._format: self[k]
-		for k in self._format:
-			# We need to do it like this to ensure it had been read from the file...
+		for k in self.format: self[k]
+		for k in self.format:
 			data = self[k]
-			typeName = self.get(self._format[k]["type"])
-			if ":" in typeName:
-				ls = [x.exportDataLoop() for x in self.get(data)]
-				data = RPL.List(ls)
+			typeName = self.format[k]["type"]
+			if DataFormat.isCounted(typeName):
+				try: self.list(data)[0].exportDataLoop
+				except IndexError:
+					# Empty list.
+					data = RPL.List([])
+				except AttributeError:
+					# Handle things not specifically meant to be used as data types.
+					for x in self.list(data): x.exportData(rom, folder)
+					data = None
+				else:
+					# Handle things that are.
+					ls = [x.exportDataLoop(rom, folder, callers=callers + [self]) for x in self.list(data)]
+					data = RPL.List(ls)
+				#endtry
+			elif DataFormat.isCounted(typeName, True):
+				# Length as size field.
+				x = self.data[k]
+				try: x.exportDataLoop
+				except AttributeError:
+					# Handle things not specifically meant to be used as data types.
+					x.exportData(rom, folder)
+					data = None
+				else:
+					# Handle things that are.
+					data = x.exportDataLoop(rom, folder, callers=callers + [self])
+				#endif
 			#endif
 			# A command implies this data is inferred from the data that's
 			# being exported, so it shouldn't be exported itself.
-			if k not in self._command:
+			if k not in self.command and data is not None:
 				if datafile is None: ret.append(data)
 				else: datafile.add(data)
 			#endif
@@ -795,9 +924,10 @@ class DataFormat(object):
 	#enddef
 
 	def calculateOffsets(self):
+		base = self["base"].number()
 		calcedOffset = 0
-		for k in self._format:
-			fmt = self._format[k]
+		for k in self.format:
+			fmt = self.format[k]
 			# Get real offset
 			offset = calcedOffset
 			if fmt["offsetRefs"]:
@@ -817,12 +947,34 @@ class DataFormat(object):
 			#endif
 			fmt["offset"] = calcedOffset
 			data = self[k]
-			typeName = self.get(self._format[k]["type"])
-			if ":" in typeName:
-				for x in self.get(data):
-					x._base = RPL.Number(calcedOffset)
-					calcedOffset += x.calculateOffsets()
+			typeName = self.format[k]["type"]
+			if DataFormat.isCounted(typeName):
+				# Size is count.
+				tnr = typeName.pointer()
+				for x in self.list(data):
+					try: x.calculateOffsets
+					except AttributeError:
+						if fmt["end"]:
+							# TODO: Next entry should have an offset
+							DataFormat.setBase(x, RPL.Number(base + calcedOffset))
+							pass
+						else:
+							# Size is count
+							for c in tnr.clones:
+								DataFormat.setBase(c, RPL.Number(base + calcedOffset))
+								calcedOffset += c.len()
+							#endfor
+						#endelse
+					else:
+						DataFormat.setBase(x, RPL.Number(base + calcedOffset))
+						calcedOffset += x.calculateOffsets()
+					#endif
 				#endfor
+			elif DataFormat.isCounted(typeName, True):
+				# Size is length.
+				x = self.data[k]
+				DataFormat.setBase(x, RPL.Number(base + calcedOffset))
+				calcedOffset += x.len()
 			else:
 				size = self.get(fmt["size"])
 				if size == "expand":
@@ -839,17 +991,17 @@ class DataFormat(object):
 	#enddef
 
 	def offsetOf(self, key):
-		fmt = self._parseFormat(key)
+		fmt = self.parseFormat(key)
 		if fmt["offset"] is not None: return fmt["offset"]
-		keys = self._format.keys()
+		keys = self.format.keys()
 		idx = keys.index(key)
-		if idx == 0: fmt["offset"] = self.base()
+		if idx == 0: fmt["offset"] = self["base"].number()
 		else:
 			prevKey = keys[idx - 1]
-			prevFmt = self._parseFormat(prevKey)
-			if ":" in self.get(prevFmt["type"]):
+			prevFmt = self.parseFormat(prevKey)
+			if DataFormat.isCounted(prevFmt["type"]):
 				size = 0
-				for x in self.get(self[prevKey]): size += x.len()
+				for x in self.list(self[prevKey]): size += x.len()
 			else:
 				size = self.get(prevFmt["size"])
 				if size == "expand":
@@ -872,11 +1024,10 @@ class DataFormat(object):
 	def len(self):
 		if self._len is not None: return self._len
 		size = 0
-		for k in self._format:
-			fmt = self._parseFormat(k)
+		for k in self.format:
+			fmt = self.parseFormat(k)
 			data = self[k]
-			typeName = self.get(self._format[k]["type"])
-			if ":" in typeName:
+			if DataFormat.isCounted(self.format[k]["type"]):
 				for x in self.get(data): size += x.len()
 			else: size += self.get(fmt["size"])
 		#endfor
@@ -888,50 +1039,55 @@ class DataFormat(object):
 		"""
 		Returns how many different values are exported
 		"""
-		if self._count is not None: return self._count
+		if self.count is not None: return self.count
 		count = 0
 
 		# Ensure commands are set...
-		for k in self._format: self._parseFormat(k)
+		for k in self.format: self.parseFormat(k)
 
-		for k in self._format:
-			if k not in self._command: count += 1
+		for k in self.format:
+			if k not in self.command: count += 1
 		#endfor
-		self._count = count
+		self.count = count
 		return count
 	#enddef
 #endclass
 
-class Format(DataFormat, RPL.Cloneable):
+class Format(DataFormat, RPL.RPLStruct):
 	"""
 	Represents the format of packed data.
-	See Data for specifics
+	See [data] for specifics.
 	"""
 	typeName = "format"
 
 	def __init__(self, rpl, name, parent=None):
-		RPL.Cloneable.__init__(self, rpl, name, parent)
-		DataFormat.__init__(self)
-		self._base = None
+		DataFormat.__init__(self, rpl, name, parent)
+		self.base = None
 	#enddef
 
 	def basic(self, callers=[]):
 		"""
 		Returns the name with a prefix, used for referencing this as a type.
 		"""
-		return RPL.Literal("Format:" + self._name)
+		return RPL.Literal("Format:" + self.name)
 	#enddef
 
 	def base(self, value=None, rom=None, offset=0):
-		if rom is None: rom = self._rpl.rom
-		rom.seek(self._base.get() + offset)
+		if rom is None: rom = self.rpl.rom
+		rom.seek(self.base.get() + offset)
 		return rom.tell()
 	#enddef
 
 	def __getitem__(self, key):
 		if key == "base":
-			return self._base
+			return self.base
 		else: return DataFormat.__getitem__(self, key)
+	#enddef
+
+	def __setitem__(self, key, value):
+		if key == "base":
+			self.base = value
+		else: return DataFormat.__setitem__(self, key, value)
 	#enddef
 #endclass
 
@@ -968,9 +1124,8 @@ class Data(DataFormat, RPL.Serializable):
 	"""
 	typeName = "data"
 
-	def __init__(self, rpl, name, parent=None):
-		RPL.Serializable.__init__(self, rpl, name, parent)
-		DataFormat.__init__(self)
+	def register(self):
+		DataFormat.register(self)
 		self.registerKey("pretty", "bool", "false")
 		#self.registerKey("format", "string", "")
 		self.registerKey("comment", "string", "")
@@ -978,45 +1133,51 @@ class Data(DataFormat, RPL.Serializable):
 
 	def __setitem__(self, key, data):
 		if key == "format":
-			data = data.get()
-			if data[0:7] == "Format:": data = data[7:]
-			struct = self._rpl.structsByName[data]
-			for x in struct._format:
-				self._format[x] = deepcopy(struct._format[x])
-				# Update the references (this relies on the above being list form..
-				# that means the format should only be used in format: calls..
-				for d in self._format[x]:
-					if isinstance(d, RPL.RPLRef): d._container = self
+			if data.reference() and data.keyless(): struct = data.pointer()
+			else: struct = self.rpl.structsByName[self.get(data)]
+			try: struct.format
+			except AttributeError:
+				raise RPLError("Attempted to reference non-format type in data.format")
+			else:
+				# Set to managed.
+				struct.unmanaged = False
+				for x in struct.format:
+					self.format[x] = deepcopy(struct.format[x])
+					# Update the references (this relies on the above being list form..
+					# that means the format should only be used in format: calls..
+					for d in self.format[x]:
+						if isinstance(d, RPL.RPLRef): d.container = self
+					#endfor
 				#endfor
-			#endfor
+			#endtry
 		else: DataFormat.__setitem__(self, key, data)
 	#enddef
 
 	def importData(self, rom, folder):
 		self.calculateOffsets()
-		self.importDataLoop(rom)
+		self.importDataLoop(rom, folder)
 	#enddef
 
 	def exportData(self, rom, folder):
 		filename = self.open(folder, "rpl", True)
-		datafile = self._rpl.share(filename, DataFile)
+		datafile = self.rpl.share(filename, DataFile)
 		datafile.comment = self["comment"].get()
-		self.exportDataLoop(datafile)
+		self.exportDataLoop(rom, folder, datafile)
 	#enddef
 
-	def prepareForProc(self, cloneName, cloneKey, cloneRef):
-		# This only matters here when exporting, it should already be prepared
-		# when importing.
-		if self.importing: return
-		for k in self._format:
-			dataType = self.get(self._parseFormat(k)["type"])
-			# We only care about the format types
-			if dataType[0:7] != "Format:": continue
-			# If this needs to be prepared, run the get to read in the data
-			if dataType[7:] == cloneName: self[k]
-			# Note we don't break here because it can be referenced multiple times
-		#endfor
-	#enddef
+#	def prepareForProc(self, cloneName, cloneKey, cloneRef):
+#		# This only matters here when exporting, it should already be prepared
+#		# when importing.
+#		if self.importing: return
+#		for k in self.format:
+#			dataType = self.get(self.parseFormat(k)["type"])
+#			# We only care about the format types
+#			if dataType[0:7] != "Format:": continue
+#			# If this needs to be prepared, run the get to read in the data
+#			if dataType[7:] == cloneName: self[k]
+#			# Note we don't break here because it can be referenced multiple times
+#		#endfor
+#	#enddef
 #endclass
 
 def reverseEvery(data, x):
@@ -1026,15 +1187,11 @@ def reverseEvery(data, x):
 class GenericGraphic(Graphic):
 	"""
 	Manage generic graphical content.
-	read: Read direction. This can be almost any combination of L, R, U, and D.
-	      LRUD is the general reading direction: Start in upper left and read
-	      to the right until width, then go down a row.
-	      LRDU is how bitmap files are read.
-	      Other valid combinations: RLUD, RLDU, UDLR, DULR, UDRL, DURL
-	      One can shorten these to the first and third letters, eg. LU.
+	{imp Graphic}
+	read: Read direction. See [readdir].
 	pixel: List of pixel formats, in order. More often than not there will
 	       only be one pixel format. It will loop through these when it
-	       reaches the end.
+	       reaches the end. See [pixel].
 	palette: 0-based palette. Use i form in palette to index against this.
 	reverse: Reverse the order of the bytes every X bytes. Example:
 	         Data is: 0x01 23 45 67
@@ -1045,13 +1202,79 @@ class GenericGraphic(Graphic):
 
 	def __init__(self, rpl, name, parent=None):
 		Graphic.__init__(self, rpl, name, parent)
+		self.image = None
+	#enddef
+
+	def register(self):
+		Graphic.register(self)
 		self.registerKey("read", "readdir", "LRUD")
 		self.registerKey("pixel", "[pixel]*")
 		self.registerKey("palette", "[color]+", "[]")
 		self.registerKey("padding", "[string:(none, row, pixel, column), number]", "[none, 0]")
 		self.registerKey("reverse", "math", "0")
+	#enddef
 
-		self._image = None
+	def padfuncDef(self, width, height):
+		padmethod, padmod = tuple([x.get() for x in self["padding"].get()])
+		if self.rpl.importing:
+			if padmethod == "row":
+				widthmo = width - 1
+				def padfunc(i, prev, leftover, stream):
+					if i % width == widthmo:
+						tmpmod = (stream.tell() - prev) % padmod
+						#print "Skipping %i.%i bytes" % (padmod - tmpmod  if tmpmod else 0, 8 - leftover if leftover else 0)
+						return (padmod - tmpmod  if tmpmod else 0, 0)
+					#endif
+					return (None, leftover)
+				#enddef
+			elif padmethod == "column":
+				heightmo = height - 1
+				def padfunc(i, prev, leftover, stream):
+					if i % height == heightmo:
+						tmpmod = (stream.tell() - prev) % padmod
+						return (padmod - tmpmod  if tmpmod else 0, 0)
+					return (None, leftover)
+				#enddef
+			elif padmethod == "pixel":
+				def padfunc(i, prev, leftover, stream):
+					tmpmod = (stream.tell() - prev) % padmod
+					return (padmod - tmpmod  if tmpmod else 0, 0)
+				#enddef
+			else:
+				def padfunc(i, prev, leftover, stream): return (None, leftover)
+			#endif
+		else:
+			if padmethod == "row":
+				widthmo = width - 1
+				def padfunc(i, prev, leftovers, pos=None, stream=None):
+					if i % width == widthmo:
+						tmpmod = ((pos or stream.tell()) - prev) % padmod
+						leftovers[1] = 0
+						return padmod - tmpmod  if tmpmod else 0
+					#endif
+					return None
+				#enddef
+			elif padmethod == "column":
+				heightmo = height - 1
+				def padfunc(i, prev, leftovers, pos=None, stream=None):
+					if i % height == heightmo:
+						tmpmod = ((pos or stream.tell()) - prev) % padmod
+						leftovers[1] = 0
+						return padmod - tmpmod if tmpmod else 0
+					#endif
+					return None
+				#enddef
+			elif padmethod == "pixel":
+				def padfunc(i, prev, leftovers, pos=None, stream=None):
+					tmpmod = ((pos or stream.tell()) - prev) % padmod
+					leftovers[1] = 0
+					return padmod - tmpmod if tmpmod else 0
+				#enddef
+			else:
+				def padfunc(i, prev, leftovers, pos=None, stream=None): return None
+			#endif
+		#endif
+		return padfunc
 	#enddef
 
 	def importData(self, rom, folder):
@@ -1060,40 +1283,14 @@ class GenericGraphic(Graphic):
 
 		# Create padding function...
 		prev = 0
-		padmethod, padmod = tuple([x.get() for x in self["padding"].get()])
-		if padmethod == "row":
-			widthmo = width - 1
-			def padfunc(i, prev, leftover, stream):
-				if i % width == widthmo:
-					tmpmod = (stream.tell() - prev) % padmod
-					#print "Skipping %i.%i bytes" % (padmod - tmpmod  if tmpmod else 0, 8 - leftover if leftover else 0)
-					return (padmod - tmpmod  if tmpmod else 0, 0)
-				#endif
-				return (None, leftover)
-			#enddef
-		elif padmethod == "column":
-			heightmo = height - 1
-			def padfunc(i, prev, leftover, stream):
-				if i % height == heightmo:
-					tmpmod = (stream.tell() - prev) % padmod
-					return (padmod - tmpmod  if tmpmod else 0, 0)
-				return (None, leftover)
-			#enddef
-		elif padmethod == "pixel":
-			def padfunc(i, prev, leftover, stream):
-				tmpmod = (stream.tell() - prev) % padmod
-				return (padmod - tmpmod  if tmpmod else 0, 0)
-			#enddef
-		else:
-			def padfunc(i, prev, leftover, stream): return (None, leftover)
-		#endif
+		padfunc = self.padfuncDef(width, height)
 
 		# Prepare palette
 		self.definePalette([x.get() for x in self["palette"].get()])
 
 		# Prepare data
 		leftover = 0
-		data = self._image.load()
+		data = self.image.load()
 		pixels = self["pixel"].get()
 		stream = StringIO()
 		for idx, x, y in self["read"].rect(width, height):
@@ -1121,68 +1318,24 @@ class GenericGraphic(Graphic):
 
 		# Create padding function...
 		prev = 0
-		padmethod, padmod = tuple([x.get() for x in self["padding"].get()])
-		if padmethod == "row":
-			widthmo = width - 1
-			def padfunc(i, prev, leftovers, pos=None, stream=None):
-				if i % width == widthmo:
-					tmpmod = ((pos or stream.tell()) - prev) % padmod
-					leftovers[1] = 0
-					return padmod - tmpmod  if tmpmod else 0
-				#endif
-				return None
-			#enddef
-		elif padmethod == "column":
-			heightmo = height - 1
-			def padfunc(i, prev, leftovers, pos=None, stream=None):
-				if i % height == heightmo:
-					tmpmod = ((pos or stream.tell()) - prev) % padmod
-					leftovers[1] = 0
-					return padmod - tmpmod if tmpmod else 0
-				#endif
-				return None
-			#enddef
-		elif padmethod == "pixel":
-			def padfunc(i, prev, leftovers, pos=None, stream=None):
-				tmpmod = ((pos or stream.tell()) - prev) % padmod
-				leftovers[1] = 0
-				return padmod - tmpmod if tmpmod else 0
-			#enddef
-		else:
-			def padfunc(i, prev, leftovers, pos=None, stream=None): return None
-		#endif
+		padfunc = self.padfuncDef(width, height)
 
 		# Collect size of data to read
-		bytes, leftovers = 0, ["", 0]
 		pixels = self["pixel"].get()
-		# TODO: Make more efficient for repeated rows or uniform pixel size...
-		for i in helper.range(numPixels):
-			pixel = pixels[i % len(pixels)]
-			bytes += pixel._bytes
-			leftovers[1] += pixel._extraBits
-			if leftovers[1] >= 8:
-				bytes += 1
-				leftovers[1] -= 8
-			#endif
-			tmp = padfunc(i, prev, leftovers, bytes)
-			if tmp is not None:
-				bytes += tmp
-				prev = bytes
-			#endif
-		#endfor
-		#bytes = bytes * numPixels + int(ceil(extraBits * numPixels / 8))
+		bytes = self.len(numPixels, padfunc, pixels)
 
 		# Prepare palette
 		palette = [x.get() for x in self["palette"].get()]
 
 		# Read pixels
-		self.base()
+		self.rpl.rom.seek(self["base"].number())
 		reverse = self["reverse"].get({
 			"w": width, "width": width,
 			"h": height, "height": height,
 		})
-		if reverse: stream = StringIO(reverseEvery(bytes, reverse))
-		else: stream = StringIO(self._rpl.rom.read(bytes))
+		if reverse: stream = StringIO(reverseEvery(self.rpl.rom.read(bytes), reverse))
+		else: stream = StringIO(self.rpl.rom.read(bytes))
+
 		leftovers, data, prev = ["", 0], [], 0
 		for i in helper.range(numPixels):
 			data.append(pixels[i % len(pixels)].read(stream, palette, leftovers))
@@ -1195,7 +1348,7 @@ class GenericGraphic(Graphic):
 		#endfor
 
 		# Paste to image
-		self._image.putdata(data)
+		self.image.putdata(data)
 
 		# Transform resultant image by read.
 		# Since this is confusing, here's a full readout:
@@ -1209,19 +1362,46 @@ class GenericGraphic(Graphic):
 		# DURL: ROTATE_90, FLIP_TOP_BOTTOM
 		primary, secondary = self["read"].ids()
 		# if xxDU
-		if secondary == 3: self._image = self._image.transpose(Image.FLIP_TOP_BOTTOM)
+		if secondary == 3: self.image = self.image.transpose(Image.FLIP_TOP_BOTTOM)
 		# if xxLR
-		elif secondary == 0: self._image = self._image.transpose(Image.ROTATE_270)
+		elif secondary == 0: self.image = self.image.transpose(Image.ROTATE_270)
 		# if xxRL
-		elif secondary == 1: self._image = self._image.transpose(Image.ROTATE_90)
+		elif secondary == 1: self.image = self.image.transpose(Image.ROTATE_90)
 		# if RLxx
-		if primary == 1: self._image = self._image.transpose(Image.FLIP_LEFT_RIGHT)
+		if primary == 1: self.image = self.image.transpose(Image.FLIP_LEFT_RIGHT)
 		# if UDLR or DURL
-		elif primary - secondary == 2: self._image = self._image.transpose(Image.FLIP_TOP_BOTTOM)
+		elif primary - secondary == 2: self.image = self.image.transpose(Image.FLIP_TOP_BOTTOM)
+	#enddef
+
+	def len(self, numPixels=None, padfunc=None, pixels=None):
+		if numPixels is None or padfunc is None:
+			width, height = tuple([x.get() for x in self["dimensions"].get()])
+			numPixels = width * height
+			padfunc = self.padfuncDef(width, height)
+		#endif
+		prev, bytes, leftovers = 0, 0, ["", 0]
+		pixels = pixels or self["pixel"].get()
+		# TODO: Make more efficient for repeated rows or uniform pixel size...
+		for i in helper.range(numPixels):
+			pixel = pixels[i % len(pixels)]
+			bytes += pixel.bytes
+			leftovers[1] += pixel.extraBits
+			if leftovers[1] >= 8:
+				bytes += 1
+				leftovers[1] -= 8
+			#endif
+			tmp = padfunc(i, prev, leftovers, bytes)
+			if tmp is not None:
+				bytes += tmp
+				prev = bytes
+			#endif
+		#endfor
+		#bytes = bytes * numPixels + int(ceil(extraBits * numPixels / 8))
+		return bytes
 	#enddef
 #endclass
 
-class Map(RPL.Executable):
+class Map(RPL.RPLStruct):
 	"""
 	Translates data. When exporting, it will look for the value in packed and
 	output the corresponding value in unpacked. When importing, it does the
@@ -1233,95 +1413,264 @@ class Map(RPL.Executable):
 	is multibyte, this will help.
 	packed:   What the value should look like when packed.
 	unpacked: What the value should look like when unpacked.
-	data:     Reference to the data to modify. Data must be a string or number.
 	unmapped: Method to handle data not represented in un/packed. May be:
 	          except: Throw an exception.
 	          add:    Write it as is.
 	          drop:   Ignore it.
+	cast:     Type to cast unpacked values to, if more specific than the
+	          interpreted type.
+	string:   Type to cast unpacked strings to specifically, if strings and
+	          numbers are both present.
+	number:   Type to cast unpacked numbers to specifically, if strings and
+	          numbers are both present.
 	"""
 	typeName = "map"
+	sizeFieldType = "len"
 
 	def __init__(self, rpl, name, parent=None):
-		RPL.Executable.__init__(self, rpl, name, parent)
-		self.registerKey("packed", "string|[number|string]+")
-		self.registerKey("unpacked", "string|[number|string]+")
-		self.registerKey("data", "[number|string]*")
-		self.registerKey("unmapped", "string:(except, add, drop)", "except")
+		RPL.RPLStruct.__init__(self, rpl, name, parent)
+		self.base, self.size, self.myData = None, None, None
 	#enddef
 
-	def doProcessing(self, p, u):
-		st = isinstance(p, RPL.String) and isinstance(u, RPL.String)
-		if not st and (isinstance(p, RPL.String) or isinstance(u, RPL.String)):
-			raise RPLError("Packed and unpacked must be the same type.")
+	def register(self):
+		self.registerKey("packed", "string|[number|string]+")
+		self.registerKey("unpacked", "string|[number|string]+")
+		self.registerKey("unmapped", "string:(except, add, addstr, addstring, addnum, addnumber, drop)", "except")
+		self.registerKey("cast", "string", "")
+		self.registerKey("string", "string", "")
+		self.registerKey("number", "string", "")
+		self.registerKey("width", "number|string:(dynamic,all)", "")
+	#enddef
+
+	def serializePacked(self, options):
+		packed = []
+		for x in self["packed"].get():
+			try: x.serialize
+			except AttributeError: packed.append(RPL.String(x).serialize(**options))
+			else: packed.append(x.serialize(**options))
+		#endfor
+		return packed
+	#enddef
+
+	def prepare(self, callers):
+		# Retrieve mappings and set mode.
+		try: packed, unpacked, mode, utype = self["packed"].list(), self["unpacked"].list(), 0, 0
+		except RPL.RPLBadType:
+			try: unpacked, mode, utype = self["unpacked"].list(), 1, 0
+			except RPL.RPLBadType: unpacked, mode, utype = self["unpacked"].string(), 1, 1
+		#endtry
+
+		# Determine width.
+		width = self["width"].get()
+		if width == "": width = "dynamic" if mode else "all"
+
+		# Create un/serialization options.
+		options, remaining = {}, ["padside", "padchar", "endian", "sign"]
+		for c in callers[::-1]:
+			for o in remaining[:]:
+				try:
+					options[o] = c.get(o)
+					remaining.remove(o)
+				except RPLError: pass
+			#endfor
+			if not remaining: break
+		#endfor
+		if width == "all": options["size"] = self.size.number()
+		elif width != "dynamic": options["size"] = width
+
+		# Serialize packed values.
+		packed = self.serializePacked(options)
+
+		# If it's dynamic but all are the same size, just force a known width.
+		# TODO: Should this only be when defaulting?
+		if width == "dynamic":
+			tmp = map(len, packed)
+			if tmp.count(tmp[0]) == len(packed): width = tmp[0]
 		#endif
-		p, u = p.get(), u.get()
-		if len(p) != len(u):
+
+		# Ensure lengths of packed and unpacked are the same.
+		if len(packed) != len(unpacked):
 			raise RPLError(
 				"Packed (len: %i) and unpacked (len: %i) must be the same length."
-				% (len(p), len(u))
+				% (len(packed), len(unpacked))
 			)
 		#endif
 
-		if st: nu = u
+		# Available basic types.
+		if utype: types = ["string"]
 		else:
-			nu = [x.get() for x in u]
+			types = []
+			for x in unpacked:
+				try:
+					x.number()
+					if "number" not in types: types.append("number")
+				except RPLBadType:
+					if "string" not in types: types.append("string")
+				#endtry
+				if len(types) == 2: break
+			#endfor
 		#endif
 
-		def procString(string):
-			if type(string) not in [str, unicode]:
-				raise RPLError("Must use string data with string maps."
-					"Tried to map %s." % type(string).__name__
-				)
-			#endif
-			newstr = ""
-			for i, x in enumerate(string):
-				try:
-					newstr += p[nu.index(x)]
-				except ValueError:
-					action = self["unmapped"].get()
-					if action == "except":
-						raise RPLError(u'Unmapped value: %s' % unicode(RPL.String(x)))
-					elif action == "add": newstr += x
-				#endtry
-			#endfor
-			return newstr
-		#enddef
+		# Back these up for speed.
+		cast, string, number = self["cast"].string(), self["string"].string(), self["number"].string()
+		return options, packed, unpacked, mode, cast, string, number, width, types
+	#enddef
 
-		def proc(data):
-			if type(data) is list:
-				newlist = []
-				for i, x in enumerate(data):
-					try:
-						newlist.append(p[nu.index(x.get())])
-					except ValueError:
-						action = self["unmapped"].get()
-						if action == "except":
-							raise RPLError(u"Unmapped value: %s" % unicode(x))
-						elif action == "add": newlist.append(x)
+	def importPrepare(self, rom, folder, filename=None, data=None, callers=[]):
+		# This can only be used as a data's type.
+		if data is not None: self.myData = data
+	#enddef
+
+	def exportPrepare(self, rom, folder, callers=[]):
+		# This can only be used as a data's type.
+		if not callers: return
+
+		options, packed, unpacked, mode, cast, string, number, width, types = self.prepare(callers)
+
+		# Read data from ROM.
+		self.rpl.rom.seek(self.base.number())
+		bindata = self.rpl.rom.read(self.size.number())
+
+		def tmpfunc(data, expand):
+			# Loop through packed and attempt unserialize to the respective type.
+			for i, p in enumerate(packed):
+				if expand:
+					if len(p) > len(data): continue
+					d = data[:len(p)]
+				else: d = data
+				if p == d:
+					# Match found!
+					u = unpacked[i]
+					try: d, t = u.number(), 0
+					except RPL.RPLBadType:
+						# String type.
+						d, t = u.string(), 1
+					except AttributeError:
+						# unpacked is a unicode string
+						d, t = u, 1
 					#endtry
-				#endfor
-				return newlist
+
+					if expand:
+						# Chop off what was actually used from data.
+						return d, t, data[len(p):]
+					else: return d, t
+				#endif
+			#endfor
+
+			# If we arrive here, no match was found.
+			if expand: raise RPLError("Impossible to continue mapping dynamically sized map on bad match.")
+			action = self["unmapped"].get()[0:6] # Hack for normalizing addstr/num.
+			stringInterp = self.rpl.wrap("string").unserialize(data, **options).string()
+			numberInterp = self.rpl.wrap("number").unserialize(data, **options).number()
+			if action == "drop": return None
+			elif action == "addstr": d = stringInterp
+			elif action == "addnum": d = numberInterp
+			elif len(types) == 1:
+				# Has to be the only base type interpreted.
+				d, t = (stringInterp, 1) if types[0] == "string" else (numberInterp, 0)
+			elif mode == 1:
+				# Has to be a string
+				d, t = stringInterp, 1
 			else:
-				try: return p[nu.index(data)].get()
-				except ValueError:
-					action = self["unmapped"].get()
-					if action == "except":
-						raise RPLError(u"Unmapped value: %s" % unicode(data))
-					elif action == "add": return data
-				#endtry
+				# Dunno, just print the hex.
+				d = u''.join(["%02x" % ord(x) for x in data])
+				if action == "add":
+					raise RPLError(u"Cannot add unmapped value: %s Try using addstr or addnum instead." % unicode(d))
 			#endif
+
+			if action == "except":
+				raise RPLError(u"Unmapped value: %s" % unicode(d))
+			elif action[0:3] == "add": return d, t
 		#enddef
 
-		if st: self["data"].proc(procString)
-		else: self["data"].proc(proc)
+		# Interpret.
+		if width == "all": myData, typ = tmpfunc(bindata, False)
+		elif width == "dynamic":
+			# Read until exhausted. Assumes string map.
+			ret = u""
+			while bindata:
+				tmp, typ, bindata = tmpfunc(bindata, True)
+				if tmp is not None: ret += tmp
+			#endwhile
+			myData = ret
+		else:
+			# Chunk and map. Assumes string map.
+			ret = u""
+			for i in helper.range(0, len(bindata), width):
+				tmp, typ = tmpfunc(bindata[i:i + width], False)
+				if tmp is not None: ret += tmp
+			#endfor
+			myData = ret
+		#endif
+		self.myData = self.rpl.wrap((number or cast or "number") if typ == 0 else (string or cast or "string"), myData)
 	#enddef
 
-	def importProcessing(self):
-		self.doProcessing(self["packed"], self["unpacked"])
+	def importDataLoop(self, rom, folder, base=None, callers=[]):
+		options, packed, unpacked, mode, cast, string, number, width, types = self.prepare(callers)
+
+		try: unpacked[0].get
+		except AttributeError: unpacked = list(unpacked)
+		else: unpacked = [x.get() for x in unpacked]
+
+		def tmpfunc(data):
+			try: return packed[unpacked.index(data)]
+			except IndexError:
+				# No match
+				action = self["unmapped"].get()[0:6] # Hack for normalizing addstr/num.
+				try: stringInterp = self.rpl.wrap(string or cast or "string", data)
+				except RPLBadType: action = "addnum"
+				try: numberInterp = self.rpl.wrap(number or cast or "number", data)
+				except RPLBadType: action = "addstr"
+				if action == "drop": return None
+				elif action == "addstr": d = stringInterp
+				elif action == "addnum": d = numberInterp
+				elif len(types) == 1:
+					# Has to be the only base type interpreted.
+					d = stringInterp if types[0] == "string" else numberInterp
+				elif mode == 1:
+					# Has to be a string
+					d = stringInterp
+				else:
+					# Dunno, just print the hex.
+					d = u''.join(["%02x" % ord(x) for x in data])
+					if action == "add":
+						raise RPLError(u"Cannot add unmapped value: %s Try using addstr or addnum instead." % unicode(d))
+					#endif
+				#endif
+
+				if action == "except":
+					raise RPLError(u"Unmapped value: %s" % unicode(d))
+				elif action[0:3] == "add": return d.serialize(**options)
+			#endtry
+		#enddef
+
+		# Interpret.
+		self.rpl.rom.seek(self.base.number())
+		if width == "all":
+			tmp = tmpfunc(self.myData.get())
+			if tmp is not None: self.rpl.rom.write(tmp)
+		else:
+			# Writes until exhausted. Assumes string map.
+			ret = r""
+			for x in self.myData.string():
+				tmp = tmpfunc(x)
+				if tmp is not None: ret += tmp
+			#endwhile
+			self.rpl.rom.write(ret)
+		#endif
+	#endif
+
+	def exportDataLoop(self, rom, folder, datafile=None, callers=[]):
+		return self.myData
 	#enddef
 
-	def exportProcessing(self):
-		self.doProcessing(self["unpacked"], self["packed"])
+	def basic(self):
+		# DataFormat.__getitem__ export branch calls this.
+		return self.myData
+	#enddef
+
+	def len(self):
+		return self.size.number()
 	#enddef
 #endclass
 
@@ -1334,22 +1683,21 @@ class IOStatic(RPL.Static):
 	typeName = "iostatic"
 
 	def __getitem__(self, key):
-		idx = 0 if self._rpl.importing else 1
-		return self._data[key][idx]
+		return RPL.Static.__getitem__(self, key)[0 if self.rpl.importing else 1]
 	#enddef
 
 	def __setitem__(self, key, value):
-		if key not in self._data:
+		if key not in self.data:
 			# Initial set
 			if not isinstance(value, RPL.List) or len(value.get()) != 2:
 				raise RPLError("IOStatic requires each entry to be a list of two values.")
 			#endif
 			# This is supposed to be a static! So it should be fine to .get() here.
-			self._data[key] = value.get()
+			self.data[key] = value.get()
 		else:
 			# When references set it
-			idx = 0 if self._rpl.importing else 1
-			self._data[key][idx] = value
+			idx = 0 if self.rpl.importing else 1
+			self.data[key][idx] = value
 		#endif
 	#enddef
 #endclass
@@ -1366,15 +1714,15 @@ class Bin(RPL.String):
 
 	def set(self, data):
 		RPL.String.set(self, data)
-		data = re.sub(r'\s', "", self._data)
-		self._data = ""
+		data = re.sub(r'\s', "", self.data)
+		self.data = ""
 		for i in helper.range(0, len(data), 2):
-			self._data += chr(int(data[i:i+2], 16))
+			self.data += chr(int(data[i:i+2], 16))
 		#endfor
 	#endif
 
 	def __unicode__(self):
-		tmp = self._data
+		tmp = self.data
 		ret = u""
 		lastComment = ""
 		while tmp:
@@ -1398,8 +1746,8 @@ class Bin(RPL.String):
 		return ret + "," + lastComment[1:]
 	#enddef
 
-	def serialize(self, **kwargs): return self._data
-	def unserialize(self, data, **kwargs): self._data = data
+	def serialize(self, **kwargs): return self.data
+	def unserialize(self, data, **kwargs): self.data = data
 
 	@staticmethod
 	def line2esc(ln):
@@ -1439,54 +1787,54 @@ class Pixel(RPL.String):
 		 * Index in a palette
 		 * 0 is ignored
 		"""
-		self._source = data
-		self._bigEndian = bigEndian
+		self.source = data
+		self.bigEndian = bigEndian
 
 		tokens = Pixel.specification.match(data)
 		if not tokens: raise RPLError("Invalid pixel format.")
-		self._type = tokens.group(2)
-		self._bits = (lambda(x): (1 if tokens.group(2) in "bB" else 4)*x)(
+		self.type = tokens.group(2)
+		self.bits = (lambda(x): (1 if tokens.group(2) in "bB" else 4)*x)(
 			max(int(tokens.group(1)), 1)
 		)
-		self._format = tokens.group(3)
+		self.format = tokens.group(3)
 
 		# Read this many bytes from the stream
-		self._bytes = int(len(self._format) * self._bits / 8)
-		self._extraBits = len(self._format) * self._bits % 8
+		self.bytes = int(len(self.format) * self.bits / 8)
+		self.extraBits = len(self.format) * self.bits % 8
 
 		# Does a pixel fit perfectly within the certain number of bytes
-		#self._even = (len(self._format) * self._bits) & 0x7 == 0
+		#self.even = (len(self.format) * self.bits) & 0x7 == 0
 
 		# Expand the format
-		self._expanded = ""
-		for x in self._format: self._expanded += x * self._bits
+		self.expanded = ""
+		for x in self.format: self.expanded += x * self.bits
 
 		# Which "group" this is using (RGBA?, HSLA?, WA?, I)
-		rgb = helper.oneOfIn("rRgGbB", self._format)
-		hsl = helper.oneOfIn("hHsSlL", self._format)
-		ww = helper.oneOfIn("wW", self._format)
-		index = "i" in self._format
+		rgb = helper.oneOfIn("rRgGbB", self.format)
+		hsl = helper.oneOfIn("hHsSlL", self.format)
+		ww = helper.oneOfIn("wW", self.format)
+		index = "i" in self.format
 		if int(rgb) + int(hsl) + int(ww) + int(index) > 1:
 			raise RPLError("Invalid pixel format, must only use one group.")
 		#endif
-		if rgb:   self._group = 0
-		if hsl:   self._group = 1
-		if ww:    self._group = 2
-		if index: self._group = 3
-		self._alpha = helper.oneOfIn("aA", self._format)
+		if rgb:   self.group = 0
+		if hsl:   self.group = 1
+		if ww:    self.group = 2
+		if index: self.group = 3
+		self.alpha = helper.oneOfIn("aA", self.format)
 
-		self._max = {}
+		self.max = {}
 		for x in "RGBHSLWAI":
-			self._max[x] = (1 << (self._expanded.count(x.lower()) + self._expanded.count(x))) - 1
+			self.max[x] = (1 << (self.expanded.count(x.lower()) + self.expanded.count(x))) - 1
 		#endif
 	#enddef
 
 	def __unicode__(self):
 		return (
-			u"%ix" % (self._bits >> 2)
-			if self._type in "xX" else
-			u"%ib" % self._bits
-		) + self._format
+			u"%ix" % (self.bits >> 2)
+			if self.type in "xX" else
+			u"%ib" % self.bits
+		) + self.format
 	#enddef
 
 	def write(self, stream, palette, leftovers, pixel):
@@ -1496,15 +1844,15 @@ class Pixel(RPL.String):
 		#global PIXEL
 		r, g, b, a = pixel
 		val  = {
-			"R": int(round(r * self._max["R"] / 255)) if self._max["R"] else 0,
-			"G": int(round(g * self._max["G"] / 255)) if self._max["G"] else 0,
-			"B": int(round(b * self._max["B"] / 255)) if self._max["B"] else 0,
+			"R": int(round(r * self.max["R"] / 255)) if self.max["R"] else 0,
+			"G": int(round(g * self.max["G"] / 255)) if self.max["G"] else 0,
+			"B": int(round(b * self.max["B"] / 255)) if self.max["B"] else 0,
 			# TODO: Calc HSL values
 			# Silently ensure a grayscale value
-			"W": int(round((r + b + g) / 3 * 255 / self._max["W"])) if self._max["W"] else 0,
-			"A": int(round(a * 255 / self._max["A"])) if self._max["A"] else 0,
+			"W": int(round((r + b + g) / 3 * 255 / self.max["W"])) if self.max["W"] else 0,
+			"A": int(round(a * 255 / self.max["A"])) if self.max["A"] else 0,
 		}
-		if self._max["I"]:
+		if self.max["I"]:
 			try: val["I"] = palette.indexOf((r, g, b, a))
 			except KeyError:
 				try: val["I"] = palette.indexOf((r, g, b, 0xff))
@@ -1516,9 +1864,9 @@ class Pixel(RPL.String):
 		else: val["I"] = 0
 
 		mask = {}
-		for k, x in self._max.iteritems(): mask[k] = (x + 1) >> 1
+		for k, x in self.max.iteritems(): mask[k] = (x + 1) >> 1
 		bytes, bits = [0], 8 - (leftovers + 1)
-		for x in self._expanded[::-1]:
+		for x in self.expanded[::-1]:
 			if bits == -1:
 				bytes.insert(0, 0)
 				bits = 7
@@ -1570,17 +1918,17 @@ class Pixel(RPL.String):
 		#print "Pixel [%i,%i] starting from $%06x.%i" % (PIXEL % 71, int(PIXEL / 71), stream.tell(), leftovers[1]),
 		#PIXEL += 1
 		if leftovers[1]:
-			bytes = leftovers[0] + stream.read(self._bytes + (1 if leftovers[1] < self._extraBits else 0))
+			bytes = leftovers[0] + stream.read(self.bytes + (1 if leftovers[1] < self.extraBits else 0))
 			byte = 0
 			mask = 1 << (leftovers[1] - 1)
 		else:
-			bytes = stream.read(self._bytes + (1 if self._extraBits else 0))
+			bytes = stream.read(self.bytes + (1 if self.extraBits else 0))
 			byte = 0
 			mask = 0x80
 		#endif
 
 		curbyte = ord(bytes[byte])
-		for x in self._expanded:
+		for x in self.expanded:
 			if x != "0":
 				bit = 1 if curbyte & mask else 0
 				if x in "rgbhslwa": bit ^= 1
@@ -1606,20 +1954,20 @@ class Pixel(RPL.String):
 
 		# Make them relative to max values
 		for x in "RGBHSLWA":
-			if self._max[x]: values[x] = int(round(values[x] * 255 / self._max[x]))
+			if self.max[x]: values[x] = int(round(values[x] * 255 / self.max[x]))
 		#endfor
 
 		a = 0xff
-		if self._group == 0: r, g, b = values["R"], values["G"], values["B"]
-		#elif self._group == 1: TODO
-		elif self._group == 2: r, g, b = values["W"], values["W"], values["W"]
-		elif self._group == 3:
+		if self.group == 0: r, g, b = values["R"], values["G"], values["B"]
+		#elif self.group == 1: TODO
+		elif self.group == 2: r, g, b = values["W"], values["W"], values["W"]
+		elif self.group == 3:
 			val = palette[values["I"]]
 			a, r, g, b = (
 				(val & 0xff000000) >> 24, (val & 0xff0000) >> 16,
 				(val & 0xff00) >> 8, val & 0xff
 			)
-		if self._alpha: a = values["A"]
+		if self.alpha: a = values["A"]
 
 		#print "#%02x%02x%02x.%i%%" % (r, g, b, a * 100 / 255)
 		return (r, g, b, a)
@@ -1629,7 +1977,7 @@ class Pixel(RPL.String):
 class Color(RPL.Named, RPL.HexNum, RPL.Literal, RPL.List):
 	typeName = "color"
 
-	_names = {
+	names = {
 		"black":       0x00000000,
 		"white":       0x00ffffff,
 		"red":         0x00ff0000,
@@ -1647,14 +1995,14 @@ class Color(RPL.Named, RPL.HexNum, RPL.Literal, RPL.List):
 	def set(self, data):
 		if type(data) in [int, long]:
 			if data & ~0xffffffff: raise RPLError("Colors must be 3-4 byte values.")
-			else: self._data = data
+			else: self.data = data
 		elif type(data) in [list, tuple]:
-			self._data = (
+			self.data = (
 				(data[0] & 0xff) << 16 |
 				(data[1] & 0xff) << 8 |
 				(data[2] & 0xff)
 			)
-			if len(data) == 4: self._data |= (255 - (data[3] & 0xff)) << 24
+			if len(data) == 4: self.data |= (255 - (data[3] & 0xff)) << 24
 		else: RPL.Named.set(self, data, ["int", "long"])
 	#enddef
 
@@ -1664,15 +2012,26 @@ class Color(RPL.Named, RPL.HexNum, RPL.Literal, RPL.List):
 
 	def tuple(self):
 		return (
-			(self._data & 0x00ff0000) >> 16,
-			(self._data & 0x0000ff00) >> 8,
-			(self._data & 0x000000ff),
-			255 - ((self._data & 0xff000000) >> 24),
+			(self.data & 0x00ff0000) >> 16,
+			(self.data & 0x0000ff00) >> 8,
+			(self.data & 0x000000ff),
+			255 - ((self.data & 0xff000000) >> 24),
 		)
 	#enddef
 #endclass
 
 class ReadDir(RPL.Literal):
+	"""
+	This can be almost any combination of L, R, U, and D.
+	LRUD is the general reading direction: Start in upper left and read to the
+	right until width, then go down a row. This is how many languages, including
+	English, are read.
+	RLUD is how Hebrew and Arabic are read.
+	UDRL is how traditional Japanese is read.
+	LRDU is how bitmap pixels are read.
+	Other valid combinations: RLDU, UDLR, DULR, DURL
+	One can shorten these to the first and third letters, eg. LU.
+	"""
 	typeName = "readdir"
 
 	valid = [
@@ -1682,10 +2041,10 @@ class ReadDir(RPL.Literal):
 
 	def set(self, data):
 		RPL.Literal.set(self, data)
-		if self._data in ReadDir.valid:
+		if self.data in ReadDir.valid:
 			self.primary, self.secondary = (
-				"LRUD".index(self._data[0]),
-				"LRUD".index(self._data[1 if len(self._data) == 2 else 2])
+				"LRUD".index(self.data[0]),
+				"LRUD".index(self.data[1 if len(self.data) == 2 else 2])
 			)
 		else:
 			raise RPLError("Reading direction must be one of: %s." %
@@ -1697,37 +2056,37 @@ class ReadDir(RPL.Literal):
 	def ids(self): return self.primary, self.secondary
 
 	def rect(self, width, height):
-		self._index, self._width, self._height = 0, width, height
+		self.index, self.width, self.height = 0, width, height
 		# Inner is Vertical, Inner Range, Outer Range
-		self._iv = False
-		if   self.primary == 0: self._ir = helper.range(self._width,)
-		elif self.primary == 1: self._ir = helper.range(self._width - 1, -1, -1)
-		elif self.primary == 2: self._iv, self._ir = True, helper.range(self._height,)
-		elif self.primary == 3: self._iv, self._ir = True, helper.range(self._height - 1, -1, -1)
-		if   self.secondary == 0: self._ori = iter(helper.range(self._width,))
-		elif self.secondary == 1: self._ori = iter(helper.range(self._width - 1, -1, -1))
-		elif self.secondary == 2: self._ori = iter(helper.range(self._height,))
-		elif self.secondary == 3: self._ori = iter(helper.range(self._height - 1, -1, -1))
-		if self._iv: self._x = self._ori.next()
-		else: self._y = self._ori.next()
-		self._iri = iter(self._ir)
+		self.iv = False
+		if   self.primary == 0: self.ir = helper.range(self.width,)
+		elif self.primary == 1: self.ir = helper.range(self.width - 1, -1, -1)
+		elif self.primary == 2: self.iv, self.ir = True, helper.range(self.height,)
+		elif self.primary == 3: self.iv, self.ir = True, helper.range(self.height - 1, -1, -1)
+		if   self.secondary == 0: self.ori = iter(helper.range(self.width,))
+		elif self.secondary == 1: self.ori = iter(helper.range(self.width - 1, -1, -1))
+		elif self.secondary == 2: self.ori = iter(helper.range(self.height,))
+		elif self.secondary == 3: self.ori = iter(helper.range(self.height - 1, -1, -1))
+		if self.iv: self.x = self.ori.next()
+		else: self.y = self.ori.next()
+		self.iri = iter(self.ir)
 		return self
 	#enddef
 
 	def __iter__(self): return self
 
 	def next(self):
-		try: ii = self._iri.next()
+		try: ii = self.iri.next()
 		except StopIteration:
 			# Let this raise stop iteration when it's done
-			if self._iv: self._x = self._ori.next()
-			else: self._y = self._ori.next()
-			self._iri = iter(self._ir)
+			if self.iv: self.x = self.ori.next()
+			else: self.y = self.ori.next()
+			self.iri = iter(self.ir)
 			return self.next()
 		else:
-			if self._iv: i, x, y = self._index, self._x, ii
-			else: i, x, y = self._index, ii, self._y
-			self._index += 1
+			if self.iv: i, x, y = self.index, self.x, ii
+			else: i, x, y = self.index, ii, self.y
+			self.index += 1
 			return i, x, y
 		#endif
 	#enddef

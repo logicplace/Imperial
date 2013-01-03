@@ -126,8 +126,6 @@ def main():
 	#endif
 
 	if args.help:
-		parser.print_help()
-
 		if len(args.args) >= 1:
 			if args.args[0][-3:] == "rpl":
 				# Load a RPL file's help
@@ -151,7 +149,7 @@ def main():
 				tmp = getattr(__import__("rpl." + args.args[0], globals(), locals()), args.args[0])
 				tmp.printHelp(args.args[1:])
 			#endif
-		#endif
+		else: parser.print_help()
 	elif args.template:
 		tmp = rpl.RPL()
 		# Load requested libs
