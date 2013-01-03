@@ -7,24 +7,19 @@ Missing items:
 
 But the important part is that this is now usable.
 
-**NOTE: If someone actually wants to write a lib for this, wait a bit.**  
-Next up is the cleaning process, and I'm going to do a slight redesign based
- on what I've learned is better from writing this. There will likely be breaking
- but not major changes to the internal code (RPL as a language will not be
- affected (oops that's a lie, map struct will change)). However, there is one
- major thing: I plan to remove executables.
- This was a bad idea based on a spur-of-the-moment decision that I've learned
- will give more headache for lib developers than it would help anyone. I also
- plan to remove all the type checking and make the system a bit more pythonic.
- I also hope to add a lot more comments, to the test rpls as well. I'll be
- changing the CLI too, to something a lot more intelligent.
+Alright, this is mostly cleaned. Everything structural has been completed. I do
+ need to add more tests, comments, and error handling, however. Anyone who wants
+ to write a lib for this may start now. I will make the documentation for doing
+ so when I'm happy with the rest of the cleaning process.
+
+I haven't finished the CLI yet either.
 
 After I finish the clean-up process, I will then write a guide on how to develop
  libs and also begin on the wiki. After which, I will bother to write the
  typesetting lib. Maybe I'll even make it an example or something.
 
-When all of this is done, maybe I will start implementing the sound system, or
- maybe I'll write a few guides and the extra syntax files.
+When all of this is done, I will move on to the assembler portion, and maybe
+ I'll write a few guides and the extra syntax files.
 
 For now, this will stay as a development release (though in a working state!)
  until I've completed the clean-up process, at which point I will officially
