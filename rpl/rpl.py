@@ -2112,26 +2112,6 @@ class RPLRef(object):
 	def reference(self): return True
 	def keyless(self): return not bool(self.key)
 
-	def proc(self, func, callers=[], clone=None):
-		# TODO: Can this be cut?
-		"""
-		Used by executables. Runs a procedure over every instance of a clone.
-		Or if not cloneable, it runs it over the only instance.
-		"""
-		point = clone or self.pointer(callers)
-		if clone is None and isinstance(point, Cloneable):
-			args = (point.name(), self.key, point)
-			for x in self.rpl.recurse(): x.prepareForProc(*args)
-			for x in point.clones(): self.proc(func, callers, x)
-		else:
-			# TODO: Better error wording
-			if not self.key: raise RPLError("Tried to proc on basic reference.")
-			# TODO: Check that I'm doing callers right here. I think it's right
-			# but I don't wanna think that hard right now.
-			self.getFromIndex(point[self.key], callers).proc(func, callers + [self])
-		#endif
-	#enddef
-
 	def __deepcopy__(self, memo={}):
 		ret = object.__new__(self.__class__)
 		for k, x in self.__dict__.iteritems():
