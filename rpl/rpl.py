@@ -147,7 +147,7 @@ class RPLObject(object):
 		"""
 		if structType not in self.structs:
 			raise RPLError("%s isn't allowed as a substruct of %s." % (
-				structType, self.typeName
+				structType, "root" if self == self.rpl else self.typeName
 			))
 		#endif
 		new = self.structs[structType](self.rpl, name, self)
@@ -377,10 +377,12 @@ class RPL(RPLObject):
 		currentStruct = None       # What struct we are currently parsing.
 		counts = {}                # How many of a certain struct type we've enountered.
 		parents = []               # Current hierarchy of structs and lists.
+		notCaring = False
 
 		for token in RPL.specification.finditer(raw):
 			groups = token.groups() # Used later.
 			dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = groups
+
 			sstr = dstr or sstr # Double or single quoted string.
 			# (type, value) to add; error to throw; skip list childs' instantiations.
 			add, error, skipSubInst = None, None, False
@@ -435,7 +437,9 @@ class RPL(RPLObject):
 
 							if structName in self.structsByName:
 								error = 'Struct name "%s" is already taken.' % structName
-							elif not onlyCareAboutTypes or structType in onlyCareAboutTypes:
+							else:
+								# TODO: This will die on substructs.
+								notCaring = onlyCareAboutTypes and structType not in onlyCareAboutTypes
 								self.structsByName[structName] = currentStruct = (
 									currentStruct if currentStruct else self
 								).addChild(structType, structName)
@@ -452,8 +456,8 @@ class RPL(RPLObject):
 
 						# TODO: The second condition is kinda hacky, it's meant to avoid
 						# loading external things in partial-parsing mode..
-						if isinstance(currentStruct, StructRPL) and not onlyCareAboutTypes:
-							self.load(currentStruct)
+						if isinstance(currentStruct, StructRPL):
+							self.load(currentStruct, onlyCareAboutTypes)
 						#endif
 						currentStruct = currentStruct.parent
 					elif flow == "[":
@@ -490,7 +494,7 @@ class RPL(RPLObject):
 				if parents:
 					parents[-1].append(val)
 				elif currentStruct and currentKey:
-					currentStruct[currentKey] = val
+					if not notCaring: currentStruct[currentKey] = val
 					currentKey = None
 				else:
 					error = "Unused " + dtype
@@ -644,7 +648,7 @@ class RPL(RPLObject):
 		else: raise RPLError("Error parsing data: %s" % data)
 	#endif
 
-	def load(self, struct):
+	def load(self, struct, libsOnly=False):
 		"""
 		Loads includes and libs. Used by parse, probably should not need to
 		use it directly. (But if you generate a RPL struct for some reason,
@@ -658,6 +662,8 @@ class RPL(RPLObject):
 			tmp.register(self)
 			self.alreadyLoaded.append(lib)
 		#endfor
+
+		if libsOnly: return
 
 		if "RPL_INCLUDE_PATH" in os.environ:
 			includePaths = set(["."] + os.environ["RPL_INCLUDE_PATH"].split(";"))
