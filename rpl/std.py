@@ -2107,7 +2107,7 @@ class Math(RPL.Literal, RPL.Number):
 	def set(self, data):
 		if type(data) in [int, long]: data = str(data)
 		RPL.Literal.set(self, data)
-		self.tokens = Math.specification.split(self._data.replace(" ", ""))
+		self.tokens = Math.specification.split(self.data.replace(" ", ""))
 	#enddef
 
 	def get(self, var={}):
