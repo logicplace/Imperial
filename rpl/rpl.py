@@ -188,7 +188,7 @@ class RPLObject(object):
 		typeName may be a string or the class that it will grab the string from.
 		"""
 		# Grab string name if this was a class.
-		if issubclass(typeName, RPLStruct): typeName = typeName.typeName
+		if issubclass(typeName.__class__, RPLStruct): typeName = typeName.typeName
 
 		ret = []
 		# Find all *immediate* children with this type.
@@ -1429,7 +1429,7 @@ class StructRPL(RPLStruct):
 		self.registerVirtual("libs", "lib")
 		self.registerKey("include", "[path]*", "[]")
 		self.registerVirtual("includes", "include")
-		self.registerKey("help", "[string, [string, string]]+1", "[]")
+		self.registerKey("help", "[string]!|[string, [string, string]]+1", "[]")
 	#enddef
 
 	@classmethod
