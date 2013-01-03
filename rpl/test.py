@@ -38,7 +38,7 @@ def printHelp(more_info=[]):
 	#endfor
 #enddef
 
-class Echo(RPL.Executable):
+class Echo(RPL.RPLStruct):
 	"""
 	Print data to stdout. Automaticall handles wrapping and tabbing text for you.
 	width: Width of console. Default: 79.
@@ -50,7 +50,7 @@ class Echo(RPL.Executable):
 
 	typeName = "echo"
 	def __init__(self, rpl, name, parent=None):
-		RPL.Executable.__init__(self, rpl, name, parent)
+		RPL.RPLStruct.__init__(self, rpl, name, parent)
 		self.registerKey("width", "number", "79")
 		self.registerKey("tabs", "string", "'    '")
 		self.registerKey("line", "[string|number|^]*")
@@ -84,14 +84,14 @@ class Echo(RPL.Executable):
 		#endfor
 	#enddef
 
-	def importProcessing(self): self.echo()
-	def exportProcessing(self): self.echo()
+	def importPrepare(self, *args): self.echo()
+	def exportPrepare(self, *args): self.echo()
 
 	def __setitem__(self, key, value):
 		if key[0:4] == "line":
-			RPL.Executable.__setitem__(self, "line", value)
-			self._data[key] = self._data["line"]
-			del self._data["line"]
-		else: RPL.Executable.__setitem__(self, key, value)
+			RPL.RPLStruct.__setitem__(self, "line", value)
+			self.data[key] = self.data["line"]
+			del self.data["line"]
+		else: RPL.RPLStruct.__setitem__(self, key, value)
 	#enddef
 #endclass
