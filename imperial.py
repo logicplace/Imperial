@@ -129,6 +129,7 @@ def main():
 		if len(args.args) >= 1:
 			if args.args[0][-3:] == "rpl":
 				# Load a RPL file's help
+				tmp = rpl.RPL()
 				tmp.parse(args.args[0], ["RPL"])
 				rplStruct = tmp.childrenByType("RPL")
 				if not rplStruct: return 0
