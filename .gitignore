@@ -1,4 +1,5 @@
 *.pyc
 release
 build
+docs
 tests/rpls/*/test.*
