@@ -91,69 +91,85 @@ def list2english(l, conjunction=u"and"):
 	else: return u"%s, %s %s" % (", ".join(l[0:-1]), conjunction, l[-1])
 #enddef
 
-def printDox(struct, context):
-	"""
-	Supports the markup:
-	{snip} {/snip} - To remove a sections from the docstring before printing.
-	                 Each tag may be used alone as if the \A and \Z were anchors.
-	{imp ClassName} - Import docstring from another class.
-	"""
-	tmp, dox = dedent(struct.__doc__), u""
-
-	imp = tmp.find("{imp ")
-	while imp != -1:
-		impEnd = tmp.find("}", imp)
-		tmp = tmp[:imp] + dedent(context[tmp[imp + 5:impEnd]].__doc__) + tmp[impEnd + 1:]
-		imp = tmp.find("{imp ")
-	#endwhile
-
-	bsnip, esnip = tmp.find("{snip}"), tmp.find("{/snip}")
-	while bsnip != -1 or esnip != -1:
-		if bsnip != -1:
-			if bsnip < esnip:
-				dox += tmp[:bsnip]
-				tmp = tmp[esnip + 7:]
-			elif esnip != -1:
-				dox += tmp[esnip + 7:bsnip]
-				tmp = tmp[bsnip:]
+def snipDox(text, alsoSnip=None):
+	for snip in ["snip", alsoSnip] if alsoSnip else ["snip"]:
+		snipText1, snipText2 = "{%s}" % snip, "{/%s}" % snip
+		elen = len(snipText2)
+		dox, bsnip, esnip = u"", text.find(snipText1), text.find(snipText2)
+		while bsnip != -1 or esnip != -1:
+			if bsnip != -1:
+				if bsnip < esnip:
+					dox += text[:bsnip]
+					text = text[esnip + elen:]
+				elif esnip != -1:
+					dox += text[esnip + elen:bsnip]
+					text = text[bsnip:]
+				else:
+					dox += text[:bsnip]
+					break
+				#endif
 			else:
-				dox += tmp[:bsnip]
-				break
+				text = text[esnip + elen:]
 			#endif
-		else:
-			tmp = tmp[esnip + 7:]
-		#endif
-		bsnip, esnip = tmp.find("{snip}"), tmp.find("{/snip}")
-	#endwhile
-
-	print dox + tmp
+			bsnip, esnip = text.find(snipText1), text.find(snipText2)
+		#endwhile
+		text = dox + text
+	#endfor
+	return text
 #enddef
 
-def genericHelp(context, desc, lib, structs, types=None):
-	if types:
-		if not more_info:
-			print ("%s\n"
-				"It offers the structs:\n  %s\n\n"
-				"And the types:\n  %s\n\n"
-			) % (desc, "  ".join(structs), "  ".join(types))
-			print "Use --help %s [structs...] for more info" % lib
-		else:
-			for x in more_info:
-				if x in structs: printDox(structs[x], context)
-				elif x in types: printDox(types[x], context)
-			#endfor
-		#endif
+def printDox(struct, context, doimp):
+	"""
+	Supports the markup:
+	{snip} {/snip}   - To remove a sections from the docstring before printing.
+	                   Each tag may be used alone as if the \A and \Z were anchors.
+	{isnip} {/isnip} - Only snip when this doc is imported.
+	{imp ClassName}  - Import docstring from another class.
+	{cimp ClassName} - Import docstring from another class when requested.
+	"""
+	# TODO: Dear god this function is so ugly.
+	tmp = snipDox(dedent(struct.__doc__).strip("\n").replace("{isnip}", "").replace("{/isnip}", ""))
+
+	hadimp = False
+	for impstr in ["{imp ", "{cimp "]:
+		imp = tmp.find(impstr)
+		while imp != -1:
+			impEnd = tmp.find("}", imp)
+			name = tmp[imp + 5:impEnd].strip().split(".")
+			tcontext = context[name[0]]
+			for x in name[1:]: tcontext = getattr(tcontext, x)
+			if impstr == "{imp " or doimp:
+				if tmp[imp-1] == "\n": imp -= 1
+				tmp = tmp[:imp] + snipDox(dedent(tcontext.__doc__).strip("\n"), "isnip") + tmp[impEnd + 1:]
+			else:
+				try: name = tcontext.typeName
+				except AttributeError: name = tmp[imp + 5:impEnd].strip()
+				tmp = tmp[:imp] + ("[Uses keys from %s]" % name) + tmp[impEnd + 1:]
+				hadimp = True
+			#endif
+			imp = tmp.find(impstr)
+		#endwhile
+	#endfor
+
+	if hadimp: print tmp + "\n\n[Use %s:all to expand common keys in place.]" % struct.typeName
+	else: print tmp
+#enddef
+
+def genericHelp(context, moreInfo, desc, lib, structs, types=None):
+	if not moreInfo:
+		print ("%s\n"
+			"It offers the structs:\n  %s\n"
+		) % (desc, "  ".join(structs))
+		if types: print "And the types:\n  %s\n" % "  ".join(types)
+		print "Use --help %s [structs...] for more info" % lib
 	else:
-		if not more_info:
-			print ("%s\n"
-				"It offers the structs:\n  %s\n\n"
-			) % (desc, "  ".join(structs))
-			print "Use --help std [structs...] for more info"
-		else:
-			for x in more_info:
-				if x in structs: printDox(structs[x], context)
-			#endfor
-		#endif
+		for x in moreInfo:
+			tmp = x.split(":")
+			x = tmp[0]
+			doimp = True if len(tmp) > 1 and tmp[1] == "all" else False
+			if x in structs: printDox(structs[x], context, doimp)
+			elif types and x in types: printDox(types[x], context, doimp)
+		#endfor
 	#endif
 #enddef
 

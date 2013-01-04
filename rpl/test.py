@@ -1,4 +1,4 @@
-import rpl as RPL
+import rpl, helper
 
 #
 # Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
@@ -23,8 +23,8 @@ def register(rpl):
 	rpl.registerStruct(Echo)
 #enddef
 
-def printHelp(more_info=[]):
-	helper.genericHelp(locals(),
+def printHelp(moreInfo=[]):
+	helper.genericHelp(globals(), moreInfo,
 		"The test library offers structs helpful for unittests.", "test", {
 			# Structs
 			"echo": Echo,
@@ -32,9 +32,10 @@ def printHelp(more_info=[]):
 	)
 #enddef
 
-class Echo(RPL.RPLStruct):
+class Echo(rpl.RPLStruct):
 	"""
-	Print data to stdout. Automaticall handles wrapping and tabbing text for you.
+	Print data to stdout. Automatically handles wrapping and tabbing text for you.
+
 	width: Width of console. Default: 79.
 	tabs: Tab character to use. Default: four spaces.
 	line#: Where # is the line number. These are sorted at runtime, but missing
@@ -43,8 +44,8 @@ class Echo(RPL.RPLStruct):
 	"""
 
 	typeName = "echo"
-	def __init__(self, rpl, name, parent=None):
-		RPL.RPLStruct.__init__(self, rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		rpl.RPLStruct.__init__(self, top, name, parent)
 		self.registerKey("width", "number", "79")
 		self.registerKey("tabs", "string", "'    '")
 		self.registerKey("line", "[string|number|^]*")
@@ -71,7 +72,7 @@ class Echo(RPL.RPLStruct):
 		# Print lines
 		for x in lines:
 			data = self[x].resolve()
-			if isinstance(data, RPL.List):
+			if isinstance(data, rpl.List):
 				# Lists are considered to be tabbed in, with wrapping.
 				for x in data.get(): self.echo(tabs + self["tabs"].get())
 			else: print self.wrap(tabs, unicode(data.get()), self["width"].get())
@@ -83,9 +84,9 @@ class Echo(RPL.RPLStruct):
 
 	def __setitem__(self, key, value):
 		if key[0:4] == "line":
-			RPL.RPLStruct.__setitem__(self, "line", value)
+			rpl.RPLStruct.__setitem__(self, "line", value)
 			self.data[key] = self.data["line"]
 			del self.data["line"]
-		else: RPL.RPLStruct.__setitem__(self, key, value)
+		else: rpl.RPLStruct.__setitem__(self, key, value)
 	#enddef
 #endclass

@@ -34,10 +34,10 @@ def register(rpl):
 
 	rpl.registerType(Pokestr)
 	# TODO: Adjust ROM
-#endclass
+#enddef
 
-def printHelp(more_info=[]):
-	helper.genericHelp(locals(),
+def printHelp(moreInfo=[]):
+	helper.genericHelp(globals(), moreInfo,
 		"min is the library for Pokemon Mini ROMs.", "min", {
 			# Structs
 			"tile": Tile, "tilemap": Tilemap,
@@ -71,11 +71,19 @@ class Tile(std.Graphic):
 	"""
 	Manage a single two-color tile.
 	Tiles are 8x8 images of form 0bw and reading DULR.
+	{/isnip}
+	{cimp std.Graphic}
+	white:  Optional. Set color for white pixel. (Default: white)
+	        See [std.color] for details.
+	black:  Optional. Set color for black pixel. (Default: black)
+	        See [std.color] for details.
+	invert: Optional. Invert pixels. Simpler than setting them to opposites.
+	        (Default: false)
 	"""
 	typeName = "tile"
 
-	def __init__(self, _rpl, name, parent=None):
-		std.Graphic.__init__(self, _rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		std.Graphic.__init__(self, top, name, parent)
 
 		self.owm = self.ohm = self.wm = self.hm = 8
 		self.baseOffset = None
@@ -151,11 +159,16 @@ class Tilemap(Tile):
 	Manages two-color tiles.
 	Tiles are 8x8 images of form 0bw and reading DULR.
 	Tilemaps index multiple [usually sequential] tiles.
+
+	{imp Tile}
+	map:    Map of tile indexes. If not used, use Tile substructs instead.
+	dir:    Optional. Reading direction of the tilemap. See [std.readdir]
+	        (Default: LRUD)
 	"""
 	typeName = "tilemap"
 
-	def __init__(self, _rpl, name, parent=None):
-		Tile.__init__(self, _rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		Tile.__init__(self, top, name, parent)
 		self.curBase = None
 	#enddef
 
@@ -230,8 +243,8 @@ class Tile3(Tile):
 	"""
 	typeName = "tile3"
 
-	def __init__(self, _rpl, name, parent=None):
-		Tile.__init__(self, _rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		Tile.__init__(self, top, name, parent)
 	#enddef
 
 	def register(self, tilemap=False):
@@ -333,8 +346,8 @@ class Tilemap3(Tile3, Tilemap):
 	"""
 	typeName = "tilemap3"
 
-	def __init__(self, _rpl, name, parent=None):
-		Tile3.__init__(self, _rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		Tile3.__init__(self, top, name, parent)
 		self.curBase = None
 	#enddef
 
@@ -398,8 +411,8 @@ class Sprite(std.Graphic):
 	"""
 	typeName = "sprite"
 
-	def __init__(self, _rpl, name, parent=None):
-		std.Graphic.__init__(self, _rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		std.Graphic.__init__(self, top, name, parent)
 		self.owm = self.ohm = self.wm = self.hm = 16
 		self.baseOffset = None
 	#enddef
@@ -506,8 +519,8 @@ class Spritemap(Sprite):
 	"""
 	typeName = "spritemap"
 
-	def __init__(self, _rpl, name, parent=None):
-		Sprite.__init__(self, _rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		Sprite.__init__(self, top, name, parent)
 		self.curBase = None
 	#enddef
 
@@ -583,8 +596,8 @@ class Sprite3(Sprite):
 	"""
 	typeName = "sprite3"
 
-	def __init__(self, _rpl, name, parent=None):
-		Sprite.__init__(self, _rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		Sprite.__init__(self, top, name, parent)
 	#enddef
 
 	def register(self, spritemap=False):
@@ -715,8 +728,8 @@ class Spritemap3(Sprite3, Spritemap):
 	"""
 	typeName = "spritemap3"
 
-	def __init__(self, _rpl, name, parent=None):
-		Sprite3.__init__(self, _rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		Sprite3.__init__(self, top, name, parent)
 
 		self.curBase = None
 	#enddef

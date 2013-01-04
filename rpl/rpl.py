@@ -1706,6 +1706,25 @@ class Serializable(RPLStruct):
 	"""
 	Inherit this class for data that can be imported and/or exported.
 	This will handle several common keys for you.
+	{/snip}
+	base:   Optional. Base address of structure in the binary.
+	        This may be a relative address using the form by having a prefix:
+	          b, s, begin, start: Relative to beginning of file.
+	          c, cur, current: Relative to end of preceding structure.
+	          e, end: Relative to end of file. (eg. e:$10 is $10 before the end.)
+	        Relative addressing is entered as a list, but range form is accepted
+	        by use of the single-character forms. (Default c:$000000)
+	file:   Optional. Name of file to export to/import from, relative to current
+	        directory. Default value uses the struct name and hierarchy so that
+	        each grandparent is a folder and this struct is the filename.
+	ext:    Optional. If defined, it will use this as the extension when defaulting
+	        file or such. Default is defined by the structure.
+	import: Optional. When to import this struct. Options are:
+	         true:      If nothing was requested, or this was requested. (Default)
+	         false:     Never import.
+	         always:    Always import, regardless of requests.
+	         requested: Only import if requested.
+	export: Optional. When to export this struct. See import for options.
 	"""
 
 	# NOTE: There is no typeName because this is not meant to be used directly.

@@ -1,8 +1,5 @@
-import os
-import re
-import Image
-import helper
-import rpl as RPL
+import os, re, Image
+import rpl, helper
 from rpl import RPLError
 from copy import deepcopy
 from math import ceil
@@ -40,10 +37,10 @@ def register(rpl):
 	rpl.registerType(Color)
 	rpl.registerType(ReadDir)
 	rpl.registerType(Math)
-#endclass
+#enddef
 
 def printHelp(moreInfo=[]):
-	helper.genericHelp(locals(),
+	helper.genericHelp(globals(), moreInfo,
 		"std is the standard library for RPL.", "std", {
 			# Structs
 			"data": Data, "format": Format,
@@ -58,7 +55,7 @@ def printHelp(moreInfo=[]):
 	)
 #enddef
 
-class DataFile(RPL.Share):
+class DataFile(rpl.Share):
 	"""
 	.rpl export for data structs.
 	"""
@@ -132,7 +129,7 @@ class DataFile(RPL.Share):
 		"""
 		Add item to data. Must be RPLData type.
 		"""
-		if not isinstance(item, RPL.RPLData):
+		if not isinstance(item, rpl.RPLData):
 			raise RPLError("Tried to add non-data to rpl data file.")
 		#endif
 		self.base.append(item)
@@ -156,7 +153,7 @@ class DataFile(RPL.Share):
 	#enddef
 #endclass
 
-class ImageFile(RPL.Share):
+class ImageFile(rpl.Share):
 	def __init__(self, width=0, height=0):
 		self.dimensions = (width, height)
 		self.image = None
@@ -243,7 +240,7 @@ class ColorScan(object):
 ############################# Media Parent Structs #############################
 ################################################################################
 
-class Graphic(RPL.Serializable):
+class Graphic(rpl.Serializable):
 	"""
 	Structs that handle images should inherit this.
 	Do note that this is for flat images. If something were to handle layers,
@@ -254,23 +251,26 @@ class Graphic(RPL.Serializable):
 	Transformations are handled in the order: rotate -> mirror -> flip
 	And this is reversed for exporting. But they are spoken about in regards
 	to importing throughout the documentation.
-	rotate: 90 degree interval to rotate clockwise. 1 = 90, 2 = 180, 3 = 270
-	        Other intervals are lossy and will not be supported. If you need
-	        them rotated in such a way, do it in your graphics editor.
-	mirror: Mirror the image horizontally.
-	flip:   Flip the image vertically.
-	blank:  Background color, ie. what to use in places where graphics aren't
-	        specifically drawn.
+
+	rotate: Optional. 90 degree interval to rotate clockwise. 1 = 90, 2 = 180,
+	        3 = 270 Other intervals are lossy and will not be supported. If you
+	        need them rotated in such a way, do it in your graphics editor.
+	        (Default: 0)
+	mirror: Optional. Mirror the image horizontally. (Default: false)
+	flip:   Optional. Flip the image vertically. (Default: false)
+	blank:  Optional. Background color, ie. what to use in places where graphics
+	        aren't specifically drawn. (Default: white)
 	dimensions: [width, height] of the canvas to draw on. By default it refers
 	            to pixels, but *maps may adjust this to pw = width * multiplier;
 	            ph = height * multiplier;
-	offset: [x, y] of where to draw the image on the canvas. These are 0-based
-	        and are (by default) the pixel locations of the image. *maps may
-	        adjust this to be px = x * multiplier; py = y * multiplier;
+	offset: Optional. [x, y] of where to draw the image on the canvas. These are
+	        0-based and are (by default) the pixel locations of the image. *maps
+	        may adjust this to be px = x * multiplier; py = y * multiplier;
+	        (Default: [0, 0])
 	"""
 
-	def __init__(self, rpl, name, parent=None):
-		RPL.Serializable.__init__(self, rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		rpl.Serializable.__init__(self, top, name, parent)
 
 		self.image = None
 		self.importing = False
@@ -282,7 +282,7 @@ class Graphic(RPL.Serializable):
 	#enddef
 
 	def register(self):
-		RPL.Serializable.register(self)
+		rpl.Serializable.register(self)
 		self.registerKey("rotate", "number", "0")
 		self.registerKey("mirror", "bool", "false")
 		self.registerKey("flip", "bool", "false")
@@ -375,7 +375,7 @@ class Graphic(RPL.Serializable):
 		the class to prepare the image (during exporting).
 		"""
 		if not self.importing: self.prepareImage()
-		return RPL.String(self.name)
+		return rpl.String(self.name)
 	#enddef
 
 	def definePalette(self, palette):
@@ -455,7 +455,7 @@ class Graphic(RPL.Serializable):
 	#enddef
 #endclass
 
-class Sound(RPL.Serializable):
+class Sound(rpl.Serializable):
 	"""
 	Structs that handle sound should inherit this.
 	"""
@@ -463,7 +463,7 @@ class Sound(RPL.Serializable):
 	pass
 #endclass
 
-class Model(RPL.Serializable):
+class Model(rpl.Serializable):
 	"""
 	Structs that handle 3D models should inherit this.
 	"""
@@ -471,7 +471,7 @@ class Model(RPL.Serializable):
 	pass
 #endclass
 
-class Markup(RPL.Serializable):
+class Markup(rpl.Serializable):
 	"""
 	Structs that handle formatted text should inherit this.
 	"""
@@ -479,7 +479,7 @@ class Markup(RPL.Serializable):
 	pass
 #endclass
 
-class Assembly(RPL.Serializable):
+class Assembly(rpl.Serializable):
 	"""
 	Structs that handle bytecode should inherit this.
 	"""
@@ -495,9 +495,9 @@ class DataFormat(object):
 	"""
 	The mutual parent for Data and Format
 	"""
-	def __init__(self, rpl, name, parent):
-		self.parentClass = RPL.Serializable if isinstance(self, RPL.Serializable) else RPL.RPLStruct
-		self.parentClass.__init__(self, rpl, name, parent)
+	def __init__(self, top, name, parent):
+		self.parentClass = rpl.Serializable if isinstance(self, rpl.Serializable) else rpl.RPLStruct
+		self.parentClass.__init__(self, top, name, parent)
 		self.format = odict()
 		self.command = {}
 		self._len = None
@@ -612,7 +612,7 @@ class DataFormat(object):
 	#enddef
 
 	def __getitem__(self, key):
-		if key in self.data and isinstance(self.data[key], RPL.RPLStruct):
+		if key in self.data and isinstance(self.data[key], rpl.RPLStruct):
 			return self.data[key].basic()
 		#endif
 		try: return self.parentClass.__getitem__(self, key)
@@ -626,11 +626,11 @@ class DataFormat(object):
 						if com[0] == "len":
 							if DataFormat.isCounted(fmt["type"], True):
 								# Grab projected size of referenced struct.
-								self.data[key] = RPL.Number(fmt["type"].pointer().len())
+								self.data[key] = rpl.Number(fmt["type"].pointer().len())
 							else:
 								# Grab size of serialized data.
 								# TODO: Should this rather be a projected size?
-								self.data[key] = RPL.Number(len(
+								self.data[key] = rpl.Number(len(
 									self[com[1]].serialize(**self.prepOpts(
 										self.format[com[1]], size=False
 									))
@@ -639,13 +639,13 @@ class DataFormat(object):
 						elif com[0] == "count":
 							try:
 								typeName = self.pointer(self.parseFormat(com[1])["type"])
-								self.data[key] = RPL.Number(len(self.get(self[com[1]])))
+								self.data[key] = rpl.Number(len(self.get(self[com[1]])))
 							except RPLBadType: raise RPLError("Tried to count basic type.")
 						elif com[0] == "offset":
 							return None
 							#offset = self.format[com[1]]["offset"]
 							#if offset is None: return None
-							#self.data[key] = RPL.Number(offset)
+							#self.data[key] = rpl.Number(offset)
 						return self.data[key]
 					#endif
 					raise RPLError("Somehow have not read data for %s." % key)
@@ -660,14 +660,14 @@ class DataFormat(object):
 						size = self.offsetOf(keys[
 							keys.index(key) + 1
 						]) - offset
-						fmt["size"] = RPL.Number(size)
+						fmt["size"] = rpl.Number(size)
 					#endif
 					if DataFormat.isCounted(fmt["type"], True):
 						tmp = []
 						ref = self.pointer(fmt["type"])
 						def tmpfunc(address):
 							t = ref.clone()
-							DataFormat.setBase(t, RPL.Number(address))
+							DataFormat.setBase(t, rpl.Number(address))
 							if t.sizeFieldType == "len": DataFormat.setLen(t, fmt["size"])
 							try: t.exportPrepare
 							except AttributeError: pass
@@ -691,8 +691,8 @@ class DataFormat(object):
 								raise RPLError("Couldn't fit %s.%s into the available space perfectly." % (self.name, key))
 							#endif
 							# Adjust to the actual value..
-							fmt["size"] = RPL.Number(count)
-							self.data[key] = RPL.List(tmp)
+							fmt["size"] = rpl.Number(count)
+							self.data[key] = rpl.List(tmp)
 						elif ref.sizeFieldType == "len":
 							# Size is length.
 							address = tmpfunc(address)
@@ -700,7 +700,7 @@ class DataFormat(object):
 						else:
 							# Size is count.
 							for i in helper.range(size): address = tmpfunc(address)
-							self.data[key] = RPL.List(tmp)
+							self.data[key] = rpl.List(tmp)
 						#endif
 					else:
 						typeName = self.get(fmt["type"])
@@ -723,7 +723,7 @@ class DataFormat(object):
 			if key not in self.format:
 				self.parentClass.__setitem__(self, "x", value)
 				tmp = self.data["x"]
-				if isinstance(tmp, RPL.String):
+				if isinstance(tmp, rpl.String):
 					self.format[key] = map(self.rpl.parseData, tmp.get().split())
 				else: self.format[key] = tmp.get()
 				if DataFormat.isCounted(self.format[key][0], True):
@@ -748,7 +748,7 @@ class DataFormat(object):
 		self.importing = True
 		if filename is None:
 			# Should not initially prepare anything if Format type.
-			if self.parentClass != RPL.Serializable: return
+			if self.parentClass != rpl.Serializable: return
 			filename = self.open(folder, "rpl", True)
 		#endif
 		if data:
@@ -763,14 +763,14 @@ class DataFormat(object):
 			if type(data) is list:
 				try: self[k] = data.pop(0)
 				except IndexError:
-					raise RPL.RPLError("Not enough data for %s. Cannot set %s." % (
+					raise rpl.RPLError("Not enough data for %s. Cannot set %s." % (
 						self.name, k
 					))
 				#endtry
 			else:
 				try: self[k] = data.next()
 				except StopIteration:
-					raise RPL.RPLError("Not enough data for %s. Cannot set %s." % (
+					raise rpl.RPLError("Not enough data for %s. Cannot set %s." % (
 						self.name, k
 					))
 				#endtry
@@ -792,7 +792,7 @@ class DataFormat(object):
 						except TypeError: t.importPrepare(rom, folder)
 						tmp.append(t)
 					#endfor
-					self[k] = RPL.List(tmp)
+					self[k] = rpl.List(tmp)
 				#endif
 			#endif
 		#endfor
@@ -833,12 +833,12 @@ class DataFormat(object):
 				if com[0] in ["len", "count"]:
 					fmtc1 = self.format[com[1]]
 					if com[0] == "len" and fmtc1["end"]:
-						self[k] = data = RPL.Number(data.get() + fmtc1["offset"])
+						self[k] = data = rpl.Number(data.get() + fmtc1["offset"])
 					elif com[0] == "count" and fmtc1["end"]:
 						# This was actually a count, not a size..
 						size = 0
 						for x in self.get(com[1]): size += x.len()
-						self[k] = data = RPL.Number(size + fmtc1["offset"])
+						self[k] = data = rpl.Number(size + fmtc1["offset"])
 					#endif
 				#endif
 			#endif
@@ -887,7 +887,7 @@ class DataFormat(object):
 				try: self.list(data)[0].exportDataLoop
 				except IndexError:
 					# Empty list.
-					data = RPL.List([])
+					data = rpl.List([])
 				except AttributeError:
 					# Handle things not specifically meant to be used as data types.
 					for x in self.list(data): x.exportData(rom, folder)
@@ -895,7 +895,7 @@ class DataFormat(object):
 				else:
 					# Handle things that are.
 					ls = [x.exportDataLoop(rom, folder, callers=callers + [self]) for x in self.list(data)]
-					data = RPL.List(ls)
+					data = rpl.List(ls)
 				#endtry
 			elif DataFormat.isCounted(typeName, True):
 				# Length as size field.
@@ -918,7 +918,7 @@ class DataFormat(object):
 			#endif
 		#endfor
 		if ret:
-			if self.countExported() > 1: return RPL.List(ret)
+			if self.countExported() > 1: return rpl.List(ret)
 			else: return ret[0]
 		#endif
 	#enddef
@@ -956,24 +956,24 @@ class DataFormat(object):
 					except AttributeError:
 						if fmt["end"]:
 							# TODO: Next entry should have an offset
-							DataFormat.setBase(x, RPL.Number(base + calcedOffset))
+							DataFormat.setBase(x, rpl.Number(base + calcedOffset))
 							pass
 						else:
 							# Size is count
 							for c in tnr.clones:
-								DataFormat.setBase(c, RPL.Number(base + calcedOffset))
+								DataFormat.setBase(c, rpl.Number(base + calcedOffset))
 								calcedOffset += c.len()
 							#endfor
 						#endelse
 					else:
-						DataFormat.setBase(x, RPL.Number(base + calcedOffset))
+						DataFormat.setBase(x, rpl.Number(base + calcedOffset))
 						calcedOffset += x.calculateOffsets()
 					#endif
 				#endfor
 			elif DataFormat.isCounted(typeName, True):
 				# Size is length.
 				x = self.data[k]
-				DataFormat.setBase(x, RPL.Number(base + calcedOffset))
+				DataFormat.setBase(x, rpl.Number(base + calcedOffset))
 				calcedOffset += x.len()
 			else:
 				size = self.get(fmt["size"])
@@ -982,7 +982,7 @@ class DataFormat(object):
 					size = len(self[k].serialize(**self.prepOpts(
 						fmt, size=False
 					)))
-					fmt["size"] = RPL.Number(size)
+					fmt["size"] = rpl.Number(size)
 				#endif
 				calcedOffset += size
 			#endif
@@ -1014,7 +1014,7 @@ class DataFormat(object):
 			if prevFmt["end"]: fmt["offset"] = size
 			else: fmt["offset"] = self.offsetOf(prevKey) + size
 			if fmt["end"]:
-				fmt["size"] = RPL.Number(self.get(fmt["size"]) - fmt["offset"])
+				fmt["size"] = rpl.Number(self.get(fmt["size"]) - fmt["offset"])
 				fmt["end"] = False
 			#endif
 			return fmt["offset"]
@@ -1053,15 +1053,15 @@ class DataFormat(object):
 	#enddef
 #endclass
 
-class Format(DataFormat, RPL.RPLStruct):
+class Format(DataFormat, rpl.RPLStruct):
 	"""
 	Represents the format of packed data.
 	See [data] for specifics.
 	"""
 	typeName = "format"
 
-	def __init__(self, rpl, name, parent=None):
-		DataFormat.__init__(self, rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		DataFormat.__init__(self, top, name, parent)
 		self.base = None
 	#enddef
 
@@ -1069,7 +1069,7 @@ class Format(DataFormat, RPL.RPLStruct):
 		"""
 		Returns the name with a prefix, used for referencing this as a type.
 		"""
-		return RPL.Literal("Format:" + self.name)
+		return rpl.Literal("Format:" + self.name)
 	#enddef
 
 	def base(self, value=None, rom=None, offset=0):
@@ -1093,7 +1093,7 @@ class Format(DataFormat, RPL.RPLStruct):
 
 # TODO: Support txt, bin, json, and csv? exports
 # TODO: Export RPLs with statics too instead of being so nameless
-class Data(DataFormat, RPL.Serializable):
+class Data(DataFormat, rpl.Serializable):
 	"""
 	Manages un/structured binary data.
 	To describe the format, one must add keys prefixed with "x"
@@ -1146,7 +1146,7 @@ class Data(DataFormat, RPL.Serializable):
 					# Update the references (this relies on the above being list form..
 					# that means the format should only be used in format: calls..
 					for d in self.format[x]:
-						if isinstance(d, RPL.RPLRef): d.container = self
+						if isinstance(d, rpl.RPLRef): d.container = self
 					#endfor
 				#endfor
 			#endtry
@@ -1187,7 +1187,7 @@ def reverseEvery(data, x):
 class GenericGraphic(Graphic):
 	"""
 	Manage generic graphical content.
-	{imp Graphic}
+	{/isnip}{imp Graphic}
 	read: Read direction. See [readdir].
 	pixel: List of pixel formats, in order. More often than not there will
 	       only be one pixel format. It will loop through these when it
@@ -1200,8 +1200,8 @@ class GenericGraphic(Graphic):
 	"""
 	typeName = "graphic"
 
-	def __init__(self, rpl, name, parent=None):
-		Graphic.__init__(self, rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		Graphic.__init__(self, top, name, parent)
 		self.image = None
 	#enddef
 
@@ -1401,7 +1401,7 @@ class GenericGraphic(Graphic):
 	#enddef
 #endclass
 
-class Map(RPL.RPLStruct):
+class Map(rpl.RPLStruct):
 	"""
 	Translates data. When exporting, it will look for the value in packed and
 	output the corresponding value in unpacked. When importing, it does the
@@ -1427,8 +1427,8 @@ class Map(RPL.RPLStruct):
 	typeName = "map"
 	sizeFieldType = "len"
 
-	def __init__(self, rpl, name, parent=None):
-		RPL.RPLStruct.__init__(self, rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		rpl.RPLStruct.__init__(self, top, name, parent)
 		self.base, self.size, self.myData = None, None, None
 	#enddef
 
@@ -1446,7 +1446,7 @@ class Map(RPL.RPLStruct):
 		packed = []
 		for x in self["packed"].get():
 			try: x.serialize
-			except AttributeError: packed.append(RPL.String(x).serialize(**options))
+			except AttributeError: packed.append(rpl.String(x).serialize(**options))
 			else: packed.append(x.serialize(**options))
 		#endfor
 		return packed
@@ -1455,9 +1455,9 @@ class Map(RPL.RPLStruct):
 	def prepare(self, callers):
 		# Retrieve mappings and set mode.
 		try: packed, unpacked, mode, utype = self["packed"].list(), self["unpacked"].list(), 0, 0
-		except RPL.RPLBadType:
+		except rpl.RPLBadType:
 			try: unpacked, mode, utype = self["unpacked"].list(), 1, 0
-			except RPL.RPLBadType: unpacked, mode, utype = self["unpacked"].string(), 1, 1
+			except rpl.RPLBadType: unpacked, mode, utype = self["unpacked"].string(), 1, 1
 		#endtry
 
 		# Determine width.
@@ -1542,7 +1542,7 @@ class Map(RPL.RPLStruct):
 					# Match found!
 					u = unpacked[i]
 					try: d, t = u.number(), 0
-					except RPL.RPLBadType:
+					except rpl.RPLBadType:
 						# String type.
 						d, t = u.string(), 1
 					except AttributeError:
@@ -1675,7 +1675,7 @@ class Map(RPL.RPLStruct):
 #endclass
 
 # Input/Output [dependent] Static
-class IOStatic(RPL.Static):
+class IOStatic(rpl.Static):
 	"""
 	Returned data from a key depends on whether we're importing or exporting.
 	Format is key: [import, export]
@@ -1683,13 +1683,13 @@ class IOStatic(RPL.Static):
 	typeName = "iostatic"
 
 	def __getitem__(self, key):
-		return RPL.Static.__getitem__(self, key)[0 if self.rpl.importing else 1]
+		return rpl.Static.__getitem__(self, key)[0 if self.rpl.importing else 1]
 	#enddef
 
 	def __setitem__(self, key, value):
 		if key not in self.data:
 			# Initial set
-			if not isinstance(value, RPL.List) or len(value.get()) != 2:
+			if not isinstance(value, rpl.List) or len(value.get()) != 2:
 				raise RPLError("IOStatic requires each entry to be a list of two values.")
 			#endif
 			# This is supposed to be a static! So it should be fine to .get() here.
@@ -1705,7 +1705,7 @@ class IOStatic(RPL.Static):
 ################################################################################
 ##################################### Types ####################################
 ################################################################################
-class Bin(RPL.String):
+class Bin(rpl.String):
 	"""
 	Manages binary data.
 	Prints data in a fancy, hex editor-like way.
@@ -1713,7 +1713,7 @@ class Bin(RPL.String):
 	typeName = "bin"
 
 	def set(self, data):
-		RPL.String.set(self, data)
+		rpl.String.set(self, data)
 		data = re.sub(r'\s', "", self.data)
 		self.data = ""
 		for i in helper.range(0, len(data), 2):
@@ -1738,9 +1738,9 @@ class Bin(RPL.String):
 			#endif
 			lastComment = "%s # %s" % (
 				" " * pad,
-				RPL.String.binchr.sub(".", l1),
+				rpl.String.binchr.sub(".", l1),
 			)
-			if l2: lastComment += " " + RPL.String.binchr.sub(".", l2) + os.linesep
+			if l2: lastComment += " " + rpl.String.binchr.sub(".", l2) + os.linesep
 			tmp = tmp[16:]
 		#endwhile
 		return ret + "," + lastComment[1:]
@@ -1758,7 +1758,7 @@ class Bin(RPL.String):
 #endclass
 
 #PIXEL = 0
-class Pixel(RPL.String):
+class Pixel(rpl.String):
 	typeName = "pixel"
 
 	specification = re.compile(r'(\d+)([bBxX])([rgbRGBhslHSLwWaAi0]+)')
@@ -1974,7 +1974,7 @@ class Pixel(RPL.String):
 	#enddef
 #endclass
 
-class Color(RPL.Named, RPL.HexNum, RPL.Literal, RPL.List):
+class Color(rpl.Named, rpl.HexNum, rpl.Literal, rpl.List):
 	typeName = "color"
 
 	names = {
@@ -2003,11 +2003,11 @@ class Color(RPL.Named, RPL.HexNum, RPL.Literal, RPL.List):
 				(data[2] & 0xff)
 			)
 			if len(data) == 4: self.data |= (255 - (data[3] & 0xff)) << 24
-		else: RPL.Named.set(self, data, ["int", "long"])
+		else: rpl.Named.set(self, data, ["int", "long"])
 	#enddef
 
 	def __unicode__(self):
-		return RPL.Named.__unicode__(self, "$%06x")
+		return rpl.Named.__unicode__(self, "$%06x")
 	#enddef
 
 	def tuple(self):
@@ -2020,7 +2020,7 @@ class Color(RPL.Named, RPL.HexNum, RPL.Literal, RPL.List):
 	#enddef
 #endclass
 
-class ReadDir(RPL.Literal):
+class ReadDir(rpl.Literal):
 	"""
 	This can be almost any combination of L, R, U, and D.
 	LRUD is the general reading direction: Start in upper left and read to the
@@ -2040,7 +2040,7 @@ class ReadDir(RPL.Literal):
 	]
 
 	def set(self, data):
-		RPL.Literal.set(self, data)
+		rpl.Literal.set(self, data)
 		if self.data in ReadDir.valid:
 			self.primary, self.secondary = (
 				"LRUD".index(self.data[0]),
@@ -2092,7 +2092,7 @@ class ReadDir(RPL.Literal):
 	#enddef
 #endclass
 
-class Math(RPL.Literal, RPL.Number):
+class Math(rpl.Literal, rpl.Number):
 	"""
 	Handles mathematics.
 	TODO: Currently does not handle Order of Operations or parenthesis.
@@ -2106,7 +2106,7 @@ class Math(RPL.Literal, RPL.Number):
 
 	def set(self, data):
 		if type(data) in [int, long]: data = str(data)
-		RPL.Literal.set(self, data)
+		rpl.Literal.set(self, data)
 		self.tokens = Math.specification.split(self.data.replace(" ", ""))
 	#enddef
 

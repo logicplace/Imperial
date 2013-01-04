@@ -1,4 +1,4 @@
-import rpl as RPL
+import rpl, helper
 
 #
 # Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
@@ -24,7 +24,7 @@ def register(rpl):
 #enddef
 
 def printHelp(moreInfo=[]):
-	helper.genericHelp(locals(),
+	helper.genericHelp(globals(), moreInfo,
 		"The table library aids in dealing with table or database formats that "
 		"use a table head for dynamic typing and such.", "table", {
 			# Structs
@@ -33,22 +33,24 @@ def printHelp(moreInfo=[]):
 	)
 #enddef
 
-class Table(RPL.Serializable):
+class Table(rpl.Serializable):
 	"""
 	Manages dynamic typing and such.
+
+	{/isnip}{cimp rpl.Serializable}
 	index:  List of indexes that map to format.
 	format: List of references to format struct.
-    head:   Reference to key that contains the typing information.
-            This key is contained in a format or data struct and uses a
-            format struct as its type.
-    type:   Name of key in header struct that contains the type ID.
-    name:   Optional. Name of key in header struct that contains the column name.
-    unique: Optional. Name or ID of column that's used as the unique index.
+	head:   Reference to key that contains the typing information.
+	        This key is contained in a format or data struct and uses a
+	        format struct as its type.
+	type:   Name of key in header struct that contains the type ID.
+	name:   Optional. Name of key in header struct that contains the column name.
+	unique: Optional. Name or ID of column that's used as the unique index.
 	"""
 	typeName = "table"
 
-	def __init__(self, rpl, name, parent=None):
-		RPL.Serializable.__init__(self, rpl, name, parent)
+	def __init__(self, top, name, parent=None):
+		rpl.Serializable.__init__(self, top, name, parent)
 		self.registerKey("index", "[number|string]+")
 		self.registerKey("format", "[reference]+")
 		self.registerKey("head", "reference")
@@ -68,12 +70,12 @@ class Table(RPL.Serializable):
 				except RPL.RPLError: pass
 			#endfor
 		#endif
-		RPL.Serializable.__setitem__(self, key, value)
+		rpl.Serializable.__setitem__(self, key, value)
 	#enddef
 
 	def __getitem__(self, key):
 		if key == "row": return self.row
-		else: return RPL.Serializable.__getitem__(self, key)
+		else: return rpl.Serializable.__getitem__(self, key)
 	#enddef
 
 	def importPrepare(self, rom, folder, filename=None, data=None, callers=[]):
@@ -119,8 +121,8 @@ class Table(RPL.Serializable):
 			ref = self.get("format")[idx].pointer()
 			ref.unmanaged = False
 			clone = ref.clone()
-			try: clone["base"] = RPL.Number(address)
-			except RPL.RPLError: clone.base = RPL.Number(address)
+			try: clone["base"] = rpl.Number(address)
+			except rpl.RPLError: clone.base = rpl.Number(address)
 			try: clone.exportPrepare
 			except AttributeError: pass
 			else:
@@ -138,13 +140,13 @@ class Table(RPL.Serializable):
 	def exportDataLoop(self, rom, folder, datafile=None, callers=[]):
 		ret = []
 		for x in self.row: ret.append(x.exportDataLoop(rom, folder, datafile))
-		return RPL.List(ret)
+		return rpl.List(ret)
 	#enddef
 
 	def calculateOffsets(self):
 		calcedOffset = 0
 		for x in self.row:
-			x.base = RPL.Number(calcedOffset)
+			x.base = rpl.Number(calcedOffset)
 			calcedOffset += x.calculateOffsets()
 		#endfor
 		return calcedOffset
@@ -158,7 +160,7 @@ class Table(RPL.Serializable):
 #		"""
 #		Returns the name with a prefix, used for referencing this as a type.
 #		"""
-#		return RPL.Literal("Table:" + self.name)
+#		return rpl.Literal("Table:" + self.name)
 #	#enddef
 
 	def len(self):
