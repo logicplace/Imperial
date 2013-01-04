@@ -792,7 +792,7 @@ class Pokestr(rpl.Literal):
 	Some don't implement: [¥]^_`
 	Sometimes ¥ is implemented as ⋯
 
-	Katakan starts at $a6.
+	Katakana starts at $a6.
 	Zany Cards DE/FR implements accented latin characters starting at $a0.
 	Though it's only used once, I'm allowing this to serialize it as well since
 	it is used in the same way as the regular pokestr.
