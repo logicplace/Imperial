@@ -26,7 +26,7 @@ def register(rpl):
 def printHelp(moreInfo=[]):
 	helper.genericHelp(locals(),
 		"The table library aids in dealing with table or database formats that "
-		"use a table head for dynamic typing and such.\n", {
+		"use a table head for dynamic typing and such.", "table", {
 			# Structs
 			"table": Table,
 		}

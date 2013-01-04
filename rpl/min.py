@@ -2,7 +2,6 @@
 
 import re
 import rpl, std, helper
-from textwrap import dedent
 
 #
 # Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
@@ -38,24 +37,18 @@ def register(rpl):
 #endclass
 
 def printHelp(more_info=[]):
-	print(
-		"min is the library for Pokemon Mini ROMs.\n"
-		"It offers the structs:\n"
-		"  tile  tilemap  tile3  tilemap3  sprite  spritemap  sprite3  spritemap3\n\n"
-		"And the types:\n"
-		"  pokestr\n"
+	helper.genericHelp(locals(),
+		"min is the library for Pokemon Mini ROMs.", "min", {
+			# Structs
+			"tile": Tile, "tilemap": Tilemap,
+			"tile3": Tile3, "tilemap3": Tilemap3,
+			"sprite": Sprite, "spritemap": Spritemap,
+			"sprite3": Sprite, "spritemap3": Spritemap3,
+		}, {
+			# Types
+			"pokestr": Pokestr,
+		}
 	)
-	if not more_info: print "Use --help std [structs...] for more info"
-	infos = {
-		"tile": Tile, "tilemap": Tilemap,
-		"tile3": Tile3, "tilemap3": Tilemap3,
-		"sprite": Sprite, "spritemap": Spritemap,
-		"sprite3": Sprite, "spritemap3": Spritemap3,
-		"pokestr": Pokestr,
-	}
-	for x in more_info:
-		if x in infos: print dedent(infos[x].__doc__)
-	#endfor
 #enddef
 
 def splitBits(byte):

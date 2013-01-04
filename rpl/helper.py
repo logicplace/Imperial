@@ -129,14 +129,14 @@ def printDox(struct, context):
 	print dox + tmp
 #enddef
 
-def genericHelp(context, desc, structs, types=None):
+def genericHelp(context, desc, lib, structs, types=None):
 	if types:
 		if not more_info:
 			print ("%s\n"
 				"It offers the structs:\n  %s\n\n"
 				"And the types:\n  %s\n\n"
 			) % (desc, "  ".join(structs), "  ".join(types))
-			print "Use --help std [structs...] for more info"
+			print "Use --help %s [structs...] for more info" % lib
 		else:
 			for x in more_info:
 				if x in structs: printDox(structs[x], context)

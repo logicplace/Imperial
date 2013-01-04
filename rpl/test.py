@@ -24,18 +24,12 @@ def register(rpl):
 #enddef
 
 def printHelp(more_info=[]):
-	print(
-		"The test library offers structs helpful for unittests.\n"
-		"It offers the structs:\n"
-		"  echo\n"
+	helper.genericHelp(locals(),
+		"The test library offers structs helpful for unittests.", "test", {
+			# Structs
+			"echo": Echo,
+		}
 	)
-	if not more_info: print "Use --help test [structs...] for more info"
-	infos = {
-		"echo": Echo,
-	}
-	for x in more_info:
-		if x in infos: print dedent(infos[x].__doc__)
-	#endfor
 #enddef
 
 class Echo(RPL.RPLStruct):

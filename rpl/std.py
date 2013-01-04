@@ -44,7 +44,7 @@ def register(rpl):
 
 def printHelp(moreInfo=[]):
 	helper.genericHelp(locals(),
-		"std is the standard library for RPL.", {
+		"std is the standard library for RPL.", "std", {
 			# Structs
 			"data": Data, "format": Format,
 			"map": Map, "iostatic": IOStatic,
