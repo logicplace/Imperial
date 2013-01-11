@@ -1,14 +1,6 @@
-import os
-import re
-import copy
-import codecs
-import helper
-from math import ceil
-from zlib import crc32
-from collections import OrderedDict as odict
-
+#-*- coding:utf-8 -*-
 #
-# Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
+# Copyright (C) 2012-2013 Sapphire Becker (http://logicplace.com)
 #
 # This file is part of Imperial Exchange.
 #
@@ -25,14 +17,18 @@ from collections import OrderedDict as odict
 # You should have received a copy of the GNU General Public License
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
+import os
+import re
+import copy
+import codecs
+import helper
+from math import ceil
+from zlib import crc32
+from collections import OrderedDict as odict
 
 # TODO:
 #  * RPLRef issues:
 #    * @back (maybe?)
-#  * T) Serializers that modify the same file need to compound.
-#    Therefore, make a system in which structs request the handler/data to
-#    modify, which will open the file and read it if it's the first, but
-#    otherwise return the already loaded/modified data to be further modified.
 #  * Add referencing multiline strs with @` ` form.
 
 ################################################################################

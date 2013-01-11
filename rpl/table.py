@@ -1,7 +1,6 @@
-import rpl, helper
-
+#-*- coding:utf-8 -*-
 #
-# Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
+# Copyright (C) 2012-2013 Sapphire Becker (http://logicplace.com)
 #
 # This file is part of Imperial Exchange.
 #
@@ -18,6 +17,8 @@ import rpl, helper
 # You should have received a copy of the GNU General Public License
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
+
+import rpl, helper
 
 def register(rpl):
 	rpl.registerStruct(Table)
@@ -67,7 +68,7 @@ class Table(rpl.Serializable):
 				# Try to manage this
 				try: x.pointer().unmanaged = False
 				# Does not exist yet... will need to be set in preparation.
-				except RPL.RPLError: pass
+				except rpl.RPLError: pass
 			#endfor
 		#endif
 		rpl.Serializable.__setitem__(self, key, value)

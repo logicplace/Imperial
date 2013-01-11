@@ -1,10 +1,6 @@
 #-*- coding:utf-8 -*-
-
-import re
-import rpl, std, helper
-
 #
-# Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
+# Copyright (C) 2012-2013 Sapphire Becker (http://logicplace.com)
 #
 # This file is part of Imperial Exchange.
 #
@@ -21,6 +17,9 @@ import rpl, std, helper
 # You should have received a copy of the GNU General Public License
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
+
+import re
+import rpl, std, helper
 
 def register(rpl):
 	rpl.registerStruct(Tile)

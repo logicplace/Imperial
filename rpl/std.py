@@ -1,13 +1,6 @@
-import os, re, Image
-import rpl, helper
-from rpl import RPLError
-from copy import deepcopy
-from math import ceil
-from StringIO import StringIO
-from collections import OrderedDict as odict
-
+#-*- coding:utf-8 -*-
 #
-# Copyright (C) 2012 Sapphire Becker (http://logicplace.com)
+# Copyright (C) 2012-2013 Sapphire Becker (http://logicplace.com)
 #
 # This file is part of Imperial Exchange.
 #
@@ -24,6 +17,14 @@ from collections import OrderedDict as odict
 # You should have received a copy of the GNU General Public License
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
+
+import os, re, Image
+import rpl, helper
+from rpl import RPLError
+from copy import deepcopy
+from math import ceil
+from StringIO import StringIO
+from collections import OrderedDict as odict
 
 def register(rpl):
 	rpl.registerStruct(Data)
