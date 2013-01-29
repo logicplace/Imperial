@@ -42,17 +42,16 @@ def register(rpl):
 
 def printHelp(moreInfo=[]):
 	helper.genericHelp(globals(), moreInfo,
-		"std is the standard library for RPL.", "std", {
+		"std is the standard library for RPL.", "std", [
 			# Structs
-			"data": Data, "format": Format,
-			"map": Map, "iostatic": IOStatic,
-			"graphic": GenericGraphic,
-		}, {
+			Data, Format,
+			Map, IOStatic,
+			GenericGraphic,
 			# Types
-			"bin": Bin, "pixel": Pixel,
-			"color": Color, "readdir": ReadDir,
-			"math": Math,
-		}
+			Bin, Pixel,
+			Color, ReadDir,
+			Math,
+		]
 	)
 #enddef
 
@@ -248,26 +247,32 @@ class Graphic(rpl.Serializable):
 	it would currently inherit this as well, but have to add a lot of
 	functionality. This, however, should not be used for anything using more
 	than two dimensions.
-	{/snip}
+	<all><imp rpl.Serializable.all /><graphic>
+	<transformations>
 	Transformations are handled in the order: rotate -> mirror -> flip
 	And this is reversed for exporting. But they are spoken about in regards
 	to importing throughout the documentation.
-
+	<rotate>
 	rotate: Optional. 90 degree interval to rotate clockwise. 1 = 90, 2 = 180,
 	        3 = 270 Other intervals are lossy and will not be supported. If you
 	        need them rotated in such a way, do it in your graphics editor.
-	        (Default: 0)
-	mirror: Optional. Mirror the image horizontally. (Default: false)
-	flip:   Optional. Flip the image vertically. (Default: false)
+	        (Default: 0)</rotate>
+	<mirror>
+	mirror: Optional. Mirror the image horizontally. (Default: false)</mirror>
+	<flip>
+	flip:   Optional. Flip the image vertically. (Default: false)</flip></transformations>
+	<blank>
 	blank:  Optional. Background color, ie. what to use in places where graphics
-	        aren't specifically drawn. (Default: white)
+	        aren't specifically drawn. (Default: white)</blank>
+	<dimensions>
 	dimensions: [width, height] of the canvas to draw on. By default it refers
-	            to pixels, but *maps may adjust this to pw = width * multiplier;
+	            to pixels, but *maps may adjust this to pw = width * multiplier;</dimensions>
 	            ph = height * multiplier;
+	<offset>
 	offset: Optional. [x, y] of where to draw the image on the canvas. These are
 	        0-based and are (by default) the pixel locations of the image. *maps
 	        may adjust this to be px = x * multiplier; py = y * multiplier;
-	        (Default: [0, 0])
+	        (Default: [0, 0])</offset></graphic></all>
 	"""
 
 	def __init__(self, top, name, parent=None):
@@ -1057,7 +1062,8 @@ class DataFormat(object):
 class Format(DataFormat, rpl.RPLStruct):
 	"""
 	Represents the format of packed data.
-	See [data] for specifics.
+	Same as [data] but does not import or export.
+	<imp Data.all />
 	"""
 	typeName = "format"
 
@@ -1097,6 +1103,7 @@ class Format(DataFormat, rpl.RPLStruct):
 class Data(DataFormat, rpl.Serializable):
 	"""
 	Manages un/structured binary data.
+	<all>
 	To describe the format, one must add keys prefixed with "x"
 	Order is important, of course. The format for a field's description is:
 	[type, size, offset?, endian?, sign?, pad char?, pad side?, end?]
@@ -1113,15 +1120,22 @@ class Data(DataFormat, rpl.Serializable):
 	              or "rcenter"
 	    End: Rather than size, Size is actually the address to stop reading.
 	         Use the literal word "end"
-	endian:  Default endian, may be "little" or "big". Defaults to "little"
-	pad:     Default padding character, default is "$00"
+	<endian>
+	endian:  Default endian, may be "little" or "big". Defaults to "little"</endian>
+	<pad>
+	pad:     Default padding character, default is "$00"</pad>
+	<padside>
 	padside: Default padside, may be "left", "right", "center", or "rcenter".
-	         Default is "right"
-	sign:    Default sign, may be "signed" or "unsigned". Defaults to "unsigned"
-	pretty:  Pretty print data, particularly relevant to lists.
-	comment: Comment to write to the file. Great for when sharing the file.
+	         Default is "right"</padside>
+	<sign>
+	sign:    Default sign, may be "signed" or "unsigned". Defaults to "unsigned"</sign>
+	<pretty>
+	pretty:  Pretty print data, particularly relevant to lists.</pretty>
+	<comment>
+	comment: Comment to write to the file. Great for when sharing the file.</comment>
+	<format>
 	format:  Copy the x keys from given format struct *at this point* in the
-	         data struct. This is a write-only key.
+	         data struct. This is a write-only key.</format></all>
 	"""
 	typeName = "data"
 
@@ -1188,16 +1202,20 @@ def reverseEvery(data, x):
 class GenericGraphic(Graphic):
 	"""
 	Manage generic graphical content.
-	{/isnip}{imp Graphic}
-	read: Read direction. See [readdir].
+	<if all><imp Graphic.all /></if>
+	<read>
+	read: Read direction. See [readdir].</read>
+	<pixel>
 	pixel: List of pixel formats, in order. More often than not there will
 	       only be one pixel format. It will loop through these when it
-	       reaches the end. See [pixel].
-	palette: 0-based palette. Use i form in palette to index against this.
+	       reaches the end. See [pixel].</pixel>
+	<palette>
+	palette: 0-based palette. Use i form in palette to index against this.</palette>
+	<reverse>
 	reverse: Reverse the order of the bytes every X bytes. Example:
 	         Data is: 0x01 23 45 67
 	         reverse: 2
-	         Final data is: 0x23 01 67 45
+	         Final data is: 0x23 01 67 45</reverse>
 	"""
 	typeName = "graphic"
 
@@ -1412,18 +1430,24 @@ class Map(rpl.RPLStruct):
 	being that it can translate strings longer than one character. However do
 	remember that strings in RPL are UTF8 as it is. But if the custom encoding
 	is multibyte, this will help.
-	packed:   What the value should look like when packed.
-	unpacked: What the value should look like when unpacked.
+	<packed>
+	packed:   What the value should look like when packed.</packed>
+	<unpacked>
+	unpacked: What the value should look like when unpacked.</unpacked>
+	<unmapped>
 	unmapped: Method to handle data not represented in un/packed. May be:
 	          except: Throw an exception.
 	          add:    Write it as is.
-	          drop:   Ignore it.
+	          drop:   Ignore it.</unmapped>
+	<cast>
 	cast:     Type to cast unpacked values to, if more specific than the
-	          interpreted type.
+	          interpreted type.</cast>
+	<string>
 	string:   Type to cast unpacked strings to specifically, if strings and
-	          numbers are both present.
+	          numbers are both present.</string>
+	<number>
 	number:   Type to cast unpacked numbers to specifically, if strings and
-	          numbers are both present.
+	          numbers are both present.</number>
 	"""
 	typeName = "map"
 	sizeFieldType = "len"

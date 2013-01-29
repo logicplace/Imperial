@@ -37,16 +37,15 @@ def register(rpl):
 
 def printHelp(moreInfo=[]):
 	helper.genericHelp(globals(), moreInfo,
-		"min is the library for Pokemon Mini ROMs.", "min", {
+		"min is the library for Pokemon Mini ROMs.", "min", [
 			# Structs
-			"tile": Tile, "tilemap": Tilemap,
-			"tile3": Tile3, "tilemap3": Tilemap3,
-			"sprite": Sprite, "spritemap": Spritemap,
-			"sprite3": Sprite, "spritemap3": Spritemap3,
-		}, {
+			Tile,   Tilemap,
+			Tile3,  Tilemap3,
+			Sprite, Spritemap,
+			Sprite, Spritemap3,
 			# Types
-			"pokestr": Pokestr,
-		}
+			Pokestr,
+		]
 	)
 #enddef
 
@@ -70,14 +69,16 @@ class Tile(std.Graphic):
 	"""
 	Manage a single two-color tile.
 	Tiles are 8x8 images of form 0bw and reading DULR.
-	{/isnip}
-	{cimp std.Graphic}
+	<all><if all><imp std.Graphic.all /></if>
+	<tile><white>
 	white:  Optional. Set color for white pixel. (Default: white)
-	        See [std.color] for details.
+	        See [std.color] for details.</white>
+	<black>
 	black:  Optional. Set color for black pixel. (Default: black)
-	        See [std.color] for details.
+	        See [std.color] for details.</black>
+	<invert>
 	invert: Optional. Invert pixels. Simpler than setting them to opposites.
-	        (Default: false)
+	        (Default: false)</invert></tile></all>
 	"""
 	typeName = "tile"
 
@@ -159,10 +160,12 @@ class Tilemap(Tile):
 	Tiles are 8x8 images of form 0bw and reading DULR.
 	Tilemaps index multiple [usually sequential] tiles.
 
-	{imp Tile}
-	map:    Map of tile indexes. If not used, use Tile substructs instead.
+	<imp Tile.all />
+	<map>
+	map:    Map of tile indexes. If not used, use Tile substructs instead.</map>
+	<dir>
 	dir:    Optional. Reading direction of the tilemap. See [std.readdir]
-	        (Default: LRUD)
+	        (Default: LRUD)</dir>
 	"""
 	typeName = "tilemap"
 
@@ -235,10 +238,22 @@ class Tilemap(Tile):
 
 class Tile3(Tile):
 	"""
+	<if base><imp rpl.Serializable.base /></if>
+	<if !base>
 	Manage a single three-color tile.
-	Tiles are two 8x8 images of form 0bw and reading DULR that are
-	combined by t1 & t2 being black, t1 nor t2 being white, and
-	t1 ^ t2 being gray.
+	Tiles are two 8x8 images of form 0bw and reading DULR that are combined by
+	t1 & t2 being black, t1 nor t2 being white, and t1 ^ t2 being gray.
+	<if all><imp std.Graphic.graphic><br/>
+	<imp rpl.Serializable.all-base /></if>
+	<bases>
+	base1:  Base of first dither of image. See <me/>:base for details.
+	base2:  Base of second dither of image. See <me/>:base for details.</bases>
+	<imp Tile.tile />
+	<gray>
+	gray:   Optional. Set color for gray pixel. (Default: gray)
+	        See [std.color] for details.
+	grey:   Alias of gray.</gray>
+	</if>
 	"""
 	typeName = "tile3"
 
@@ -249,8 +264,9 @@ class Tile3(Tile):
 	def register(self, tilemap=False):
 		Tile.register(self, tilemap)
 		self.registerKey("gray", "color", "gray")
-		self.registerKey("base1", self.keys["base"][0].source, "$000000")
-		self.registerKey("base2", self.keys["base"][0].source, "$000000")
+		self.registerVirtual("grey", "gray")
+		self.registerKey("base1", self.keys["base"][0].source, "c:$000000")
+		self.registerKey("base2", self.keys["base"][0].source, "c:$000000")
 		self.unregisterKey("base")
 	#enddef
 
@@ -262,13 +278,7 @@ class Tile3(Tile):
 				self.parent[key] +
 				self.parent.mapSize() + self.baseOffset
 			)
-		elif key == "grey": return std.Graphic.__getitem__(self, "gray")
 		else: return std.Graphic.__getitem__(self, key)
-	#enddef
-
-	def __setitem__(self, key, value):
-		if key == "grey": std.Graphic.__setitem__(self, "gray", value)
-		else: std.Graphic.__setitem__(self, key, value)
 	#enddef
 
 	def getPalette(self):
@@ -602,6 +612,7 @@ class Sprite3(Sprite):
 	def register(self, spritemap=False):
 		Sprite.register(self, spritemap)
 		self.registerKey("gray", "color", "gray")
+		self.registerVirtual("grey", "gray")
 		self.registerKey("base1", self.keys["base"][0].source, "$000000")
 		self.registerKey("base2", self.keys["base"][0].source, "$000000")
 		self.unregisterKey("base")
@@ -615,13 +626,7 @@ class Sprite3(Sprite):
 				self.parent[key] +
 				self.parent.mapSize() + self.baseOffset
 			)
-		elif key == "grey": return std.Graphic.__getitem__(self, "gray")
 		else: return std.Graphic.__getitem__(self, key)
-	#enddef
-
-	def __setitem__(self, key, value):
-		if key == "grey": std.Graphic.__setitem__(self, "gray", value)
-		else: std.Graphic.__setitem__(self, key, value)
 	#enddef
 
 	def getPalette(self):

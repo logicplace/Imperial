@@ -18,9 +18,11 @@
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-import codecs
+import re, codecs
 from sys import stderr
 from textwrap import dedent
+
+class RPLInternal(Exception): pass
 
 # So I can be lazy about writing errors
 def err(msg): stderr.write(unicode(msg) + "\n")
@@ -28,7 +30,6 @@ def err(msg): stderr.write(unicode(msg) + "\n")
 # TODO: Define some levels
 logLevel = 0
 def log(level, msg):
-	global logLevel
 	if level <= logLevel: print "LOG(%i): %s" % (debugLevel, unicode(msg))
 #enddef
 
@@ -92,84 +93,137 @@ def list2english(l, conjunction=u"and"):
 	else: return u"%s, %s %s" % (", ".join(l[0:-1]), conjunction, l[-1])
 #enddef
 
-def snipDox(text, alsoSnip=None):
-	for snip in ["snip", alsoSnip] if alsoSnip else ["snip"]:
-		snipText1, snipText2 = "{%s}" % snip, "{/%s}" % snip
-		elen = len(snipText2)
-		dox, bsnip, esnip = u"", text.find(snipText1), text.find(snipText2)
-		while bsnip != -1 or esnip != -1:
-			if bsnip != -1:
-				if bsnip < esnip:
-					dox += text[:bsnip]
-					text = text[esnip + elen:]
-				elif esnip != -1:
-					dox += text[esnip + elen:bsnip]
-					text = text[bsnip:]
-				else:
-					dox += text[:bsnip]
-					break
-				#endif
-			else:
-				text = text[esnip + elen:]
-			#endif
-			bsnip, esnip = text.find(snipText1), text.find(snipText2)
-		#endwhile
-		text = dox + text
-	#endfor
-	return text
+def linechar(string):
+	lastnl = string.rfind("\n")
+	if lastnl == -1: return 1, len(string)
+	else: return string.count("\n"), len(string[lastnl+1:])
 #enddef
 
-def printDox(struct, context, doimp):
+def typeOrClass(cls):
+	try: return cls.typeName
+	except AttributeError: return cls.__name__
+#enddef
+
+doxSyntax = re.compile(r'<(/?)([a-zA-Z0-9]+)(?: +([^>]+?))? */?>|([^<]+)')
+
+def fetchDox(struct, context, conds, key=None, ignore=None):
 	"""
 	Supports the markup:
-	{snip} {/snip}   - To remove a sections from the docstring before printing.
-	                   Each tag may be used alone as if the \A and \Z were anchors.
-	{isnip} {/isnip} - Only snip when this doc is imported.
-	{imp ClassName}  - Import docstring from another class.
-	{cimp ClassName} - Import docstring from another class when requested.
+	<help>Preferably one line help for conds.</help> Generated if omitted.
+	<mykey>mykey: blah blah blah</mykey>
+	<DevDocs hidden>Blah blah</DevDocs> All keys must be named, this can still be
+	                                    shown when it's imported.
+	<imp class.tagname /> class is basically the same mechanism as above, just
+	                      selecting a tag as well.
+	<if all>blah blah</if> "all" sent by :all
+	<br/> Insert newline manually.
+	<me/> Insert name of current struct.
 	"""
-	# TODO: Dear god this function is so ugly.
-	tmp = snipDox(dedent(struct.__doc__).strip("\n").replace("{isnip}", "").replace("{/isnip}", ""))
-
-	hadimp = False
-	for impstr in ["{imp ", "{cimp "]:
-		imp = tmp.find(impstr)
-		while imp != -1:
-			impEnd = tmp.find("}", imp)
-			name = tmp[imp + 5:impEnd].strip().split(".")
-			tcontext = context[name[0]]
-			for x in name[1:]: tcontext = getattr(tcontext, x)
-			if impstr == "{imp " or doimp:
-				if tmp[imp-1] == "\n": imp -= 1
-				tmp = tmp[:imp] + snipDox(dedent(tcontext.__doc__).strip("\n"), "isnip") + tmp[impEnd + 1:]
+	parents, do, dox = [[""]], 0, dedent(struct.__doc__)
+	for x in doxSyntax.finditer(dox):
+		end, tagname, args, text = x.groups("")
+		if text.strip() == "": text = ""
+		if tagname or do:
+			# Command or key
+			if tagname == "if":
+				if end:
+					if do: do -= 1
+				elif do: do += 1
+				else:
+					tmp = args.split(" ")
+					t, f = [], []
+					for tp in tmp:
+						if tp[0] == "!": f.append(tp[1:])
+						else: t.append(tp)
+					#endfor
+					do = 0 if allIn(t, conds) and not oneOfIn(f, conds) else 1
+				#endif
+			elif do: continue
+			elif end:
+				if len(parents) == 1:
+					raise RPLInternal("Line %i char %i: Extraneous end tag (%s) in help for %s." % (
+						linechar(dox[:x.start()]) + (tagname, typeOrClass(struct))
+					))
+				elif tagname != parents[-1][0]:
+					raise RPLInternal("Line %i char %i: Mismatched tags (%s & %s) in help for %s" % (
+						linechar(dox[:x.start()]) + (parents[-1][0], tagname, typeOrClass(struct))
+					))
+				#endif
+				if tagname == key: return parents[-1][-1]
+				if ((ignore and tagname in ignore) or
+					key == "help" or tagname == "help" or "hidden" in parents[-1][1]
+				):
+					parents.pop()
+				else: parents[-2][-1] += parents.pop()[-1]
+			elif tagname == "imp":
+				imps = args.split()
+				for imp in imps:
+					igs = imp.split("-")
+					tmp = igs[0].split(".")
+					if not key or tmp[-1] == key:
+						cls = context[tmp[0]]
+						for attr in tmp[1:-1]: cls = getattr(cls, attr)
+						parents[-1][-1] += fetchDox(cls, context, conds, tmp[-1], igs[1:])
+					#endif
+				#endfor
+			elif tagname == "br":
+				parents[-1][-1] += "\n"
+			elif tagname == "me":
+				# TODO: Should refer to topmost struct.
+				parents[-1][-1] += typeOrClass(struct)
 			else:
-				try: name = tcontext.typeName
-				except AttributeError: name = tmp[imp + 5:impEnd].strip()
-				tmp = tmp[:imp] + ("[Uses keys from %s]" % name) + tmp[impEnd + 1:]
-				hadimp = True
-			#endif
-			imp = tmp.find(impstr)
-		#endwhile
+				# Key
+				parents.append([tagname, args.split(), ""])
+		else:
+			# Text
+			parents[-1][-1] += text
+		#endif
 	#endfor
-
-	if hadimp: print tmp + "\n\n[Use %s:all to expand common keys in place.]" % struct.typeName
-	else: print tmp
+	if key: raise RPLInternal("Key %s not found in %s's help." % (key, typeOrClass(struct)))
+	return parents[0][0]
 #enddef
 
-def genericHelp(context, moreInfo, desc, lib, structs, types=None):
+condSyntax = re.compile(r'<if(?: +([^>]+))?>')
+
+def fetchConds(struct):
+	"""
+	Just return all conditions in this helpdoc.
+	"""
+	conds = []
+	for x in condSyntax.findall(struct.__doc__):
+		conds += x.split()
+	#endfor
+	if conds > 1:
+		return "For more information try any of the tags: " + list2english(conds, "or")
+	else: return "For more information try %s:%s" % (struct.typeName, conds[0])
+#enddef
+
+def genericHelp(context, moreInfo, desc, lib, defs):
 	if not moreInfo:
+		structs, types = [], []
+		for x in defs:
+			# I don't like this cause it restricts types from using a certain
+			# attribute, but isinstance isn't working..
+			try: x.manage
+			except AttributeError: types.append(x.typeName)
+			else: structs.append(x.typeName)
+		#endfor
 		print ("%s\n"
 			"It offers the structs:\n  %s\n"
 		) % (desc, "  ".join(structs))
 		if types: print "And the types:\n  %s\n" % "  ".join(types)
 		print "Use --help %s [structs...] for more info" % lib
 	else:
+		kdefs = {}
+		for x in defs: kdefs[x.typeName] = x
 		for x in moreInfo:
 			tmp = x.split(":")
 			x = tmp[0]
-			doimp = True if len(tmp) > 1 and tmp[1] == "all" else False
-			if x in structs: printDox(structs[x], context, doimp)
-			elif types and x in types: printDox(types[x], context, doimp)
+			conds = tmp[1:]
+			if "help" in conds:
+				try: print fetchDox(kdefs[x], context, conds, "help").strip()
+				except RPLInternal: print fetchConds(defs[x])
+			else: print fetchDox(kdefs[x], context, conds).strip()
 		#endfor
 	#endif
 #enddef

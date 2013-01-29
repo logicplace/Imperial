@@ -37,11 +37,14 @@ class Echo(rpl.RPLStruct):
 	"""
 	Print data to stdout. Automatically handles wrapping and tabbing text for you.
 
-	width: Width of console. Default: 79.
-	tabs: Tab character to use. Default: four spaces.
+	<width>
+	width: Width of console. Default: 79.</width>
+	<tabs>
+	tabs: Tab character to use. Default: four spaces.</tabs>
+	<line>
 	line#: Where # is the line number. These are sorted at runtime, but missing
 	       entries are ignored. If you want a blank line, do line#: ""
-	       Numbers are interpreted as strings.
+	       Numbers are interpreted as strings.</line>
 	"""
 
 	typeName = "echo"

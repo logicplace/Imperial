@@ -38,15 +38,21 @@ class Table(rpl.Serializable):
 	"""
 	Manages dynamic typing and such.
 
-	{/isnip}{cimp rpl.Serializable}
-	index:  List of indexes that map to format.
-	format: List of references to format struct.
+	<if all><imp rpl.Serializable.all /></if>
+	<index>
+	index:  List of indexes that map to format.</index>
+	<format>
+	format: List of references to format struct.</format>
+	<head>
 	head:   Reference to key that contains the typing information.
 	        This key is contained in a format or data struct and uses a
-	        format struct as its type.
-	type:   Name of key in header struct that contains the type ID.
-	name:   Optional. Name of key in header struct that contains the column name.
-	unique: Optional. Name or ID of column that's used as the unique index.
+	        format struct as its type.</head>
+	<type>
+	type:   Name of key in header struct that contains the type ID.</type>
+	<name>
+	name:   Optional. Name of key in header struct that contains the column name.</name>
+	<unique>
+	unique: Optional. Name or ID of column that's used as the unique index.</unique>
 	"""
 	typeName = "table"
 
