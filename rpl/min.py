@@ -42,7 +42,7 @@ def printHelp(moreInfo=[]):
 			Tile,   Tilemap,
 			Tile3,  Tilemap3,
 			Sprite, Spritemap,
-			Sprite, Spritemap3,
+			Sprite3, Spritemap3,
 			# Types
 			Pokestr,
 		]
@@ -159,13 +159,12 @@ class Tilemap(Tile):
 	Manages two-color tiles.
 	Tiles are 8x8 images of form 0bw and reading DULR.
 	Tilemaps index multiple [usually sequential] tiles.
-
 	<imp Tile.all />
-	<map>
+	<tilemap><map>
 	map:    Map of tile indexes. If not used, use Tile substructs instead.</map>
 	<dir>
 	dir:    Optional. Reading direction of the tilemap. See [std.readdir]
-	        (Default: LRUD)</dir>
+	        (Default: LRUD)</dir></tilemap>
 	"""
 	typeName = "tilemap"
 
@@ -238,12 +237,12 @@ class Tilemap(Tile):
 
 class Tile3(Tile):
 	"""
-	<if base><imp rpl.Serializable.base /></if>
+	<if base><all><imp rpl.Serializable.base /></all></if>
 	<if !base>
 	Manage a single three-color tile.
 	Tiles are two 8x8 images of form 0bw and reading DULR that are combined by
 	t1 & t2 being black, t1 nor t2 being white, and t1 ^ t2 being gray.
-	<if all><imp std.Graphic.graphic><br/>
+	<all><if all><imp std.Graphic.graphic><br/>
 	<imp rpl.Serializable.all-base /></if>
 	<bases>
 	base1:  Base of first dither of image. See <me/>:base for details.
@@ -252,7 +251,7 @@ class Tile3(Tile):
 	<gray>
 	gray:   Optional. Set color for gray pixel. (Default: gray)
 	        See [std.color] for details.
-	grey:   Alias of gray.</gray>
+	grey:   Alias of gray.</gray></all>
 	</if>
 	"""
 	typeName = "tile3"
@@ -352,6 +351,7 @@ class Tilemap3(Tile3, Tilemap):
 	combined by t1 & t2 being black, t1 nor t2 being white, and
 	t1 ^ t2 being gray.
 	Tilemaps index multiple [usually sequential] tiles.
+	<imp Tile3.all Tilemap.tilemap />
 	"""
 	typeName = "tilemap3"
 
@@ -417,6 +417,15 @@ class Sprite(std.Graphic):
 	UR mask, BR mask, UR draw, BR draw.
 	Mask sections are of form 0ba and reading DULR.
 	Draw sections are of form 0bw and reading DULR.
+	<all><if all><imp std.Graphic.all rpl.Serializable.all /></if>
+	<sprite><imp Tile.white Tile.black />
+	<alpha>
+	alpha:  Optional. Alpha color (draw bit is 0). (Default: cyan)</alpha>
+	<setalpha>
+	setalpha: Optional. Alpha color (draw bit is 1). (Default: magenta)</setalpha>
+	<imp Tile.invert />
+	<inverta>
+	inverta: Same as invert but for alphas.</inverta></sprite></all>
 	"""
 	typeName = "sprite"
 
@@ -525,6 +534,7 @@ class Spritemap(Sprite):
 	UR mask, BR mask, UR draw, BR draw.
 	Mask sections are of form 0ba and reading DULR.
 	Draw sections are of form 0bw and reading DULR.
+	<imp Sprite.all Tilemap.tilemap />
 	"""
 	typeName = "spritemap"
 
@@ -597,11 +607,17 @@ class Spritemap(Sprite):
 
 class Sprite3(Sprite):
 	"""
+	<if base><all><imp rpl.Serializable.base /></all></if>
+	<if !base>
 	Manage a single three-color sprite.
 	Sprites are 16x16 images of form UL mask, BL mask, UL draw, BL draw,
 	UR mask, BR mask, UR draw, BR draw.
 	Mask sections are of form 0ba and reading DULR.
 	Draw sections are of form 0bw and reading DULR.
+	<all><if all><imp std.Graphic.graphic><br/>
+	<imp rpl.Serializable.all-base /></if>
+	<imp Tile3.bases Sprite.sprite Tile3.gray /></all>
+	</if>
 	"""
 	typeName = "sprite3"
 
@@ -729,6 +745,7 @@ class Spritemap3(Sprite3, Spritemap):
 	UR mask, BR mask, UR draw, BR draw.
 	Mask sections are of form 0ba and reading DULR.
 	Draw sections are of form 0bw and reading DULR.
+	<imp Sprite3.all Tilemap.tilemap />
 	"""
 	typeName = "spritemap3"
 
