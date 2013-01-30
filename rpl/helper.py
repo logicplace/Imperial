@@ -87,6 +87,7 @@ def allIn(l1, l2):
 #enddef
 
 def list2english(l, conjunction=u"and"):
+	if len(l) == 0: return ""
 	l = map(unicode, l)
 	if len(l) == 1: return l[0]
 	elif len(l) == 2: return u"%s %s %s" % (l[0], conjunction, l[1])
@@ -158,6 +159,10 @@ def fetchDox(struct, context, conds, key=None, ignore=None):
 			elif tagname == "imp":
 				imps = args.split()
 				for imp in imps:
+					if imp == "BR":
+						parents[-1][-1] += "\n"
+						continue
+					#endif
 					igs = imp.split("-")
 					tmp = igs[0].split(".")
 					if not key or tmp[-1] == key:
@@ -189,13 +194,15 @@ def fetchConds(struct):
 	"""
 	Just return all conditions in this helpdoc.
 	"""
+	# TODO: Fetch from imports?
 	conds = []
 	for x in condSyntax.findall(struct.__doc__):
-		conds += x.split()
+		conds += [c for c in x.split() if c[0] != "!"]
 	#endfor
-	if conds > 1:
+	if len(conds) > 1:
 		return "For more information try any of the tags: " + list2english(conds, "or")
-	else: return "For more information try %s:%s" % (struct.typeName, conds[0])
+	elif conds: return "For more information try %s:%s" % (struct.typeName, conds[0])
+	else: return "No extra information for this struct."
 #enddef
 
 def genericHelp(context, moreInfo, desc, lib, defs):
@@ -222,7 +229,7 @@ def genericHelp(context, moreInfo, desc, lib, defs):
 			conds = tmp[1:]
 			if "help" in conds:
 				try: print fetchDox(kdefs[x], context, conds, "help").strip()
-				except RPLInternal: print fetchConds(defs[x])
+				except RPLInternal: print fetchConds(kdefs[x])
 			else: print fetchDox(kdefs[x], context, conds).strip()
 		#endfor
 	#endif
