@@ -48,8 +48,8 @@ class Echo(rpl.RPLStruct):
 	"""
 
 	typeName = "echo"
-	def __init__(self, top, name, parent=None):
-		rpl.RPLStruct.__init__(self, top, name, parent)
+
+	def register(self):
 		self.registerKey("width", "number", "79")
 		self.registerKey("tabs", "string", "'    '")
 		self.registerKey("line", "[string|number|^]*")

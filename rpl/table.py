@@ -58,14 +58,17 @@ class Table(rpl.Serializable):
 
 	def __init__(self, top, name, parent=None):
 		rpl.Serializable.__init__(self, top, name, parent)
+
+		self.row = []
+	#enddef
+
+	def register(self):
 		self.registerKey("index", "[number|string]+")
 		self.registerKey("format", "[reference]+")
 		self.registerKey("head", "reference")
 		self.registerKey("name", "string", "")
 		self.registerKey("type", "string")
 		self.registerKey("unique", "number|string", "")
-
-		self.row = []
 	#enddef
 
 	def __setitem__(self, key, value):
