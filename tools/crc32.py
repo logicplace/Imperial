@@ -37,9 +37,9 @@ def main():
 
 		formatter_class=argparse.RawTextHelpFormatter,
 		add_help     = False,
-		prefix_chars = "-/"
+		prefix_chars = "-"
 	)
-	parser.add_argument("--help", "-h", "-?", "/?", "/h",
+	parser.add_argument("--help", "-h", "-?",
 		help    = argparse.SUPPRESS,
 		action  = "store_true"
 	)
