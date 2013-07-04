@@ -63,6 +63,7 @@ class Table(rpl.Serializable):
 	#enddef
 
 	def register(self):
+		rpl.Serializable.register(self)
 		self.registerKey("index", "[number|string]+")
 		self.registerKey("format", "[reference]+")
 		self.registerKey("head", "reference")
