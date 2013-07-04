@@ -247,7 +247,7 @@ class Graphic(rpl.Serializable):
 	it would currently inherit this as well, but have to add a lot of
 	functionality. This, however, should not be used for anything using more
 	than two dimensions.
-	<all><imp rpl.Serializable.all /><graphic>
+	<all><imp rpl.Serializable.all BR /><graphic>
 	<transformations>
 	Transformations are handled in the order: rotate -> mirror -> flip
 	And this is reversed for exporting. But they are spoken about in regards
@@ -266,8 +266,8 @@ class Graphic(rpl.Serializable):
 	        aren't specifically drawn. (Default: white)</blank>
 	<dimensions>
 	dimensions: [width, height] of the canvas to draw on. By default it refers
-	            to pixels, but *maps may adjust this to pw = width * multiplier;</dimensions>
-	            ph = height * multiplier;
+	            to pixels, but *maps may adjust this to pw = width * multiplier;
+	            ph = height * multiplier;</dimensions>
 	<offset>
 	offset: Optional. [x, y] of where to draw the image on the canvas. These are
 	        0-based and are (by default) the pixel locations of the image. *maps
@@ -588,8 +588,9 @@ class DataFormat(object):
 
 	def refersToSelf(self, ref):
 		# TODO: Should this also be true if the struct name is its own name?
-		struct, key, idxs = ref.parts()
-		return key if struct == "this" and key[0] == "x" else None
+		# TODO: Should this support multikey or indexing?
+		struct, keysets = ref.parts()
+		return keysets[0][0] if struct == "this" and keysets and keysets[0][0][0] == "x" else None
 	#enddef
 
 	def prepOpts(self, opts, size=True):

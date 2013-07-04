@@ -234,8 +234,8 @@ class RPL(RPLObject):
 		 # Flow Identifier: One of: {}[],
 		 r'([{}\[\],])|'
 		 # Reference: @StructName.keyname[#][#][#] keyname and indexes are
-		 # optional. Can have infinite indexes, but only one keyname.
-		 r'@([^%(lit)s.]+(?:\.%(key)s)?(?:\[[0-9]+\])*)|'
+		 # optional. Indexing and keynames are infinitely contiguous.
+		 r'@([^%(lit)s.]+(?:(?:\.%(key)s)(?:\[[0-9]+\])*)*)|'
 		 # Literal: Unquoted string or struct name/type.
 		 r'([^%(lit)s]+)|'
 		 # Comment.
@@ -1937,7 +1937,7 @@ class Serializable(RPLStruct):
 
 	def importPrepare(self, rom, folder):
 		"""
-		Stub. Fill this in to prepare struct.
+		Stub. Fill this in to prepare the struct.
 
 		                 v This stage.
 		[Bin] <-- [Pyt] <-- [Reso-]
@@ -1959,7 +1959,7 @@ class Serializable(RPLStruct):
 
 	def exportPrepare(self, rom, folder):
 		"""
-		Stub. Fill this in to prepare struct before executables run.
+		Stub. Fill this in to prepare the struct.
 		Typically speaking you will want to lazily read from the ROM by
 		adding the reads to your __getitem__ statement. This allows things
 		to be pulled in in the order necessary, which may not be necessarily
@@ -2008,7 +2008,7 @@ class RPLRef(object):
 	Manages references to other fields.
 	"""
 
-	specification = re.compile(r'@?([^.]+)(?:\.([^\[]*))?((?:\[[0-9]+\])*)')
+	keyspec = re.compile(r'([a-z]+[0-9]*)((?:\[[0-9]+\])*)')
 	# Way way ... back; Great great ... grand parent
 	heir = re.compile(r'^(?=.)((w*)back_?)?((g*)parent)?$')
 
@@ -2021,9 +2021,13 @@ class RPLRef(object):
 		self.pos = (line, char)
 		self.nocopy = ["rpl", "container", "pos", "idxs"]
 
-		self.struct, self.key, idxs = self.specification.match(ref).groups()
-		if idxs: self.idxs = map(int, idxs[1:-1].split("]["))
-		else: self.idxs = []
+		tmp = ref.split(".")
+		self.struct, self.keysets = tmp[0], []
+
+		for x in tmp[1:]:
+			keyset = self.keyspec.match(x).groups("")
+			self.keysets.append((keyset[0], map(int, keyset[1][1:-1].split("][")) if keyset[1] else []))
+		#endfor
 	#enddef
 
 	def __unicode__(self):
@@ -2031,12 +2035,14 @@ class RPLRef(object):
 		Output ref to RPL format.
 		"""
 		ret = "@%s" % self.struct
-		if self.key: ret += "." + self.key
-		if self.idxs: ret += "[%s]" % "][".join(self.idxs)
+		for x in self.keysets:
+			ret += "." + x[0]
+			if x[1]: ret += "[%s]" % "][".join(x[1])
+		#endfor
 		return ret
 	#enddef
 
-	def parts(self): return self.struct, self.key, self.idxs
+	def parts(self): return self.struct, self.keysets
 
 	def pointer(self, callers=[], this=None):
 		# When a reference is made, this function should know what struct made
@@ -2072,31 +2078,30 @@ class RPLRef(object):
 		return ret
 	#enddef
 
-	def getFromIndex(self, ret, callers):
-		# Traverses a list to find the requested data within.
-		callersAndSelf = callers + [self]
-		for i, x in enumerate(self.idxs):
-			try:
-				if isinstance(ret, RPLRef): ret = ret.get(callersAndSelf)[x]
-				elif isinstance(ret, List): ret = ret.get()[x]
-				else: raise IndexError
-			except IndexError:
-				raise RPLError("List not deep enough. Failed on %ith index." % i)
-			#endtry
-		#endfor
-
-		if isinstance(ret, RPLRef): ret = ret.get(callersAndSelf, True)
-		return ret
-	#endif
-
 	def get(self, callers=[], retCl=False, this=None):
 		"""
 		Return referenced value.
 		"""
 		ret = self.pointer(callers, this)
-		if not self.key: ret = ret.basic()
-		else: ret = ret[self.key]
-		ret = self.getFromIndex(ret, callers)
+		ti = 0 # Total Index
+		callersAndSelf = callers + [self]
+		for ks in self.keysets:
+			# Retrieve key.
+			ret = ret[ks[0]]
+			# Retrieve indexes.
+			for i, x in enumerate(ks[1]):
+				try:
+					if ret.reference(): ret = ret.get(callersAndSelf)[x]
+					else: ret = ret.list()[x]
+				except IndexError:
+					raise RPLError("List not deep enough. Failed on %ith index." % ti)
+				except RPLBadType:
+					raise RPLError("Attempted to index nonlist. Failed on %ith index." % ti)
+				#endtry
+				ti += 1
+			#endfor
+			if ret.reference(): ret = ret.get(callersAndSelf, True)
+		#endfor
 
 		# Verify type
 		if (self.container is not None and self.mykey is not None
@@ -2116,43 +2121,45 @@ class RPLRef(object):
 		"""
 		ret = self.pointer(callers, this)
 
-		if not self.key:
-			try:
-				# This passes unwrapped data
-				ret.setBasic(data)
-				return True
-			except AttributeError: return False
-		else:
-			k = self.key
-			if self.idxs:
-				oret = None
-				callersAndSelf = callers + [self]
-				for i, x in enumerate(self.idxs):
-					try:
-						oret = ret[k]
-						if isinstance(ret, RPLRef): ret = ret[k].get(callersAndSelf)
-						else: ret = ret[k].get()
-						ret[x] # Throw error if it doesn't exist
-						k = x
-					except IndexError:
-						raise RPLError("List not deep enough. Failed on %ith index." % (i-1))
-					#endtry
-				#endfor
+		ti = 0
+		lks = len(self.keysets) - 1 # Last Key Set
+		callersAndSelf = callers + [self]
+		for ki, ks in enumerate(self.keysets):
+			if ki == lks and not ks[1]:
+				key = ks[0]
+				break
 			#endif
-			# Needs to wrap data
-			datatype = {
-				str: "string", unicode:"string", int: "number", long:"number",
-				list: "list"
-			}[type(data)]
-			if datatype == "list" and isinstance(data[0], RPLData):
-				skipSubInst = True
-			else: skipSubInst = False
-			ret[k] = self.rpl.parseCreate(
-				(datatype, data), None, None, *self.pos, skipSubInst=skipSubInst
-			)
-			if self.idxs: oret.set(ret)
-			return True
-		#endif
+			ret = ret[ks[0]]
+			lksi = len(ks[1]) - 1
+			for i, x in enumerate(ks[1]):
+				if ki == lks and i == lksi:
+					key = x
+					break
+				#endif
+
+				try:
+					if ret.reference(): ret = ret.get(callersAndSelf)[x]
+					else: ret = ret.list()[x]
+				except IndexError:
+					raise RPLError("List not deep enough. Failed on %ith index." % ti)
+				except RPLBadType:
+					raise RPLError("Attempted to index nonlist. Failed on %ith index." % ti)
+				#endtry
+				ti += 1
+			#endfor
+		#endfor
+
+		# Needs to wrap data
+		datatype = {
+			str: "string", unicode:"string", int: "number", long:"number",
+			list: "list"
+		}[type(data)]
+
+		ret[key] = self.rpl.parseCreate(
+			(datatype, data), None, None, *self.pos,
+			skipSubInst = (datatype == "list" and isinstance(data[0], RPLData))
+		)
+		return True
 	#enddef
 
 	def resolve(self): return self.get(retCl=True)
@@ -2160,7 +2167,7 @@ class RPLRef(object):
 	def number(self): return self.get(retCl=True).number()
 	def list(self): return self.get(retCl=True).list()
 	def reference(self): return True
-	def keyless(self): return not bool(self.key)
+	def keyless(self): return not bool(self.keysets)
 
 	def __deepcopy__(self, memo={}):
 		ret = object.__new__(self.__class__)
