@@ -1047,7 +1047,7 @@ class RPLTCData(object):
 				data.get(), helper.list2english(self.discrete)
 			))
 		# Check if the given data is always valid.
-		elif self.type == "all" or isinstance(data, RPLRef): return data
+		elif self.type == "all" or data.reference(): return data
 		# Otherwise, check the type
 		else:
 			# If it's a basic type and we want the most basic type, return as is.
@@ -1076,7 +1076,8 @@ class RPLTCList(object):
 
 	def verify(self, data, parentList=None):
 		# Make sure data is a list (if it is 0 or more).
-		if not isinstance(data, List):
+		try: data.list()
+		except RPLBadType:
 			if self.repeat in "*!~.":
 				if self.num is not None:
 					# Select only the given index to compare.
@@ -1274,7 +1275,7 @@ class RPLStruct(RPLObject):
 		if key in self.virtuals: key = self.virtuals[key]
 		if key in self.keys:
 			# Reference's types are lazily checked
-			if isinstance(value, RPLRef): self.data[key] = value
+			if value.reference(): self.data[key] = value
 			else: self.data[key] = self.keys[key][0].verify(value)
 		else: raise RPLError('"%s" has no key "%s".' % (self.typeName, key))
 	#enddef
@@ -1333,10 +1334,10 @@ class RPLStruct(RPLObject):
 		These handle references in terms of cloneables, ensuring "this" refers
 		to the appropriate instance rather than the uninstanced struct.
 		"""
-		if isinstance(data, RPLRef): return data.get(this=self)
-		elif type(data) in [str, unicode]:
+		if type(data) in [str, unicode]:
 			try: return self.get(self[data])
 			except RPLError as err: raise RPLError(err.args[0].replace("???", data))
+		elif data.reference(): return data.get(this=self)
 		else:
 			try: data.get
 			except AttributeError: raise RPLError("Failed retrieval of ??? in %s." % self.name)
@@ -1349,17 +1350,21 @@ class RPLStruct(RPLObject):
 		These handle references in terms of cloneables, ensuring "this" refers
 		to the appropriate instance rather than the uninstanced struct.
 		"""
-		if isinstance(data, RPLRef): return data.set(val, this=self)
+		if data.reference(): return data.set(val, this=self)
 		else: return data.set(val)
 	#endif
 
-	def resolve(self, data):
+	def resolve(self, data=None):
 		"""
 		These handle references in terms of cloneables, ensuring "this" refers
 		to the appropriate instance rather than the uninstanced struct.
 		"""
-		if isinstance(data, RPLRef): return data.resolve(this=self)
-		elif type(data) in [str, unicode]: return self.resolve(self[data])
+		# Handle in terms of basic data.
+		if data is None: return self.basic().resolve()
+
+		# As docstring says..
+		if type(data) in [str, unicode]: return self.resolve(self[data])
+		elif data.reference(): return data.resolve(this=self)
 		else: return data.resolve()
 	#endif
 
@@ -1368,8 +1373,12 @@ class RPLStruct(RPLObject):
 		These handle references in terms of cloneables, ensuring "this" refers
 		to the appropriate instance rather than the uninstanced struct.
 		"""
-		if isinstance(data, RPLRef): return data.string(this=self)
-		elif type(data) in [str, unicode]: return self.string(self[data])
+		# Handle in terms of basic data.
+		if data is None: return self.basic().string()
+
+		# As docstring says..
+		if type(data) in [str, unicode]: return self.string(self[data])
+		elif data.reference(): return data.string(this=self)
 		else: return data.string()
 	#endif
 
@@ -1378,8 +1387,12 @@ class RPLStruct(RPLObject):
 		These handle references in terms of cloneables, ensuring "this" refers
 		to the appropriate instance rather than the uninstanced struct.
 		"""
-		if isinstance(data, RPLRef): return data.number(this=self)
-		elif type(data) in [str, unicode]: return self.number(self[data])
+		# Handle in terms of basic data.
+		if data is None: return self.basic().number()
+
+		# As docstring says..
+		if type(data) in [str, unicode]: return self.number(self[data])
+		elif data.reference(): return data.number(this=self)
 		else: return data.number()
 	#endif
 
@@ -1388,8 +1401,12 @@ class RPLStruct(RPLObject):
 		These handle references in terms of cloneables, ensuring "this" refers
 		to the appropriate instance rather than the uninstanced struct.
 		"""
-		if isinstance(data, RPLRef): return data.list(this=self)
-		elif type(data) in [str, unicode]: return self.list(self[data])
+		# Handle in terms of basic data.
+		if data is None: return self.basic().list()
+
+		# As docstring says..
+		if type(data) in [str, unicode]: return self.list(self[data])
+		elif data.reference(): return data.list(this=self)
 		else: return data.list()
 	#endif
 
@@ -1398,10 +1415,15 @@ class RPLStruct(RPLObject):
 		These handle references in terms of cloneables, ensuring "this" refers
 		to the appropriate instance rather than the uninstanced struct.
 		"""
+		# As docstring says..
 		if type(data) in [str, unicode]: return self.pointer(self[data])
+		elif data.struct(): return data
 		try: return data.pointer(this=self)
 		except AttributeError: raise RPLBadType("Can only use pointer on references.")
 	#endif
+
+	def reference(self): return False
+	def struct(self): return True
 
 	def clone(self):
 		new = copy.deepcopy(self)
@@ -2022,7 +2044,7 @@ class RPLRef(object):
 		self.nocopy = ["rpl", "container", "pos", "idxs"]
 
 		tmp = ref.split(".")
-		self.struct, self.keysets = tmp[0], []
+		self.refstruct, self.keysets = tmp[0], []
 
 		for x in tmp[1:]:
 			keyset = self.keyspec.match(x).groups("")
@@ -2034,7 +2056,7 @@ class RPLRef(object):
 		"""
 		Output ref to RPL format.
 		"""
-		ret = "@%s" % self.struct
+		ret = "@%s" % self.refstruct
 		for x in self.keysets:
 			ret += "." + x[0]
 			if x[1]: ret += "[%s]" % "][".join(x[1])
@@ -2042,22 +2064,22 @@ class RPLRef(object):
 		return ret
 	#enddef
 
-	def parts(self): return self.struct, self.keysets
+	def parts(self): return self.refstruct, self.keysets
 
 	def pointer(self, callers=[], this=None):
 		# When a reference is made, this function should know what struct made
 		# the reference ("this", ie. self.container) BUT also the chain of
 		# references up to this point..
 		# First check if we're referring to self or referrer and/or parents.
-		heir = RPLRef.heir.match(self.struct)
-		if self.struct == "this" or heir:
+		heir = RPLRef.heir.match(self.refstruct)
+		if self.refstruct == "this" or heir:
 			if self.container is None or self.mykey is None:
 				raise RPLError("Cannot use relative references in data form.")
 			#endif
 			# Referrer history
 			if heir and heir.group(1):
 				try: ret = callers[-1 - len(heir.group(2))]
-				except IndexError: raise RPLError("No %s." % self.struct)
+				except IndexError: raise RPLError("No %s." % self.refstruct)
 			# "this" or parents only
 			else: ret = this or self.container
 			# "parent"
@@ -2073,8 +2095,8 @@ class RPLRef(object):
 				#endfor
 			#endif
 		else:
-			try: ret = self.rpl.structsByName[self.struct]
-			except KeyError: raise RPLError("Struct %s not found." % self.struct)
+			try: ret = self.rpl.structsByName[self.refstruct]
+			except KeyError: raise RPLError("Struct %s not found." % self.refstruct)
 		return ret
 	#enddef
 
@@ -2087,7 +2109,8 @@ class RPLRef(object):
 		callersAndSelf = callers + [self]
 		for ks in self.keysets:
 			# Retrieve key.
-			ret = ret[ks[0]]
+			if ret.struct(): ret = ret[ks[0]]
+			else: ret = ret.list()[ks[0]]
 			# Retrieve indexes.
 			for i, x in enumerate(ks[1]):
 				try:
@@ -2167,6 +2190,7 @@ class RPLRef(object):
 	def number(self): return self.get(retCl=True).number()
 	def list(self): return self.get(retCl=True).list()
 	def reference(self): return True
+	def struct(self): return False
 	def keyless(self): return not bool(self.keysets)
 
 	def __deepcopy__(self, memo={}):
@@ -2197,6 +2221,7 @@ class RPLData(object):
 	def number(self): raise RPLBadType("%s cannot be interpreted as a number." % self.typeName)
 	def list(self): raise RPLBadType("%s cannot be interpreted as a list." % self.typeName)
 	def reference(self): return False
+	def struct(self): return False
 
 	def proc(self, func, clone=None):
 		# TODO: Can this be cut?
@@ -2431,11 +2456,14 @@ class Range(List):
 			raise TypeError('Type "%s" expects list.' % self.typeName)
 		#endif
 		for x in data:
-			if not isinstance(x, Number) and (not isinstance(x, Literal)
-				or len(x.get()) != 1
-			):
-				raise RPLError('Types in a "%s" must be a number or one character literal' % self.typeName)
-			#endif
+			try: x.number()
+			except RPLBadType:
+				try:
+					if len(x.string()) != 1: raise RPLBadType()
+				except RPLBadType:
+					raise RPLError('Types in a "%s" must be a number or one character literal' % self.typeName)
+				#endtry
+			#endtry
 		#endfor
 		self.data = data
 	#enddef
@@ -2443,33 +2471,35 @@ class Range(List):
 	def __unicode__(self):
 		ret, posseq, negseq, mul, last = [], [], [], [], None
 		for x in self.data:
-			d = x.get()
-			if isinstance(x, Literal): ret.append(d)
-			elif last is not None:
-				lastv = last.get()
-				isPos = (d - lastv == 1)
-				isNeg = (lastv - d == 1)
-				isSame = (lastv == d)
-				if not isNeg and negseq:
-					ret.append(u"%s-%s" % (negseq[0], negseq[-1]))
-					negseq = []
-				if not isPos and posseq:
-					ret.append(u"%s-%s" % (posseq[0], posseq[-1]))
-					posseq = []
-				if not isSame and mul:
-					ret.append(u"%s*%s" % (mul[0], len(mul)))
-					mul = []
+			try: ret.append(x.string())
+			except RPLBadType:
+				if last is not None:
+					d = x.number()
+					lastv = last.number()
+					isPos = (d - lastv == 1)
+					isNeg = (lastv - d == 1)
+					isSame = (lastv == d)
+					if not isNeg and negseq:
+						ret.append(u"%s-%s" % (negseq[0], negseq[-1]))
+						negseq = []
+					if not isPos and posseq:
+						ret.append(u"%s-%s" % (posseq[0], posseq[-1]))
+						posseq = []
+					if not isSame and mul:
+						ret.append(u"%s*%s" % (mul[0], len(mul)))
+						mul = []
+					#endif
+					if isPos: apd = posseq
+					elif isNeg: apd = negseq
+					elif isSame: apd = mul
+					else:
+						ret.append(unicode(x))
+						continue
+					#endif
+					if apd: apd.append(x)
+					else: apd += [last, x]
 				#endif
-				if isPos: apd = posseq
-				elif isNeg: apd = negseq
-				elif isSame: apd = mul
-				else:
-					ret.append(unicode(x))
-					continue
-				#endif
-				if apd: apd.append(x)
-				else: apd += [last, x]
-			#endif
+			#endtry
 			last = x
 		#endfor
 		if negseq: ret.append(u"%i-%i" % (negseq[0], negseq[-1]))

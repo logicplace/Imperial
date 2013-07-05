@@ -39,7 +39,7 @@ static {
 			file: @File.imgname4
 			base: @Data16.xpixoff
 			pixel: '4bi'
-			palette: @PaletteEntry.xcolor
+			palette: @Data16.xpalette.xcolor
 		}
 	}
 
@@ -53,7 +53,7 @@ static {
 			file: @File.imgname8
 			base: @Data256.xpixoff
 			pixel: '8bi'
-			palette: @PaletteEntry.xcolor
+			palette: @Data256.xpalette.xcolor
 		}
 	}
 

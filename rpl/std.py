@@ -20,7 +20,7 @@
 
 import os, re, Image
 import rpl, helper
-from rpl import RPLError
+from rpl import RPLError, RPLBadType
 from copy import deepcopy
 from math import ceil
 from StringIO import StringIO
@@ -619,8 +619,10 @@ class DataFormat(object):
 	#enddef
 
 	def __getitem__(self, key):
-		if key in self.data and isinstance(self.data[key], rpl.RPLStruct):
-			return self.data[key].basic()
+		if key in self.data and self.data[key].struct():
+			# TODO: Think this through more.
+			if self.data[key].sizeFieldType == "len": return self.data[key].basic()
+			else: return self.data[key]
 		#endif
 		try: return self.parentClass.__getitem__(self, key)
 		except RPLError:
@@ -646,7 +648,7 @@ class DataFormat(object):
 						elif com[0] == "count":
 							try:
 								typeName = self.pointer(self.parseFormat(com[1])["type"])
-								self.data[key] = rpl.Number(len(self.get(self[com[1]])))
+								self.data[key] = rpl.Number(len(self[com[1]].clones))
 							except RPLBadType: raise RPLError("Tried to count basic type.")
 						elif com[0] == "offset":
 							return None
@@ -670,8 +672,9 @@ class DataFormat(object):
 						fmt["size"] = rpl.Number(size)
 					#endif
 					if DataFormat.isCounted(fmt["type"], True):
-						tmp = []
+						#tmp = []
 						ref = self.pointer(fmt["type"])
+						tmp = None
 						def tmpfunc(address):
 							t = ref.clone()
 							DataFormat.setBase(t, rpl.Number(address))
@@ -682,7 +685,8 @@ class DataFormat(object):
 								try: t.exportPrepare(self.rpl.rom, [], [self])
 								except TypeError: t.exportPrepare(self.rpl.rom, [])
 							#endif
-							tmp.append(t)
+							#tmp.append(t)
+							tmp = t
 							return address + t.len()
 						#enddef
 
@@ -699,15 +703,15 @@ class DataFormat(object):
 							#endif
 							# Adjust to the actual value..
 							fmt["size"] = rpl.Number(count)
-							self.data[key] = rpl.List(tmp)
+							self.data[key] = ref#rpl.List(tmp)
 						elif ref.sizeFieldType == "len":
 							# Size is length.
 							address = tmpfunc(address)
-							self.data[key] = tmp[0]
+							self.data[key] = tmp
 						else:
 							# Size is count.
 							for i in helper.range(size): address = tmpfunc(address)
-							self.data[key] = rpl.List(tmp)
+							self.data[key] = ref#rpl.List(tmp)
 						#endif
 					else:
 						typeName = self.get(fmt["type"])
@@ -730,9 +734,9 @@ class DataFormat(object):
 			if key not in self.format:
 				self.parentClass.__setitem__(self, "x", value)
 				tmp = self.data["x"]
-				if isinstance(tmp, rpl.String):
-					self.format[key] = map(self.rpl.parseData, tmp.get().split())
-				else: self.format[key] = tmp.get()
+				try: tmp = tmp.string()
+				except RPLBadType: self.format[key] = tmp.get()
+				else: self.format[key] = map(self.rpl.parseData, tmp.split())
 				if DataFormat.isCounted(self.format[key][0], True):
 					# If it's a reference, it needs to be set as managed.
 					try: self.format[key][0].pointer().unmanaged = False
@@ -746,6 +750,7 @@ class DataFormat(object):
 					# is this enough?
 					self.data[key] = self.rpl.wrap(self.get(typeName), value.get())
 				else: self.data[key] = value
+			#endif
 		else:
 			self.parentClass.__setitem__(self, key, value)
 		#endif
@@ -792,14 +797,14 @@ class DataFormat(object):
 					except TypeError: t.importPrepare(rom, folder)
 					self[k] = t
 				else:
-					tmp = []
+					#tmp = []
 					for x in self.get(self[k]):
 						t = typeName.clone()
 						try: t.importPrepare(rom, folder, filename, x, callers + [self])
 						except TypeError: t.importPrepare(rom, folder)
-						tmp.append(t)
+						#tmp.append(t)
 					#endfor
-					self[k] = rpl.List(tmp)
+					self[k] = typeName#rpl.List(tmp)
 				#endif
 			#endif
 		#endfor
@@ -844,13 +849,13 @@ class DataFormat(object):
 					elif com[0] == "count" and fmtc1["end"]:
 						# This was actually a count, not a size..
 						size = 0
-						for x in self.get(com[1]): size += x.len()
+						for x in self.pointer(com[1]).clones: size += x.len()
 						self[k] = data = rpl.Number(size + fmtc1["offset"])
 					#endif
 				#endif
 			#endif
 			if DataFormat.isCounted(typeName):
-				for x in self.list(data):
+				for x in data.clones:
 					try: x.importDataLoop
 					# Handle things not specifically meant to be used as data types.
 					except AttributeError: x.importData(rom, folder)
@@ -891,7 +896,7 @@ class DataFormat(object):
 			data = self[k]
 			typeName = self.format[k]["type"]
 			if DataFormat.isCounted(typeName):
-				try: self.list(data)[0].exportDataLoop
+				try: data.exportDataLoop
 				except IndexError:
 					# Empty list.
 					data = rpl.List([])
@@ -901,7 +906,7 @@ class DataFormat(object):
 					data = None
 				else:
 					# Handle things that are.
-					ls = [x.exportDataLoop(rom, folder, callers=callers + [self]) for x in self.list(data)]
+					ls = [x.exportDataLoop(rom, folder, callers=callers + [self]) for x in data.clones]
 					data = rpl.List(ls)
 				#endtry
 			elif DataFormat.isCounted(typeName, True):
@@ -958,7 +963,7 @@ class DataFormat(object):
 			if DataFormat.isCounted(typeName):
 				# Size is count.
 				tnr = typeName.pointer()
-				for x in self.list(data):
+				for x in data.clones:
 					try: x.calculateOffsets
 					except AttributeError:
 						if fmt["end"]:
@@ -1162,7 +1167,7 @@ class Data(DataFormat, rpl.Serializable):
 					# Update the references (this relies on the above being list form..
 					# that means the format should only be used in format: calls..
 					for d in self.format[x]:
-						if isinstance(d, rpl.RPLRef): d.container = self
+						if d.reference(): d.container = self
 					#endfor
 				#endfor
 			#endtry
@@ -1715,15 +1720,16 @@ class IOStatic(rpl.Static):
 	def __setitem__(self, key, value):
 		if key not in self.data:
 			# Initial set
-			if not isinstance(value, rpl.List) or len(value.get()) != 2:
+			try:
+				if len(value.list()) != 2: raise RPLBadType()
+			except RPLBadType:
 				raise RPLError("IOStatic requires each entry to be a list of two values.")
-			#endif
+			#endtry
 			# This is supposed to be a static! So it should be fine to .get() here.
-			self.data[key] = value.get()
+			self.data[key] = value.list()
 		else:
 			# When references set it
-			idx = 0 if self.rpl.importing else 1
-			self.data[key][idx] = value
+			self.data[key][0 if self.rpl.importing else 1] = value
 		#endif
 	#enddef
 #endclass
