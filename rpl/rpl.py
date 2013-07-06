@@ -1329,11 +1329,15 @@ class RPLStruct(RPLObject):
 
 	def iterkeys(self): return iter(self.data)
 
-	def get(self, data):
+	def get(self, data=None):
 		"""
 		These handle references in terms of cloneables, ensuring "this" refers
 		to the appropriate instance rather than the uninstanced struct.
 		"""
+		# Handle in terms of basic data.
+		if data is None: return self.basic().get()
+
+		# As docstring says..
 		if type(data) in [str, unicode]:
 			try: return self.get(self[data])
 			except RPLError as err: raise RPLError(err.args[0].replace("???", data))
@@ -1368,7 +1372,7 @@ class RPLStruct(RPLObject):
 		else: return data.resolve()
 	#endif
 
-	def string(self, data):
+	def string(self, data=None):
 		"""
 		These handle references in terms of cloneables, ensuring "this" refers
 		to the appropriate instance rather than the uninstanced struct.
@@ -1382,7 +1386,7 @@ class RPLStruct(RPLObject):
 		else: return data.string()
 	#endif
 
-	def number(self, data):
+	def number(self, data=None):
 		"""
 		These handle references in terms of cloneables, ensuring "this" refers
 		to the appropriate instance rather than the uninstanced struct.
@@ -1396,7 +1400,7 @@ class RPLStruct(RPLObject):
 		else: return data.number()
 	#endif
 
-	def list(self, data):
+	def list(self, data=None):
 		"""
 		These handle references in terms of cloneables, ensuring "this" refers
 		to the appropriate instance rather than the uninstanced struct.
@@ -2185,10 +2189,10 @@ class RPLRef(object):
 		return True
 	#enddef
 
-	def resolve(self): return self.get(retCl=True)
-	def string(self): return self.get(retCl=True).string()
-	def number(self): return self.get(retCl=True).number()
-	def list(self): return self.get(retCl=True).list()
+	def resolve(self, this=None): return self.get(retCl=True, this=this)
+	def string(self, this=None): return self.get(retCl=True, this=this).string()
+	def number(self, this=None): return self.get(retCl=True, this=this).number()
+	def list(self, this=None): return self.get(retCl=True, this=this).list()
 	def reference(self): return True
 	def struct(self): return False
 	def keyless(self): return not bool(self.keysets)

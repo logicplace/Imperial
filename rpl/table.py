@@ -96,9 +96,10 @@ class Table(rpl.Serializable):
 
 		self.row = []
 		data = data.get()
-		for idx, col in enumerate(self.get(self["head"])):
-			typeidx = col[self.get(self["type"])]
-			try: idxidx = self.get("index").index(typeidx)
+		ktype, index = self.get("type"), self.get("index")
+		for idx, col in enumerate(self.resolve("head").clones):
+			typeidx = col[ktype]
+			try: idxidx = index.index(typeidx)
 			except ValueError:
 				raise RPLError("Encountered unknown type %s when processing table." % typeidx)
 			#endtry
@@ -122,14 +123,15 @@ class Table(rpl.Serializable):
 
 		# Loop through each column in the head and read in the respective format
 		address = self["base"].number()
-		for x in self.get(self["head"]):
-			typeidx = x[self.get(self["type"])]
-			try: idx = self.get("index").index(typeidx)
+		ktype, index, form = self.get("type"), self.get("index"), self.get("format")
+		for x in self["head"].resolve().clones:
+			typeidx = x[ktype]
+			try: idx = index.index(typeidx)
 			except ValueError:
 				raise RPLError("Encountered unknown type %s when processing table." % typeidx)
 			#endtry
 
-			ref = self.get("format")[idx].pointer()
+			ref = form[idx].pointer()
 			ref.unmanaged = False
 			clone = ref.clone()
 			try: clone["base"] = rpl.Number(address)

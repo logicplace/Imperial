@@ -674,7 +674,6 @@ class DataFormat(object):
 					if DataFormat.isCounted(fmt["type"], True):
 						#tmp = []
 						ref = self.pointer(fmt["type"])
-						tmp = None
 						def tmpfunc(address):
 							t = ref.clone()
 							DataFormat.setBase(t, rpl.Number(address))
@@ -686,8 +685,7 @@ class DataFormat(object):
 								except TypeError: t.exportPrepare(self.rpl.rom, [])
 							#endif
 							#tmp.append(t)
-							tmp = t
-							return address + t.len()
+							return address + t.len(), t
 						#enddef
 
 						# Change this to end address to just use end's functionality
@@ -695,7 +693,7 @@ class DataFormat(object):
 						if fmt["end"] or expand:
 							count = 0
 							while address < size:
-								address = tmpfunc(address)
+								address, _ = tmpfunc(address)
 								count += 1
 							#endwhile
 							if address > size:
@@ -706,11 +704,10 @@ class DataFormat(object):
 							self.data[key] = ref#rpl.List(tmp)
 						elif ref.sizeFieldType == "len":
 							# Size is length.
-							address = tmpfunc(address)
-							self.data[key] = tmp
+							address, self.data[key] = tmpfunc(address)
 						else:
 							# Size is count.
-							for i in helper.range(size): address = tmpfunc(address)
+							for i in helper.range(size): address, _ = tmpfunc(address)
 							self.data[key] = ref#rpl.List(tmp)
 						#endif
 					else:
@@ -801,7 +798,11 @@ class DataFormat(object):
 					for x in self.get(self[k]):
 						t = typeName.clone()
 						try: t.importPrepare(rom, folder, filename, x, callers + [self])
-						except TypeError: t.importPrepare(rom, folder)
+						except TypeError as err:
+							# TODO: Can Python be more precise about what's
+							# raising the error than this?
+							if err.args[0].find("importPrepare") == -1: raise
+							t.importPrepare(rom, folder)
 						#tmp.append(t)
 					#endfor
 					self[k] = typeName#rpl.List(tmp)
@@ -890,7 +891,7 @@ class DataFormat(object):
 		"""
 		ret = []
 		# Ensures everything is loaded and tagged with commands, so nothing
-		# is accidentally exported.. Not optimal I don't think?
+		# is accidentally exported.. TODO: Not optimal I don't think?
 		for k in self.format: self[k]
 		for k in self.format:
 			data = self[k]
@@ -1013,7 +1014,7 @@ class DataFormat(object):
 			prevFmt = self.parseFormat(prevKey)
 			if DataFormat.isCounted(prevFmt["type"]):
 				size = 0
-				for x in self.list(self[prevKey]): size += x.len()
+				for x in self[prevKey].clones: size += x.len()
 			else:
 				size = self.get(prevFmt["size"])
 				if size == "expand":
@@ -1454,6 +1455,11 @@ class Map(rpl.RPLStruct):
 	<number>
 	number:   Type to cast unpacked numbers to specifically, if strings and
 	          numbers are both present.</number>
+	<width>
+	width:    Byte width for packed values. The default is some kind of voodoo.
+	          If set to "dynamic" it will allow dynmically sized strings through.
+	          If set to "all" then the entire data is used for the mapping.
+	          If set to a number, then the data is split at the given interval.</width>
 	"""
 	typeName = "map"
 	sizeFieldType = "len"
@@ -1543,8 +1549,10 @@ class Map(rpl.RPLStruct):
 		#endif
 
 		# Back these up for speed.
-		cast, string, number = self["cast"].string(), self["string"].string(), self["number"].string()
-		return options, packed, unpacked, mode, cast, string, number, width, types
+		return (
+			options, packed, unpacked, mode, self["cast"].string(),
+			self["string"].string(), self["number"].string(), width, types
+		)
 	#enddef
 
 	def importPrepare(self, rom, folder, filename=None, data=None, callers=[]):
