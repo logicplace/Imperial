@@ -109,7 +109,7 @@
 		</context>
 
 		<context id="ref" style-ref="ref">
-			<match>@\%{struct-name}(?:\.\%{key-name})?(?:\[[0-9]+\])*</match>
+			<match>@\%{struct-name}(?:(?:\.\%{key-name})(?:\[[0-9]+\])*)*</match>
 		</context>
 
 		<context id="literal" style-ref="string">
