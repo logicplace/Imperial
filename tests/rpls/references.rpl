@@ -15,6 +15,17 @@ static ImaGParent {
 	}
 }
 
+static Multikey {
+	test: hi
+
+	static Multikid {
+		buff: @parent
+		huff: @Multikey
+		guff: @this
+		list: [@parent, @RefMeBaby]
+	}
+}
+
 static tests {
 	test1:  @RefMeBaby.one
 	test2:  @RefMeBaby.more
@@ -27,4 +38,11 @@ static tests {
 	test9:  @tests.test1
 	test10: @this.test1
 	test11: @ImaToysRUsKid.test1
+
+	# Multikey tests.
+	test12: @Multikid.buff.test
+	test13: @Multikid.huff.test
+	test14: @Multikid.guff.buff.test
+	test15: @Multikid.list[0].test
+	test16: @Multikid.guff.list[1].more[3][2]
 }
