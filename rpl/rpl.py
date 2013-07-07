@@ -853,6 +853,24 @@ class RPL(RPLObject):
 			return tmp
 		#endif
 	#enddef
+
+	@staticmethod
+	def updateROM(idloc=None, idform=None, nameloc=None, nameform=None, idtype=None, nametype=None):
+		if idloc is not None: ROM.id_location = idloc
+		if idform is not None:
+			for x in idform: ROM.id_format[x] = idform[x]
+		#endif
+
+		if nameloc is not None: ROM.name_location = nameloc
+		if nameloc is not None:
+			for x in nameform: ROM.name_format[x] = nameform[x]
+		#endif
+
+		if idtype is not None: ROM.id_type = idtype
+		if nametype is not None: ROM.name_type = nametype
+
+		ROM.changed_once = True
+	#enddef
 #endclass
 
 ################################################################################
@@ -1338,13 +1356,16 @@ class RPLStruct(RPLObject):
 		if data is None: return self.basic().get()
 
 		# As docstring says..
+		key = "???"
 		if type(data) in [str, unicode]:
-			try: return self.get(self[data])
-			except RPLError as err: raise RPLError(err.args[0].replace("???", data))
-		elif data.reference(): return data.get(this=self)
+			key = data
+			data = self[data]
+		#endif
+
+		if data.reference(): return data.get(this=self)
 		else:
 			try: data.get
-			except AttributeError: raise RPLError("Failed retrieval of ??? in %s." % self.name)
+			except AttributeError: raise RPLError("Failed retrieval of %s in %s." % (key, self.name))
 			else: return data.get()
 		#endif
 	#endif
@@ -1367,9 +1388,18 @@ class RPLStruct(RPLObject):
 		if data is None: return self.basic().resolve()
 
 		# As docstring says..
-		if type(data) in [str, unicode]: return self.resolve(self[data])
-		elif data.reference(): return data.resolve(this=self)
-		else: return data.resolve()
+		key = "???"
+		if type(data) in [str, unicode]:
+			key = data
+			data = self[data]
+		#endif
+
+		if data.reference(): return data.resolve(this=self)
+		else:
+			try: data.resolve
+			except AttributeError: raise RPLError("Failed resolution of %s in %s." % (key, self.name))
+			else: return data.resolve()
+		#endif
 	#endif
 
 	def string(self, data=None):
@@ -1381,9 +1411,18 @@ class RPLStruct(RPLObject):
 		if data is None: return self.basic().string()
 
 		# As docstring says..
-		if type(data) in [str, unicode]: return self.string(self[data])
-		elif data.reference(): return data.string(this=self)
-		else: return data.string()
+		key = "???"
+		if type(data) in [str, unicode]:
+			key = data
+			data = self[data]
+		#endif
+
+		if data.reference(): return data.string(this=self)
+		else:
+			try: data.string
+			except AttributeError: raise RPLError("Failed string retrieval of %s in %s." % (key, self.name))
+			else: return data.string()
+		#endif
 	#endif
 
 	def number(self, data=None):
@@ -1395,9 +1434,18 @@ class RPLStruct(RPLObject):
 		if data is None: return self.basic().number()
 
 		# As docstring says..
-		if type(data) in [str, unicode]: return self.number(self[data])
-		elif data.reference(): return data.number(this=self)
-		else: return data.number()
+		key = "???"
+		if type(data) in [str, unicode]:
+			key = data
+			data = self[data]
+		#endif
+
+		if data.reference(): return data.number(this=self)
+		else:
+			try: data.number
+			except AttributeError: raise RPLError("Failed numerical retrieval of %s in %s." % (key, self.name))
+			else: return data.number()
+		#endif
 	#endif
 
 	def list(self, data=None):
@@ -1409,9 +1457,18 @@ class RPLStruct(RPLObject):
 		if data is None: return self.basic().list()
 
 		# As docstring says..
-		if type(data) in [str, unicode]: return self.list(self[data])
-		elif data.reference(): return data.list(this=self)
-		else: return data.list()
+		key = "???"
+		if type(data) in [str, unicode]:
+			key = data
+			data = self[data]
+		#endif
+
+		if data.reference(): return data.list(this=self)
+		else:
+			try: data.list
+			except AttributeError: raise RPLError("Failed list retrieval of %s in %s." % (key, self.name))
+			else: return data.list()
+		#endif
 	#endif
 
 	def pointer(self, data):
@@ -1420,8 +1477,8 @@ class RPLStruct(RPLObject):
 		to the appropriate instance rather than the uninstanced struct.
 		"""
 		# As docstring says..
-		if type(data) in [str, unicode]: return self.pointer(self[data])
-		elif data.struct(): return data
+		if type(data) in [str, unicode]: data = self[data]
+		if data.struct(): return data
 		try: return data.pointer(this=self)
 		except AttributeError: raise RPLBadType("Can only use pointer on references.")
 	#endif
@@ -1525,12 +1582,14 @@ class ROM(RPLStruct):
 	typeName = "ROM"
 
 	# Default settings for id and name keys:
+	id_type = "string"
 	id_location   = 0
 	id_format     = {
 		"length":  0,      # 0 for non-fixed length
 		"padding": "\0",   # Char to pad with
 		"align":   "left", # How to align the name, usually left
 	}
+	name_type = "string"
 	name_location = 0
 	name_format   = {
 		"length":  0,      # 0 for non-fixed length
@@ -1546,6 +1605,15 @@ class ROM(RPLStruct):
 		self.id_format     = copy.copy(self.id_format)
 		self.name_location = self.name_location
 		self.name_format   = copy.copy(self.name_format)
+
+		# Adjust keys...
+		if self.id_type != "string":
+			self.keys["id"][0] = RPLTypeCheck(self.rpl, "id", "[%s]*" % id_type)
+		#endif
+
+		if self.name_type != "string":
+			self.keys["name"][0] = RPLTypeCheck(self.rpl, "name", "[%s]*" % name_type)
+		#endif
 	#enddef
 
 	def register(self):
