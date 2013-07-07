@@ -32,7 +32,12 @@ def register(rpl):
 	rpl.registerStruct(Spritemap3)
 
 	rpl.registerType(Pokestr)
-	# TODO: Adjust ROM
+
+	rpl.updateROM(
+		0x21ac, { "length":  4 },
+		0x21b0, { "length": 12 },
+		nametype = "pokestr"
+	)
 #enddef
 
 def printHelp(moreInfo=[]):
