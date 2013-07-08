@@ -27,7 +27,7 @@ Usage: python -m tests.tests [tests...]
 For a list of tests see python -m tests.tests --help
 """
 
-import os, sys, Image, codecs, unittest
+import os, sys, Image, codecs, unittest, shutil
 from rpl import rpl, helper
 from time import time
 
@@ -133,7 +133,7 @@ class TestParse(RPLTestCase):
 
 	def testStatic0(self):
 		static0 = TestParse.basic.child("static0")
-		self.checkLen(static0, 8)
+		self.checkLen(static0, 9)
 		self.check(static0, "string", "string", "hi")
 		self.check(static0, "literal", "literal", "bye")
 		self.check(static0, "number", "number", 1)
@@ -150,6 +150,8 @@ class TestParse(RPLTestCase):
 			("hexnum", 0xbabe), ("range", map(lambda(x): ("number", x),
 			[1, 2, 3]))
 		])
+
+		self.check(static0, "a", "literal", "one letter key")
 
 		for y in static0:
 			self.assertEqual(y.name, "sub", 'Unexpected sub "%s"' % y.name)
@@ -438,18 +440,22 @@ class IOTest(RPLTestCase):
 		folder = os.path.join("tests", "rpls", name.split("_", 1)[0])
 
 		# Delete files
-		for file1, file2 in compares:
-			try: os.unlink(os.path.join(folder, file2))
-			except OSError as err:
-				if err.errno == 2: pass
-				else: raise
-			#endtry
-		#endfor
+		if direction != 2 and compares[0]:
+			for file1, file2 in compares:
+				try: os.unlink(os.path.join(folder, file2))
+				except OSError as err:
+					if err.errno == 2: pass
+					else: raise
+				#endtry
+			#endfor
+		#endif
 
-		if direction == 0: arpl.importData(os.path.join(folder, "test." + name + ext), folder, what)
-		else: arpl.exportData(os.path.join(folder, name + ext), folder, what)
+		if direction == 0:   arpl.importData(os.path.join(folder, "test." + name + ext), folder, what)
+		elif direction == 1: arpl.exportData(os.path.join(folder, name + ext), folder, what)
+		elif direction == 2: arpl.run(folder, what)
 
 		self.time = time()
+		if not compares[0]: return
 		for file1, file2 in compares:
 			# Compare test.bin with data.bin
 			exts = map(lambda x: x[1:].lower(),
@@ -468,13 +474,14 @@ class IOTest(RPLTestCase):
 				test = read([folder, file2], "rb")
 			#endif
 			self.assertEqual(data, test, "Unexpected result from %s." %
-				["import", "export"][direction]
+				["import", "export", "run"][direction]
 			)
 		#endfor
 	#enddef
 
 	def _import(self, name, ext, what=None, *compares): return self._xxport(0, name, ext, what, compares)
 	def _export(self, name, ext, what=None, *compares): return self._xxport(1, name, ext, what, compares)
+	def _run(self, name, what=None, *compares): return self._xxport(2, name, "", what, compares)
 #enddef
 
 class TestData(IOTest):
@@ -533,6 +540,20 @@ class TestMin(IOTest):
 	def testExport(self): self._export("min", ".bin", ("tile.bmp", "test.tile.bmp"), ("tilemap1.bmp", "test.tilemap1.bmp"), ("tilemap2.bmp", "test.tilemap2.bmp"))
 #endclass
 
+class TestTypeset(IOTest):
+	@timedTest
+	def testAll(self):
+		# First, blank the test bmp.
+		shutil.copy2(
+			os.path.join("tests", "rpls", "typeset", "blank.typeset.png"),
+			os.path.join("tests", "rpls", "typeset", "test.typeset.png")
+		)
+
+		# Now run the test.
+		self._run("typeset", ("typeset.png", "test.typeset.png"))
+	#enddef
+#endclass
+
 if __name__ == "__main__":
 	run = sys.argv[1:]
 	if not run: run = ["all"]
@@ -569,17 +590,26 @@ if __name__ == "__main__":
 	if helper.oneOfIn(["all", "std", "table"], run): suite.append(TestTable)
 	if helper.oneOfIn(["all", "std", "graphic"], run): suite.append(TestGraphic)
 	if helper.oneOfIn(["all", "min"], run): suite.append(TestMin)
+	if helper.oneOfIn(["all", "typeset"], run): suite.append(TestTypeset)
 	try:
+		errors = {}
 		if suite:
 			for x in suite:
 				print "===== Tests for %s =====" % x.__name__.replace("Test", "")
-				unittest.TextTestRunner().run(
+				tmp = unittest.TextTestRunner().run(
 					unittest.defaultTestLoader.loadTestsFromTestCase(x)
 				)
+				if tmp.errors: errors[x.__class__.__name__] = len(tmp.errors)
 			#endfor
 		else: unittest.main()
 	finally:
-		total = 0.0
+		total, errs = 0.0, 0
+		for x in errors:
+			print "%i errors in %s" % (errors[x], x)
+			errs += errors[x]
+		#endfor
+		print "Total errors: %i\n" % errs
+
 		for test, time in _timedTests:
 			print "Time for %s: %.3fs" % (test, time)
 			total += time

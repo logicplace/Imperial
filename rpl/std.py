@@ -197,12 +197,12 @@ class ImageFile(rpl.Share):
 		if self.image is None: self.newImage()
 		region = Image.new("RGBA", (width, height))
 		region.putdata(data)
-		self.image.paste(region, (left, top))
+		self.image.paste(region, (left, top), region)
 	#enddef
 
 	def addImage(self, image, left, top):
 		if self.image is None: self.newImage()
-		self.image.paste(image, (left, top))
+		self.image.paste(image, (left, top), image)
 	#enddef
 
 	def addPixel(self, rgba, x, y):

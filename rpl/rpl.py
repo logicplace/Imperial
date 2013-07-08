@@ -42,8 +42,8 @@ class RecurseIter(object):
 	"""
 	Iterator used by both RPL and RPLStruct to recurse their children.
 	"""
-	def __init__(self, children):
-		self.children, self.iter = children.itervalues(), None
+	def __init__(self, children, parent):
+		self.children, self.iter, self.parent = children.itervalues(), None, parent
 	#enddef
 
 	def __iter__(self): return self
@@ -56,6 +56,8 @@ class RecurseIter(object):
 		except StopIteration:
 			# Raised when child has completed. Continue to next child.
 			child = self.children.next() # This will raise if we're done
+			# Ignore structs that are just pointed to.
+			#while child.parent != self.parent: child = self.children.next()
 			self.iter = child.recurse()
 			# This order makes it return itself before returning any of its children
 			return child
@@ -141,6 +143,13 @@ class RPLObject(object):
 		"""
 		Create a new struct and add it as a child of this one.
 		"""
+		# Statics are always allowed.
+		if structType == "static":
+			new = self.rpl.structs[structType](self.rpl, name, self)
+			#self.children[name] = new
+			return new
+		#endif
+
 		if structType not in self.structs:
 			raise RPLError("%s isn't allowed as a substruct of %s." % (
 				structType, "root" if self == self.rpl else self.typeName
@@ -176,7 +185,7 @@ class RPLObject(object):
 	def __nonzero__(self): return True
 	def __iter__(self): return self.children.itervalues()
 	def child(self, name): return self.children[name]
-	def recurse(self): return RecurseIter(self.children)
+	def recurse(self): return RecurseIter(self.children, self)
 
 	def childrenByType(self, typeName):
 		"""
@@ -246,7 +255,7 @@ class RPL(RPLObject):
 			# Between these parts, one can add more things to this set.
 			# It's used above to add :\-*+~ in one portion.
 			# Range part 2.
-			"r2": r']|(?<!\w)[a-z](?=:)|(?<=:)[a-z](?!\w)|\$[0-9a-fA-F]+)',
+			"r2": r']|(?<!\w)[a-z](?=:[a-z$0-9])|(?<=[a-z$0-9]:)[a-z](?!\w)|\$[0-9a-fA-F]+)',
 			# Invalid characters for a Literal.
 			"lit": r'{}\[\],\$@"#\r\n' r"'",
 			# Valid key name.
@@ -483,19 +492,21 @@ class RPL(RPLObject):
 				error = "Literal with no purpose: %s" % lastLit
 			#endif
 
-			if add:
-				dtype = add[0]
-				val = self.parseCreate(add, currentStruct, currentKey, line, char, skipSubInst)
+			try:
+				if add:
+					dtype = add[0]
+					val = self.parseCreate(add, currentStruct, currentKey, line, char, skipSubInst)
 
-				if parents:
-					parents[-1].append(val)
-				elif currentStruct and currentKey:
-					if not notCaring: currentStruct[currentKey] = val
-					currentKey = None
-				else:
-					error = "Unused " + dtype
+					if parents:
+						parents[-1].append(val)
+					elif currentStruct and currentKey:
+						if not notCaring: currentStruct[currentKey] = val
+						currentKey = None
+					else:
+						error = "Unused " + dtype
+					#endif
 				#endif
-			#endif
+			except RPLError as x: error = x.args[0]
 
 			if error:
 				raise RPLError("Error in line %i char %i: %s" % (
@@ -754,7 +765,7 @@ class RPL(RPLObject):
 		# Doing this in a three step process ensures proper ordering when
 		# importing shared data.
 
-		# Do preparations
+		# Do preparations.
 		toImport = []
 		for x in self.recurse():
 			if x.manage(what):
@@ -765,7 +776,7 @@ class RPL(RPLObject):
 			#endif
 		#endfor
 
-		# Commit imports
+		# Commit imports.
 		if not nocreate:
 			for x in toImport:
 				try: x.importData
@@ -794,9 +805,9 @@ class RPL(RPLObject):
 		# Exports are lazily drawn from the ROM, as there is no ordering
 		# necessary since it's all based on fixed positions. Prerequisites are
 		# handled properly this way, such as pulling lengths or pointers from
-		# other blocks
+		# other blocks.
 
-		# Do preparations
+		# Do preparations.
 		toExport = []
 		for x in self.recurse():
 			if x.manage(what):
@@ -807,7 +818,7 @@ class RPL(RPLObject):
 			#endif
 		#endfor
 
-		# Write exports
+		# Write exports.
 		if not nocreate:
 			for x in toExport:
 				try: x.exportData
@@ -815,6 +826,43 @@ class RPL(RPLObject):
 				else: x.exportData(rom, lfolder)
 			for x in self.sharedDataHandlers.itervalues(): x.write()
 		#endif
+
+		rom.close()
+		self.importing = self.rom = None
+		del self.requested
+	#enddef
+
+	def run(self, folder, what=[]):
+		"""
+		Running is the idea of working on files alone, without a rom.
+		Therefore, it basically works like this:
+		[v Pyt] <-- [Reso-]
+		[> hon] --> [urces]
+		by calling importPrepare then exportData.
+		"""
+		self.rom = rom = helper.FakeStream()
+		self.importing = True
+		self.requested = what
+		lfolder = list(os.path.split(os.path.normpath(folder)))
+
+		# Do preparations.
+		toExport = []
+		for x in self.recurse():
+			if x.manage(what):
+				try: x.importPrepare
+				except AttributeError: pass
+				else: x.importPrepare(rom, lfolder)
+				toExport.append(x)
+			#endif
+		#endfor
+
+		self.importing = False
+		# Write exports.
+		for x in toExport:
+			try: x.exportData
+			except AttributeError: pass
+			else: x.exportData(rom, lfolder)
+		for x in self.sharedDataHandlers.itervalues(): x.write()
 
 		rom.close()
 		self.importing = self.rom = None
@@ -1795,17 +1843,32 @@ class Static(RPLStruct):
 		return True
 	#enddef
 
-	def addChild(self, sType, name):
+	def addChild(self, structType, name):
 		"""
-		Overwrite this cause Static accepts all root children.
+		Overwrite this cause Static accepts all root children UNLESS it is
+		a child itself.
 		"""
-		if sType not in self.rpl.structs:
+		# If this has a parent, then this can only accept the children that
+		# parent can.
+
+		# Retrieve the first non-static parent.
+		if self.parent:
+			parent = self.parent
+			while parent and parent != self.rpl and parent.typeName == "static": parent = parent.parent
+		else:
+			parent = self.rpl
+		#endif
+
+		if structType not in parent.structs:
 			raise RPLError("%s isn't allowed as a substruct of %s." % (
-				sType, self.typeName
+				structType, "root" if parent == self.rpl else parent.typeName
 			))
 		#endif
-		new = self.rpl.structs[sType](self.rpl, name, self)
+		new = parent.structs[structType](self.rpl, name, self)
 		self.children[name] = new
+		# Add a copy to the parent, too, so lib writers don't have to
+		# think about static children.
+		parent.children[name] = new
 		return new
 	#enddef
 

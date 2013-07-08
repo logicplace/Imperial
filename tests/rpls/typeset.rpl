@@ -1,0 +1,75 @@
+RPL { lib: typeset }
+
+font BasicFont {
+	file: font.png
+	transparent: white
+
+	# Upper case
+	static StandardCaps {
+		dimensions: [4, 5]
+		charset {
+			set: ABCDEFGHIJKLMNOP
+			start: [0, 0]
+		}
+
+		char {
+			c: Q
+			box: [64, 0, 3, 6]
+			base: 5
+		}
+
+		charset {
+			set: RSTUVWXYZ
+			start: [68, 0]
+		}
+	}
+
+	# Lower case
+	char { c: a, box: [  0, 9, 4, 3] }
+	char { c: b, box: [  4, 7, 4, 5] }
+	char { c: c, box: [  8, 9, 4, 3] }
+	char { c: d, box: [ 12, 7, 4, 5] }
+	char { c: e, box: [ 16, 9, 4, 3] }
+	char { c: f, box: [ 20, 7, 4, 5] }
+	char { c: g, box: [ 24, 9, 4, 5], base: 3 }
+	char { c: h, box: [ 28, 7, 4, 5] }
+	char { c: i, box: [ 32, 7, 3, 5] }
+	char { c: j, box: [ 35, 8, 3, 6], base: 4 }
+	char { c: k, box: [ 38, 7, 4, 5] }
+	char { c: l, box: [ 42, 7, 2, 5] }
+	char { c: m, box: [ 44, 9, 6, 3] }
+	char { c: n, box: [ 50, 9, 4, 3] }
+	char { c: o, box: [ 54, 9, 4, 3] }
+	char { c: p, box: [ 58, 9, 4, 5], base: 3 }
+	char { c: q, box: [ 62, 9, 4, 5], base: 3 }
+	char { c: r, box: [ 66, 9, 4, 3] }
+	char { c: s, box: [ 70, 9, 4, 3] }
+	char { c: t, box: [ 74, 7, 4, 5] }
+	char { c: u, box: [ 78, 9, 4, 3] }
+	char { c: v, box: [ 82, 9, 4, 3] }
+	char { c: w, box: [ 86, 9, 6, 3] }
+	char { c: x, box: [ 92, 9, 4, 3] }
+	char { c: y, box: [ 96, 9, 4, 5], base: 3 }
+	char { c: z, box: [100, 9, 4, 3] }
+
+	# Punctuation
+	char { c: ' ', box: [104, 7, 3, 5] }
+	char { c: '.', box: [104, 3, 3, 2] }
+	char { c: ',', box: [107, 3, 3, 4], base: 2 }
+	char { c: ':', box: [110, 0, 3, 5] }
+	char { c: ';', box: [113, 3, 3, 7], base: 5 }
+	char { c: '-', box: [116, 2, 4, 2] }
+	char { c: '!', box: [120, 0, 4, 5] }
+	char { c: '?', box: [124, 0, 4, 5] }
+}
+
+typeset Test1 {
+	file: test.typeset.png
+	font: @BasicFont
+	bg: white
+
+	text {
+		text: "Hello World!"
+		box: [0, 0, 50, 7]
+	}
+}

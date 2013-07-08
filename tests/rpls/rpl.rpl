@@ -13,6 +13,9 @@ static {
 	static sub {
 		lit: :D
 	}
+
+	# Regression test:
+	a: one letter key
 }
 
 static AndAnotherStatic {
