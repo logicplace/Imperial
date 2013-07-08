@@ -59,14 +59,9 @@ def main():
 		nargs   = 2,
 		metavar = ("ROM", "RPL")
 	)
-	action.add_argument("--makefile", "-m", #"/m",
+	action.add_argument("--makefile", "-m", "--binary", "-b", #"/m", "/b",
 		help    = "Create a new file. This will overwrite an existing file.\n"
 		"Implies -r",
-		nargs   = 2,
-		metavar = ("ROM", "RPL")
-	)
-	action.add_argument("--binary", "-b", #"/b",
-		help    = argparse.SUPPRESS,
 		nargs   = 2,
 		metavar = ("ROM", "RPL")
 	)
@@ -76,6 +71,11 @@ def main():
 		"If no destination is given, result is printed to stdout.",
 		action  = "store_true"
 	)
+	action.add_argument("--run",
+		help    = "Run a RPL without involving a ROM. Implies --romless",
+		nargs   = 1,
+		metavar = ("RPL")
+	)
 	parser.add_argument("--libs", "-l", #"/l",
 		help    = "What libs to load for template creation.",
 		nargs   = "*"
@@ -84,13 +84,13 @@ def main():
 		help    = "What structs to include in the template.",
 		nargs   = "*"
 	)
-	parser.add_argument("--run",
-		help    = "Run a RPL without creating anything.",
-		action  = "store_true"
-	)
 	parser.add_argument("--romless", "-r", #"/r",
 		help    = "Do not perform validations in ROM struct, and"
 		" do not warn if there isn't a ROM struct.",
+		action  = "store_true"
+	)
+	parser.add_argument("--blank",
+		help    = "Run action without creating or modifying a ROM file.",
 		action  = "store_true"
 	)
 	parser.add_argument("--define", "-d", #"/d",
@@ -107,35 +107,31 @@ def main():
 		default = "."
 	)
 	parser.add_argument("args", nargs="*", help=argparse.SUPPRESS)
+
 	if len(sys.argv) == 1:
 		parser.print_help()
 		return 0
 	#endif
-	args = parser.parse_args(sys.argv[1:])
-	# Map binary command
-	if args.binary:
-		args.romless = True
-		args.makefile = args.binary
-	elif args.makefile:
-		args.romless = True
-	#endif
 
-	# Do some input verifications
-	if args.run and args.makefile:
-		parser.error("Cannot use --run with --makefile, use it with --import instead.")
+	args = parser.parse_args(sys.argv[1:])
+
+	# Windows help flag.
+	if args.args and args.args[0] == "/?":
+		args.help = True
+		args.args.pop(0)
 	#endif
 
 	if args.help:
 		if len(args.args) >= 1:
 			if args.args[0][-3:] == "rpl":
-				# Load a RPL file's help
-				tmp = rpl.RPL()
-				tmp.parse(args.args[0], ["RPL"])
-				rplStruct = tmp.childrenByType("RPL")
+				# Load a RPL file's help.
+				thing = rpl.RPL()
+				thing.parse(args.args[0], ["RPL"])
+				rplStruct = thing.childrenByType("RPL")
 				if not rplStruct: return 0
 				help = rplStruct[0]["help"].get()
 
-				# Abuse argparse's help generator
+				# Abuse argparse's help generator.
 				filehelp = argparse.ArgumentParser(
 					description = help[0].get(),
 					usage       = argparse.SUPPRESS
@@ -146,34 +142,49 @@ def main():
 				#endfor
 				filehelp.print_help()
 			else:
-				# Load a lib's help
+				# Load a lib's help.
 				tmp = getattr(__import__("rpl." + args.args[0], globals(), locals()), args.args[0])
 				tmp.printHelp(args.args[1:])
 			#endif
 		else: parser.print_help()
 	elif args.template:
-		tmp = rpl.RPL()
-		# Load requested libs
+		thing = rpl.RPL()
+		# Load requested libs.
 		if args.libs:
 			rplStruct = rpl.StructRPL()
 			rplStruct["lib"] = rpl.List(map(rpl.String, args.libs))
-			tmp.load(rplStruct)
+			thing.load(rplStruct)
 		#endif
 		structs = args.structs
 		if structs and not args.romless: structs = ["ROM"] + structs
-		print tmp.template(structs)
-	else:
-		# Regular form
+		print thing.template(structs)
+	elif args.run:
 		thing = rpl.RPL()
 
-		# Grab filenames
+		thing.parse(args.run[0])
+
+		# Do defines.
+		if args.define:
+			for x in args.define: thing.addDef(*x)
+		#endif
+
+		# Run RPL.
+		start = time()
+		thing.run(args.folder, args.args)
+		print "Finished executing. Time taken: %.3fs" % (time() - start)
+	else:
+		# Regular form.
+		thing = rpl.RPL()
+
+		# Grab filenames.
 		if args.importing:  romfile, rplfile = tuple(args.importing)
 		elif args.export:   romfile, rplfile = tuple(args.export)
 		elif args.makefile: romfile, rplfile = tuple(args.makefile)
 
-		if not args.run: romstream = helper.stream(romfile)
 		thing.parse(rplfile)
-		if not args.romless:
+
+		if not args.romless and not args.makefile:
+			romstream = helper.stream(romfile)
 			roms = thing.childrenByType("ROM")
 			for x in roms:
 				fails = x.validate(romstream)
@@ -190,32 +201,33 @@ def main():
 			#endfor
 		#endif
 
-		# Do defines
+		# Do defines.
 		if args.define:
 			for x in args.define: thing.addDef(*x)
 		#endif
 
-		# Run imports
+		# Run imports.
 		start = time()
 		if args.importing:
-			thing.importData(romstream, args.folder, args.args, args.run)
-			print "Finished %s." % ("executing" if args.run else "importing"),
+			thing.importData(romstream, args.folder, args.args, args.blank)
+			print "Finished %s." % ("blank import" if args.blank else "importing"),
+			romstream.close()
 		elif args.export:
-			thing.exportData(romstream, args.folder, args.args, args.run)
-			print "Finished %s." % ("executing" if args.run else "exporting"),
+			thing.exportData(romstream, args.folder, args.args, args.blank)
+			print "Finished %s." % ("blank export" if args.blank else "exporting"),
+			romstream.close()
 		elif args.makefile:
 			try: os.unlink(romfile)
-			except IOError as err:
+			except OSError as err:
 				if err.errno == 2: pass
 				else:
 					helper.err('Could not delete "%s": %s' % (romfile, err.strerror))
 					return 1
 				#endif
 			#endtry
-			thing.importData(romstream, args.folder, args.args)
-			print "Finished building.",
+			thing.importData(romfile, args.folder, args.args, args.blank)
+			print "Finished %s." % ("build test" if args.blank else "building"),
 		#endif
-		if romfile is not None: romstream.close()
 		print "Time taken: %.3fs" % (time() - start)
 	#endif
 #enddef
