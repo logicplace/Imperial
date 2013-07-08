@@ -1312,7 +1312,7 @@ class GenericGraphic(Graphic):
 		padfunc = self.padfuncDef(width, height)
 
 		# Prepare palette
-		self.definePalette([x.get() for x in self["palette"].get()])
+		self.definePalette([x.tuple() for x in self["palette"].get()])
 
 		# Prepare data
 		leftover = 0
@@ -1351,7 +1351,7 @@ class GenericGraphic(Graphic):
 		bytes = self.len(numPixels, padfunc, pixels)
 
 		# Prepare palette
-		palette = [x.get() for x in self["palette"].get()]
+		palette = [x.tuple() for x in self["palette"].get()]
 
 		# Read pixels
 		self.rpl.rom.seek(self["base"].number())
@@ -2001,12 +2001,7 @@ class Pixel(rpl.String):
 		if self.group == 0: r, g, b = values["R"], values["G"], values["B"]
 		#elif self.group == 1: TODO
 		elif self.group == 2: r, g, b = values["W"], values["W"], values["W"]
-		elif self.group == 3:
-			val = palette[values["I"]]
-			a, r, g, b = (
-				(val & 0xff000000) >> 24, (val & 0xff0000) >> 16,
-				(val & 0xff00) >> 8, val & 0xff
-			)
+		elif self.group == 3: r, g, b, a = palette[values["I"]]
 		if self.alpha: a = values["A"]
 
 		#print "#%02x%02x%02x.%i%%" % (r, g, b, a * 100 / 255)

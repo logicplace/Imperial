@@ -599,16 +599,16 @@ if __name__ == "__main__":
 				tmp = unittest.TextTestRunner().run(
 					unittest.defaultTestLoader.loadTestsFromTestCase(x)
 				)
-				if tmp.errors: errors[x.__class__.__name__] = len(tmp.errors)
+				if tmp.errors: errors[x.__class__.__name__] = len(tmp.errors) + len(tmp.failures)
 			#endfor
 		else: unittest.main()
 	finally:
 		total, errs = 0.0, 0
 		for x in errors:
-			print "%i errors in %s" % (errors[x], x)
+			print "%i errors & failures in %s" % (errors[x], x)
 			errs += errors[x]
 		#endfor
-		print "Total errors: %i\n" % errs
+		print "Total errors & failures: %i\n" % errs
 
 		for test, time in _timedTests:
 			print "Time for %s: %.3fs" % (test, time)

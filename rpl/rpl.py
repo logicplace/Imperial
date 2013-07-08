@@ -57,7 +57,7 @@ class RecurseIter(object):
 			# Raised when child has completed. Continue to next child.
 			child = self.children.next() # This will raise if we're done
 			# Ignore structs that are just pointed to.
-			#while child.parent != self.parent: child = self.children.next()
+			while child.parent != self.parent: child = self.children.next()
 			self.iter = child.recurse()
 			# This order makes it return itself before returning any of its children
 			return child
@@ -146,7 +146,7 @@ class RPLObject(object):
 		# Statics are always allowed.
 		if structType == "static":
 			new = self.rpl.structs[structType](self.rpl, name, self)
-			#self.children[name] = new
+			if self == self.rpl: self.children[name] = new
 			return new
 		#endif
 
