@@ -4,7 +4,7 @@ I'll basically always run the tests before pushing and make sure they all pass.
 
 ### Countdown to 1.0 ###
 * <del>Implement typesetting lib.</del>
-* Finish CLI.
+* <del>Finish CLI \[as far as I care anymore\].</del>
 * Add better error reporting.
 * Clean, make efficiency adjustments, add more comments.
 * Complete help contents.
