@@ -3,7 +3,7 @@ I'll basically always run the tests before pushing and make sure they all pass.
  you can be assured master will be functional until there are stable releases.
 
 ### Countdown to 1.0 ###
-* Implement typesetting lib.
+* <del>Implement typesetting lib.</del>
 * Finish CLI.
 * Add better error reporting.
 * Clean, make efficiency adjustments, add more comments.
