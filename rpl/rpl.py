@@ -17,11 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
-import os
-import re
-import copy
-import codecs
-import helper
+import os, re, copy, codecs
 from math import ceil
 from zlib import crc32
 from collections import OrderedDict as odict
@@ -29,7 +25,6 @@ from collections import OrderedDict as odict
 # TODO:
 #  * RPLRef issues:
 #    * @back (maybe?)
-#  * Add referencing multiline strs with @` ` form.
 
 ################################################################################
 #################################### Helpers ###################################
@@ -37,6 +32,8 @@ from collections import OrderedDict as odict
 
 class RPLError(Exception): pass
 class RPLBadType(Exception): pass
+
+import helper
 
 class RecurseIter(object):
 	"""
@@ -232,7 +229,7 @@ class RPL(RPLObject):
 		 # Multi-line String: Matches `etc` but multiple in a row
 		 # NOTE: This picks up comments and the ` themselves so have to
 		 # remove those in processing.
-		 r'((?:\s*`[^`]*`\s*(?:#.*)?)+)|'
+		 r'((?:\s*@?`[^`]*`\s*(?:#.*)?)+)|'
 		 # Number or range (verify syntactically correct range later)
 		 # That is, any string of numbers, -, *, :, or :c: where c is one
 		 # lowercase letter.
@@ -264,7 +261,7 @@ class RPL(RPLObject):
 	, re.M | re.U)
 
 	# Used to parse a multiline string token into its real data.
-	multilineStr = re.compile(r'`([^`]*)`\s*(?:#.*)?')
+	multilineStr = re.compile(r'@?`([^`]*)`\s*(?:#.*)?')
 
 	# For numbers (number and hexnum) and ranges.
 	number = re.compile(
@@ -313,6 +310,7 @@ class RPL(RPLObject):
 
 		self.registerType(String)
 		self.registerType(Literal)
+		self.registerType(RefString)
 		self.registerType(Path)
 		self.registerType(Number)
 		self.registerType(HexNum)
@@ -527,15 +525,15 @@ class RPL(RPLObject):
 		# Special handler for references (cause they're so speeshul)
 		if dtype == "reference":
 			val = RPLRef(self, currentStruct, currentKey, val, line, char)
-		elif skipSubInst: val = self.wrap(*add)
+		elif skipSubInst: val = self.wrap(add[0], add[1], currentStruct, currentKey, line, char)
 		else:
 			# So I don't have to have two branches doing the same thing we
 			# regard the data as a list for now, and change it back after.
 			if type(val) is not list: nl, val = True, [add]
 			else: nl = False
-			val = map(lambda(x): self.wrap(*x), val)
+			val = map(lambda(x): self.wrap(x[0], x[1], currentStruct, currentKey, line, char), val)
 			if nl: val = val[0]
-			else: val = self.wrap(dtype, val)
+			else: val = self.wrap(dtype, val, currentStruct, currentKey, line, char)
 		#endif
 
 		return val
@@ -575,7 +573,7 @@ class RPL(RPLObject):
 		elif sstr: add = ("string", sstr)
 		elif mstr:
 			# Need to remove all `s and comments
-			add = ("string", "".join(RPL.multilineStr.findall(mstr)))
+			add = ("refstr" if mstr[0] == "@" else "string", "".join(RPL.multilineStr.findall(mstr)))
 		elif num:
 			if not RPL.number.match(num):
 				error = "Invalid range formatting."
@@ -869,12 +867,12 @@ class RPL(RPLObject):
 		del self.requested
 	#enddef
 
-	def wrap(self, typeName, value=None):
+	def wrap(self, typeName, value=None, container=None, key=None, line=None, char=None):
 		"""
 		Wrap a value in its respective RPLData class by type name.
 		"""
 		if typeName in self.types:
-			return self.types[typeName](value)
+			return self.types[typeName](value, self, container, key, line, char)
 		raise RPLError('No type "%s" defined' % typeName)
 	#enddef
 
@@ -2343,8 +2341,9 @@ class RPLRef(object):
 ################################################################################
 
 class RPLData(object):
-	def __init__(self, data=None):
-		self.nocopy = []
+	def __init__(self, data=None, top=None, container=None, mykey=None, line=None, char=None):
+		self.rpl, self.container, self.mykey, self.pos = top, container, mykey, (line, char)
+		self.nocopy = ["rpl", "container"]
 
 		if data is not None: self.set(data)
 	#enddef
@@ -2421,11 +2420,11 @@ class String(RPLData):
 	def string(self): return self.data
 
 	def __unicode__(self):
-		return '"' + String.binchr.sub(String.replOut, self.data) + '"'
+		return '"' + String.binchr.sub(String.replOut, self.string()) + '"'
 	#enddef
 
 	def serialize(self, **kwargs):
-		rstr = self.data.encode("utf8")
+		rstr = self.string().encode("utf8")
 		if "size" not in kwargs or not kwargs["size"]: return rstr
 		# TODO: This can split a utf8 sequence at the end. Need to fix..
 		rstr = rstr[0:min(kwargs["size"], len(rstr))]
@@ -2439,7 +2438,7 @@ class String(RPLData):
 		else: return rpad + rstr
 	#enddef
 
-	def unserialize(self, data, **kwargs): self.data = data.decode("utf8")
+	def unserialize(self, data, **kwargs): self.set(data.decode("utf8"))
 
 	@staticmethod
 	def replIn(mo):
@@ -2464,6 +2463,72 @@ class Literal(String):
 
 	def __unicode__(self):
 		return self.badchr.sub(String.replOut, self.data)
+	#enddef
+#endclass
+
+class RefString(String):
+	"""
+	String that contains references, replaced when requested.
+	"""
+
+	typeName = "refstr"
+
+	def set(self, data):
+		if type(data) is str: data = unicode(data)
+		elif type(data) is not unicode:
+			raise RPLError('Type "%s" expects unicode or str. Got "%s"' % (
+				self.typeName, type(data).__name__
+			))
+		#endif
+
+		# Split up references.
+		pieces, pos = [], 0
+		next = data.find("@")
+		while next != -1:
+			space = data.find(" ", next)
+			if space == -1: space = len(data)
+			# Do escape sequence replacements on string data only.
+			pieces.append(String.escape.sub(String.replIn, data[0:next]))
+
+			# Make a reference. TODO: This could be better.. should I care?
+			# TODO: self.rpl may not always be set.
+			pieces.append(RPLRef(
+				self.rpl, self.container, self.mykey, data[next + 1:space],
+				self.pos[0], self.pos[1] + pos + next if self.pos[1] is not None else None
+			))
+			data = data[space:]
+			pos += space
+			next = data.find("@")
+		#endwhile
+		if data: pieces.append(String.escape.sub(String.replIn, data))
+
+		self.data = pieces
+	#enddef
+
+	def get(self):
+		ret = u""
+		for i, x in enumerate(self.data):
+			if i % 2 == 0: ret += x
+			else:
+				try: ret += x.string()
+				except RPLBadType:
+					try: ret += unicode(x.number())
+					except RPLBadType:
+						raise helper.Error(
+							"Cannot use list type in %s" % refstr,
+							self.container, self.mykey, x.pos
+						)
+					#endtry
+				#endtry
+			#endif
+		#endfor
+		return ret
+	#enddef
+
+	def string(self): return self.get()
+
+	def __unicode__(self):
+		return '@`' + String.binchr.sub(String.replOut, self.string()) + '`'
 	#enddef
 #endclass
 

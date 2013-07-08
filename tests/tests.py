@@ -360,6 +360,7 @@ class TestReferences(RPLTestCase):
 		self.check(x, "test14", "literal", "hi")
 		self.check(x, "test15", "literal", "hi")
 		self.check(x, "test16", "literal", "he")
+		self.check(x, "test17", "refstr", "hi world. Also 1")
 
 		x = TestReferences.refers.child("ImaGParent").child("ImaParent").child("ImaToysRUsKid")
 		self.check(x, "test1", "number", 3)

@@ -45,4 +45,7 @@ static tests {
 	test14: @Multikid.guff.buff.test
 	test15: @Multikid.list[0].test
 	test16: @Multikid.guff.list[1].more[3][2]
+
+	# refstr
+	test17: @`@Multikey.test world. Also @RefMeBaby.one`
 }

@@ -21,11 +21,26 @@
 import re, codecs
 from sys import stderr
 from textwrap import dedent
+from rpl import RPLError
 
 class RPLInternal(Exception): pass
 
 # So I can be lazy about writing errors
 def err(msg): stderr.write(unicode(msg) + "\n")
+
+def Error(error, container=None, key=None, pos=None):
+	pre = ""
+	if container and key:
+		pre = "Error in %s.%s" % (container, key)
+		if pos[0] is not None:
+			pre += " (line %i char %i)" % pos
+		#endif
+		pre += ": "
+	elif pos[0] is not None:
+		pre = "Error in line %i char %i" % pos
+	#endif
+	return RPLError(pre + error)
+#enddef
 
 # TODO: Define some levels
 logLevel = 0
