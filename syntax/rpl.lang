@@ -55,11 +55,20 @@
 			</context>
 		</include></context>
 
-		<context id="mstring" style-ref="string" end-at-line-end="true" class="string">
+		<context id="mstring" style-ref="string" class="string">
 			<start>`</start><end>`</end>
 			<include>
 				<context ref="escape"/>
 				<context ref="escape-error"/>
+			</include>
+		</context>
+
+		<context id="refstr" style-ref="string" class="string">
+			<start>@`</start><end>`</end>
+			<include>
+				<context ref="escape"/>
+				<context ref="escape-error"/>
+				<context ref="ref"/>
 			</include>
 		</context>
 
@@ -129,6 +138,7 @@
 				<context ref="def:shell-like-comment"/>
 				<context ref="list"/>
 				<context ref="string"/>
+				<context ref="refstr"/>
 				<context ref="mstring"/>
 				<context ref="hexnum"/>
 				<context ref="number"/>
@@ -151,6 +161,7 @@
 						<context ref="key"/>
 						<context ref="list"/>
 						<context ref="string"/>
+						<context ref="refstr"/>
 						<context ref="mstring"/>
 						<context ref="hexnum"/>
 						<context ref="number"/>
@@ -166,6 +177,7 @@
 				<context ref="def:shell-like-comment"/>
 				<context ref="list"/>
 				<context ref="string"/>
+				<context ref="refstr"/>
 				<context ref="mstring"/>
 				<context ref="hexnum"/>
 				<context ref="number"/>
