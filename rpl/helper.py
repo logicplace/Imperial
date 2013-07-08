@@ -18,7 +18,7 @@
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-import re, codecs
+import re, codecs, os
 from sys import stderr
 from textwrap import dedent
 from rpl import RPLError
@@ -48,6 +48,14 @@ def log(level, msg):
 	if level <= logLevel: print "LOG(%i): %s" % (debugLevel, unicode(msg))
 #enddef
 
+def makeParents(path):
+	try: os.makedirs(os.path.dirname(path))
+	except OSError as err:
+		if err.errno == 17: pass
+		else: raise RPLError('Could not open file "%s" reason: %s' % (path, err.strerror))
+	#endtry
+#enddef
+
 def readFrom(etc):
 	"""
 	Helper class to read from a file or stream
@@ -65,6 +73,7 @@ def writeTo(etc, data):
 	Helper class to write to a file or stream
 	"""
 	if type(etc) in [str, unicode]:
+		makeParents(etc)
 		x = codecs.open(etc, encoding="utf-8", mode="w")
 		ret = x.write(data)
 		x.close()
@@ -77,6 +86,7 @@ def stream(etc):
 	Helper class to open a file as a stream
 	"""
 	if type(etc) in [str, unicode]:
+		makeParents(etc)
 		try: etc = OverSeek(etc, "r+b")
 		except IOError:
 			tmp = open(etc, "w")

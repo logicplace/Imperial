@@ -117,6 +117,12 @@ class RPLObject(object):
 	Base class for RPL (file/root) and RPLStruct.
 	"""
 	def __init__(self, top=None, name=None, parent=None):
+		"""
+		top(RPL): The root, RPL instance.
+		name(string): The name of this struct.
+		parent(RPLObject): The direct parent of this struct.
+			None is the same as the root.
+		"""
 		self.rpl = top = top or self
 		self.data = odict()
 		self.children = odict()
@@ -139,6 +145,9 @@ class RPLObject(object):
 	def addChild(self, structType, name):
 		"""
 		Create a new struct and add it as a child of this one.
+		structType(string): The type name of the desired struct to create as
+			it is registered. *type* name { ... }
+		name(string): The name of the child. type *name* { ... }
 		"""
 		# Statics are always allowed.
 		if structType == "static":
@@ -160,6 +169,7 @@ class RPLObject(object):
 	def registerStruct(self, classRef):
 		"""
 		Method to register a struct as allowable for being a substruct of this.
+		classRef(RPLStruct): The class of the struct, such as Static.
 		"""
 		try: classRef.typeName
 		except AttributeError:
@@ -174,6 +184,7 @@ class RPLObject(object):
 	def unregisterStruct(self, classRef):
 		"""
 		Unregisters a struct. Please, only call this in register functions!
+		classRef(RPLStruct): The class of the struct, such as Static.
 		"""
 		try: del self.structs[name]
 		except KeyError: pass
@@ -292,8 +303,9 @@ class RPL(RPLObject):
 		self.structsByName = {}      # All structs in the file.
 		self.sharedDataHandlers = {} # Used by RPL.share.
 		self.importing = None        # Used by RPL.share. NOTE: I would like to remove this..
+		# Defining these here prevents them from being usable by RPL.lib
 		self.alreadyLoaded   = ["helper", "__init__", "rpl"]
-		self.alreadyIncluded = []    # These are used by RPL.load.
+		self.alreadyIncluded = []    # <^ These are used by RPL.load.
 		# What to include in the default template.
 		self.defaultTemplateStructs = ["RPL", "ROM"]
 		RPLObject.__init__(self)
@@ -354,19 +366,21 @@ class RPL(RPLObject):
 
 		The basic datatypes are: number, string, and list. They are the absolute
 		base types of the system, and I for one think that's so for any system.
-		There are more basic forms, however, the make up the syntax. Each type
+		There are more basic forms, however, they make up the syntax. Each type
 		from then on is derived from one of the above three basic types. These
 		are all of the types and their syntax (Name(Comment)):
 		Number:                                    1234
 		HexNum(Hexadecimal Number):                $12a4B0
 
 		String:                                    "abcdef"
+		                                           `abcdef`
 		Literal:                                   abcdef
+		RefStr(References in String):              @`abcd @Struct.key`
 
 		List:                                      [1, "abc", etc]
 		Range(List form: [1,2,3,4,5,5,x,4]):       1-4:5*2:x:4
 
-		Reference(To basic data):                  @SomeStruct
+		Reference(To basic data, or struct):       @SomeStruct
 		Reference(To a key's value):               @SomeStruct.key
 		Reference(To a value within a key's list): @SomeStruct.key[3][0]
 
@@ -658,6 +672,8 @@ class RPL(RPLObject):
 		Loads includes and libs. Used by parse, probably should not need to
 		use it directly. (But if you generate a RPL struct for some reason,
 		this isn't called when you append it, so you can do it manually then.)
+		struct(StructRPL): The struct to act from.
+		libOnly(bool): Only import libs, do not do includes.
 		"""
 		# Load libraries (python modules defining struct and data types).
 		for lib in struct["lib"].get():
@@ -1654,17 +1670,17 @@ class ROM(RPLStruct):
 
 		# Adjust keys...
 		if self.id_type != "string":
-			self.keys["id"][0] = RPLTypeCheck(self.rpl, "id", "[%s]*" % id_type)
+			self.keys["id"][0] = RPLTypeCheck(self.rpl, "id", "[%s]*" % self.id_type)
 		#endif
 
 		if self.name_type != "string":
-			self.keys["name"][0] = RPLTypeCheck(self.rpl, "name", "[%s]*" % name_type)
+			self.keys["name"][0] = RPLTypeCheck(self.rpl, "name", "[%s]*" % self.name_type)
 		#endif
 	#enddef
 
 	def register(self):
-		self.registerKey("id", "[string]*", "")
-		self.registerKey("name", "[string]*", "")
+		self.registerKey("id", "[string]*", "[]")
+		self.registerKey("name", "[string]*", "[]")
 		self.registerKey("crc32", "hexnum|[[hexnum, hexnum|range]*0]*", "[]")
 		self.registerKey("text", "[[string, hexnum]]*", "[]")
 	#enddef

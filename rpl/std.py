@@ -169,6 +169,7 @@ class ImageFile(rpl.Share):
 		ext = os.path.splitext(self.path)[1][1:].lower()
 		# Cannot save alpha..
 		if ext == "bmp": self.image = self.image.convert("RGB")
+		helper.makeParents(self.path)
 		self.image.save(self.path)
 	#enddef
 
