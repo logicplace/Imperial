@@ -1960,7 +1960,7 @@ class Serializable(RPLStruct):
 			# Calculate filename
 			cur = self
 			filename, unk = "", ""
-			while cur:
+			while cur and cur != self.rpl:
 				if "file" in cur.data:
 					tmpname = (
 						cur.data["file"].getRaw()
@@ -1969,7 +1969,9 @@ class Serializable(RPLStruct):
 					)
 					filename = tmpname + filename
 					if tmpname[0] != "/": break
-				elif not (filename or cur.gennedName): unk = "/" + cur.name + unk
+				elif not (filename or cur.gennedName):
+					unk = "/" + cur.name + unk
+				#endif
 				cur = cur.parent
 			#endwhile
 			if filename: filename = Path(filename)
