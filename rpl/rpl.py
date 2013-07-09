@@ -2918,58 +2918,144 @@ class Size(Named, Number):
 class Math(Literal, Number):
 	"""
 	Handles mathematics.
-	TODO: Currently does not handle Order of Operations or parenthesis.
-	Available operators: + - * / ^ %
-	Division is integer. ^ is power of.
+	Order of Operations:
+	 ()
+	 **
+	 * / %
+	 + -
+	 << >>
+	 &
+	 ^
+	 |
+	Division is integer. ** is power of.
 	Variables may be passed, see respective key for details.
 	"""
 	typeName = "math"
 
-	specification = re.compile(r'([+\-*/^%()])')
+	specification = re.compile(r'(\*\*|<<|>>|[()*/%+\-&^|])')
 
 	def set(self, data):
 		if type(data) in [int, long]: data = str(data)
 		Literal.set(self, data)
-		self.tokens = Math.specification.split(self.data.replace(" ", ""))
-	#enddef
+		tokens = [x for x in Math.specification.split(self.data.replace(" ", "")) if x != ""]
 
-	def get(self, var={}):
-		# Simple math for now...
-		# TODO: Currently does not handle OoO or parens
-		num, pos, nextop = None, True, None
-		for i, x in enumerate(self.tokens):
-			try: xn = int(x)
-			except:
-				if x in var: xn = var[x]
-				else: xn = None
+		# Order tokens...
+		def setPAndRet(cur, p, i):
+			p[0] = i
+			return cur
+		#enddef
+
+		def groupRight(idx, level):
+			cur = None
+			i = idx[0]
+			while i < len(tokens):
+				x = tokens[i]
+				p = [i+1]
+				try:
+					if x not in ["(",")","**","*","/","%","+","-","<<",">>","&","^","|"]:
+						# Number, variable, reference, or error to be reported later.
+						if cur is not None:
+							raise RPLError(
+								"Number with no operation.",
+								self.container, self.mykey, self.pos # TODO: Adjust pos
+							)
+						#endif
+						cur = x
+					#elif level < 1: return setPAndRet(cur)
+					elif x == "(": cur = groupRight(p, 9)
+					elif x == ")":
+						if level > 9:
+							raise RPLError(
+								"Unmatched parenthesis in expression.",
+								self.container, self.mykey,
+								(self.pos[0], self.pos[1] + data.find(")") if self.pos[1] is not None else data.find(")"))
+							)
+						elif level == 9: return setPAndRet(cur, idx, i + 1)
+						else: return setPAndRet(cur, idx, i)
+					#elif level < 2: return setPAndRet(cur)
+					elif x == "+" and i == idx[0]: cur = (0, groupRight(p, 2))
+					elif x == "-" and i == idx[0]: cur = (1, groupRight(p, 2))
+					elif level < 3: return setPAndRet(cur, idx, i + 1)
+					elif x == "**": cur = (2, cur, groupRight(p, 2))
+					elif level < 4: return setPAndRet(cur, idx, i + 1)
+					elif x == "*": cur = (3, cur, groupRight(p, 3))
+					elif x == "/": cur = (4, cur, groupRight(p, 3))
+					elif x == "%": cur = (5, cur, groupRight(p, 3))
+					elif level < 5: return setPAndRet(cur, idx, i + 1)
+					elif x == "+": cur = (6, cur, groupRight(p, 4))
+					elif x == "-": cur = (7, cur, groupRight(p, 4))
+					elif level < 6: return setPAndRet(cur, idx, i + 1)
+					elif x == "<<": cur = (8, cur, groupRight(p, 5))
+					elif x == ">>": cur = (9, cur, groupRight(p, 5))
+					elif level < 7: return setPAndRet(cur, idx, i + 1)
+					elif x == "&": cur = (10, cur, groupRight(p, 6))
+					elif level < 8: return setPAndRet(cur, idx, i + 1)
+					elif x == "^": cur = (11, cur, groupRight(p, 7))
+					elif level < 9: return setPAndRet(cur, idx, i + 1)
+					elif x == "|": cur = (12, cur, groupRight(p, 8))
+				except IndexError:
+					raise RPLError(
+						"Invalid binary operation, no lvalue.",
+						self.container, self.mykey, self.pos # TODO: Adjust pos
+					)
+				#endtry
+				i = p[0]
+			#endfor
+			if level == 9:
+				raise RPLError(
+					"Unended parenthesis in expression.",
+					self.container, self.mykey, self.pos
+				)
 			#endif
-
-			if x == "+":
-				if num is None: pos = True
-				else: nextop = "+"
-			elif x == "-":
-				if num is None: pos = False
-				else: nextop = "-"
-			elif xn is not None:
-				if num is None: num = xn
-				elif nextop is None:
-					raise RPLError("Two sequential numbers with no operator.")
-				elif nextop == "+": num += xn
-				elif nextop == "-": num -= xn
-				elif nextop == "*": num *= xn
-				elif nextop == "/": num /= xn
-				elif nextop == "^": num **= xn
-				elif nextop == "%": num %= xn
-				nextop = None
-			elif x in "*/^%":
-				if num is None:
-					raise RPLError("Cannot have %s as first operation in a group." % x)
-				else: nextop = x
-			else: raise RPLError("Unknown variable or operator.")
-		#endfor
-
-		return num
+			return setPAndRet(cur, idx, i)
+		#enddef
+		idx = [0]
+		self.data = groupRight(idx, 10)
 	#enddef
 
-	def number(self, var={}): return self.get(var)
+	def eval(self, op, var):
+		# Statics.
+		if type(op) is not tuple:
+			try: return int(op)
+			except ValueError:
+				if op in var: return var[op]
+				try: return op.number()
+				except AttributeError:
+					raise RPLError(
+						'Erroneous value in expression "%s"' % op,
+						self.container, self.mykey, self.pos
+					)
+				#endtry
+			#endtry
+		#endif
+
+		# Unary ops.
+		if op[0] in [0, 1]:
+			cmd, val = op
+			val = self.eval(val, var)
+			if cmd == 0: return +val
+			elif cmd == 1: return -val
+		# Binary ops.
+		else:
+			cmd, lval, rval = op
+			lval = self.eval(lval, var)
+			rval = self.eval(rval, var)
+			if cmd ==  2: return lval ** rval
+			if cmd ==  3: return lval * rval
+			if cmd ==  4: return int(lval // rval)
+			if cmd ==  5: return lval % rval
+			if cmd ==  6: return lval + rval
+			if cmd ==  7: return lval - rval
+			if cmd ==  8: return lval << rval
+			if cmd ==  9: return lval >> rval
+			if cmd == 10: return lval & rval
+			if cmd == 11: return lval ^ rval
+			if cmd == 12: return lval | rval
+		#endif
+
+		raise RPLError("Impossibility in equasion.", self.container, self.mykey, self.pos)
+	#enddef
+
+	def get(self, var={}): return self.eval(self.data, var)
+	def number(self, var={}): return self.eval(self.data, var)
 #endclass
