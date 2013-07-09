@@ -18,6 +18,7 @@
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
 import os, re, copy, codecs
+import helper
 from math import ceil
 from zlib import crc32
 from collections import OrderedDict as odict
@@ -30,10 +31,26 @@ from collections import OrderedDict as odict
 #################################### Helpers ###################################
 ################################################################################
 
-class RPLError(Exception): pass
-class RPLBadType(Exception): pass
+class RPLError(Exception):
+	def __init__(self, error, container=None, key=None, pos=None):
+		self.positioned = False
+		pre = ""
+		if container and key:
+			pre = "Error in %s.%s" % (container, key)
+			if pos[0] is not None:
+				pre += " (line %i char %i)" % pos
+			#endif
+			pre += ": "
+			self.positioned = True
+		elif pos is not None and pos[0] is not None and pos[0] != -1:
+			pre = "Error in line %i char %i" % pos
+			self.positioned = True
+		#endif
+		self.args = (pre + error,)
+	#enddef
+#endclass
 
-import helper
+class RPLBadType(Exception): pass
 
 class RecurseIter(object):
 	"""
@@ -330,6 +347,7 @@ class RPL(RPLObject):
 		self.registerType(Range)
 		self.registerType(Bool)
 		self.registerType(Size)
+		self.registerType(Math)
 	#enddef
 
 	def parse(self, inFile, onlyCareAboutTypes=[]):
@@ -498,7 +516,10 @@ class RPL(RPLObject):
 					add = self.parseData(groups, currentStruct, currentKey, line, char)
 				# This is for whitespace, comments, etc. Things with no return.
 				else: continue
-			except RPLError as x: error = x.args[0]
+			except RPLError as x:
+				if x.positioned: raise
+				error = x.args[0]
+			#endtry
 
 			if not lit and lastLit:
 				error = "Literal with no purpose: %s" % lastLit
@@ -576,7 +597,11 @@ class RPL(RPLObject):
 				)
 			else:
 				try: dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = RPL.specification.match(data).groups()
-				except AttributeError: raise RPLError("Syntax error in data: %s" % data)
+				except AttributeError:
+					raise RPLError(
+						"Syntax error in data: %s" % data,
+						currentStruct, currentKey, (line, char)
+					)
 			#endif
 		#endif
 		sstr = dstr or sstr
@@ -655,16 +680,17 @@ class RPL(RPLObject):
 				else: lists[-1].append(self.parseData(token, currentStruct, currentKey, line, char, raw))
 			#endfor
 			add = ("list", last)
-		elif pp: raise RPLError("Invalid data.")
-		else: raise RPLError("Invalid data: %s" % data)
+		elif pp: raise RPLError("Invalid data.", currentStruct, currentKey, (line, char))
+		else: raise RPLError("Invalid data: %s" % data, currentStruct, currentKey, (line, char))
 
 		if add:
 			if raw: return add[1]
 			elif pp: return add
 			else: return self.parseCreate(add, currentStruct, currentKey, line, char)
-		elif error: raise RPLError(error)
-		elif pp: raise RPLError("Error parsing data.")
-		else: raise RPLError("Error parsing data: %s" % data)
+		elif error:
+			raise RPLError(error, )
+		elif pp: raise RPLError("Error parsing data.", currentStruct, currentKey, (line, char))
+		else: raise RPLError("Error parsing data: %s" % data, currentStruct, currentKey, (line, char))
 	#endif
 
 	def load(self, struct, libsOnly=False):
@@ -1931,7 +1957,7 @@ class Serializable(RPLStruct):
 	#enddef
 
 	def register(self):
-		self.registerKey("base", "[string:(b, s, c, e, begin, cur, current, start, end), hexnum].", "c:$000000")
+		self.registerKey("base", "[string:(b, s, c, e, begin, cur, current, start, end), math].", "c:$000000")
 		self.registerKey("file", "path", "")
 		self.registerKey("ext", "string", "")
 		self.registerKey("export", "bool|string:(always, requested)", "true")
@@ -2428,9 +2454,11 @@ class String(RPLData):
 	def set(self, data):
 		if type(data) is str: data = unicode(data)
 		elif type(data) is not unicode:
-			raise RPLError('Type "%s" expects unicode or str. Got "%s"' % (
-				self.typeName, type(data).__name__
-			))
+			raise RPLError(
+				'Type "%s" expects unicode or str. Got "%s"' % (
+					self.typeName, type(data).__name__
+				), self.container, self.mykey, self.pos
+			)
 		#endif
 		self.data = String.escape.sub(String.replIn, data)
 	#enddef
@@ -2494,9 +2522,11 @@ class RefString(String):
 	def set(self, data):
 		if type(data) is str: data = unicode(data)
 		elif type(data) is not unicode:
-			raise RPLError('Type "%s" expects unicode or str. Got "%s"' % (
-				self.typeName, type(data).__name__
-			))
+			raise RPLError(
+				'Type "%s" expects unicode or str. Got "%s"' % (
+					self.typeName, type(data).__name__
+				), self.container, self.mykey, self.pos
+			)
 		#endif
 
 		# Split up references.
@@ -2532,7 +2562,7 @@ class RefString(String):
 				except RPLBadType:
 					try: ret += unicode(x.number())
 					except RPLBadType:
-						raise helper.Error(
+						raise RPLError(
 							"Cannot use list type in %s" % refstr,
 							self.container, self.mykey, x.pos
 						)
@@ -2599,7 +2629,10 @@ class Number(RPLData):
 
 	def set(self, data):
 		if type(data) not in [int, long]:
-			raise RPLError('Type "%s" expects int or long.'  % self.typeName)
+			raise RPLError(
+				'Type "%s" expects int or long.'  % self.typeName,
+				self.container, self.mykey, self.pos
+			)
 		#endif
 		self.data = data
 	#enddef
@@ -2650,7 +2683,10 @@ class List(RPLData):
 
 	def set(self, data):
 		if type(data) is not list:
-			raise RPLError('Type "%s" expects list.' % self.typeName)
+			raise RPLError(
+				'Type "%s" expects list.' % self.typeName,
+				self.container, self.mykey, self.pos
+			)
 		#endif
 		self.data = data
 	#enddef
@@ -2671,7 +2707,10 @@ class Range(List):
 
 	def set(self, data):
 		if type(data) is not list:
-			raise TypeError('Type "%s" expects list.' % self.typeName)
+			raise RPLError(
+				'Type "%s" expects list.' % self.typeName,
+				self.container, self.mykey, self.pos
+			)
 		#endif
 		for x in data:
 			try: x.number()
@@ -2679,7 +2718,10 @@ class Range(List):
 				try:
 					if len(x.string()) != 1: raise RPLBadType()
 				except RPLBadType:
-					raise RPLError('Types in a "%s" must be a number or one character literal' % self.typeName)
+					raise RPLError(
+						'Types in a "%s" must be a number or one character literal' % self.typeName,
+						self.container, self.mykey, self.pos
+					)
 				#endtry
 			#endtry
 		#endfor
@@ -2735,7 +2777,10 @@ class Enum(RPLData):
 				return
 			#endif
 		#endfor
-		raise RPLError('Value %s not in expected set for "%s".'  % (data, self.typeName))
+		raise RPLError(
+			'Value %s not in expected set for "%s".'  % (data, self.typeName),
+			self.container, self.mykey, self.pos
+		)
 	#enddef
 
 #	def getType(self, types, errFunc):
@@ -2761,7 +2806,10 @@ class Enum(RPLData):
 				return x[0][0]
 			#endif
 		#endfor
-		raise RPLError('IMPOSSIBLE ERROR AHHHH "%s"' % self.typeName)
+		raise RPLError(
+			'IMPOSSIBLE ERROR AHHHH "%s"' % self.typeName,
+			self.container, self.mykey, self.pos
+		)
 	#endif
 #endclass
 
@@ -2808,11 +2856,16 @@ class Named(RPLData):
 		if type(data) in [str, unicode]:
 			data = data.lower()
 			if data in self.names: self.data = self.names[data]
-			else: raise RPLError('No %s name "%s"' % (self.typeName, data))
+			else: raise RPLError(
+				'No %s name "%s"' % (self.typeName, data),
+				self.container, self.mykey, self.pos
+			)
 		else:
-			raise RPLError('Type "%s" expects %s.' % (
-				self.typeName, helper.list2english(["str", "unicode"] + types, "or")
-			))
+			raise RPLError(
+				'Type "%s" expects %s.' % (
+					self.typeName, helper.list2english(["str", "unicode"] + types, "or")
+				), self.container, self.mykey, self.pos
+			)
 		#endif
 	#enddef
 
@@ -2843,7 +2896,10 @@ class Size(Named, Number):
 
 	def set(self, data):
 		if type(data) in [int, long]:
-			if data <= 0: raise RPLError('Type "%s" expects value > 0.' % self.typeName)
+			if data <= 0: raise RPLError(
+				'Type "%s" expects value > 0.' % self.typeName,
+				self.container, self.mykey, self.pos
+			)
 			self.data = data
 		else: Named.set(self, data, ["int", "long"])
 	#enddef
@@ -2857,4 +2913,63 @@ class Size(Named, Number):
 	def unserialize(self, data, **kwargs):
 		Number.unserialize(self, data, **kwargs)
 	#enddef
+#endclass
+
+class Math(Literal, Number):
+	"""
+	Handles mathematics.
+	TODO: Currently does not handle Order of Operations or parenthesis.
+	Available operators: + - * / ^ %
+	Division is integer. ^ is power of.
+	Variables may be passed, see respective key for details.
+	"""
+	typeName = "math"
+
+	specification = re.compile(r'([+\-*/^%()])')
+
+	def set(self, data):
+		if type(data) in [int, long]: data = str(data)
+		Literal.set(self, data)
+		self.tokens = Math.specification.split(self.data.replace(" ", ""))
+	#enddef
+
+	def get(self, var={}):
+		# Simple math for now...
+		# TODO: Currently does not handle OoO or parens
+		num, pos, nextop = None, True, None
+		for i, x in enumerate(self.tokens):
+			try: xn = int(x)
+			except:
+				if x in var: xn = var[x]
+				else: xn = None
+			#endif
+
+			if x == "+":
+				if num is None: pos = True
+				else: nextop = "+"
+			elif x == "-":
+				if num is None: pos = False
+				else: nextop = "-"
+			elif xn is not None:
+				if num is None: num = xn
+				elif nextop is None:
+					raise RPLError("Two sequential numbers with no operator.")
+				elif nextop == "+": num += xn
+				elif nextop == "-": num -= xn
+				elif nextop == "*": num *= xn
+				elif nextop == "/": num /= xn
+				elif nextop == "^": num **= xn
+				elif nextop == "%": num %= xn
+				nextop = None
+			elif x in "*/^%":
+				if num is None:
+					raise RPLError("Cannot have %s as first operation in a group." % x)
+				else: nextop = x
+			else: raise RPLError("Unknown variable or operator.")
+		#endfor
+
+		return num
+	#enddef
+
+	def number(self, var={}): return self.get(var)
 #endclass

@@ -37,7 +37,6 @@ def register(rpl):
 	rpl.registerType(Pixel)
 	rpl.registerType(Color)
 	rpl.registerType(ReadDir)
-	rpl.registerType(Math)
 #enddef
 
 def printHelp(moreInfo=[]):
@@ -50,7 +49,6 @@ def printHelp(moreInfo=[]):
 			# Types
 			Bin, Pixel,
 			Color, ReadDir,
-			Math,
 		]
 	)
 #enddef
@@ -519,7 +517,7 @@ class DataFormat(object):
 		self.registerKey("pad", "string", "\x00")
 		self.registerKey("padside", "string:(left, right, center, rcenter)", "right")
 		self.registerKey("sign", "string:(unsigned, signed)", "unsigned")
-		self.registerKey("x", "string|[string|reference, number|string:(expand), string|number]+1", "")
+		self.registerKey("x", "string|[string|reference, number|string:(expand), string|math]+1", "")
 	#enddef
 
 	def parseFormat(self, key):
@@ -2125,62 +2123,5 @@ class ReadDir(rpl.Literal):
 			self.index += 1
 			return i, x, y
 		#endif
-	#enddef
-#endclass
-
-class Math(rpl.Literal, rpl.Number):
-	"""
-	Handles mathematics.
-	TODO: Currently does not handle Order of Operations or parenthesis.
-	Available operators: + - * / ^ %
-	Division is integer. ^ is power of.
-	Variables may be passed, see respective key for details.
-	"""
-	typeName = "math"
-
-	specification = re.compile(r'([+\-*/^%()])')
-
-	def set(self, data):
-		if type(data) in [int, long]: data = str(data)
-		rpl.Literal.set(self, data)
-		self.tokens = Math.specification.split(self.data.replace(" ", ""))
-	#enddef
-
-	def get(self, var={}):
-		# Simple math for now...
-		# TODO: Currently does not handle OoO or parens
-		num, pos, nextop = None, True, None
-		for i, x in enumerate(self.tokens):
-			try: xn = int(x)
-			except:
-				if x in var: xn = var[x]
-				else: xn = None
-			#endif
-
-			if x == "+":
-				if num is None: pos = True
-				else: nextop = "+"
-			elif x == "-":
-				if num is None: pos = False
-				else: nextop = "-"
-			elif xn is not None:
-				if num is None: num = xn
-				elif nextop is None:
-					raise RPLError("Two sequential numbers with no operator.")
-				elif nextop == "+": num += xn
-				elif nextop == "-": num -= xn
-				elif nextop == "*": num *= xn
-				elif nextop == "/": num /= xn
-				elif nextop == "^": num **= xn
-				elif nextop == "%": num %= xn
-				nextop = None
-			elif x in "*/^%":
-				if num is None:
-					raise RPLError("Cannot have %s as first operation in a group." % x)
-				else: nextop = x
-			else: raise RPLError("Unknown variable or operator.")
-		#endfor
-
-		return num
 	#enddef
 #endclass
