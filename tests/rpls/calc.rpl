@@ -1,0 +1,22 @@
+RPL { lib: std }
+
+calc tests {
+	test1: `1 + 1`                # = 2
+	test2: `3 * 2`                # = 6
+	test3: `3 ** 2`               # = 9
+	test4: `5 + 6 * 8 ** 2`       # = 389
+	test5: `(5 + 6) * 8 ** 2`     # = 704
+	test6: `(((8 + 1) * 3) ** 2)` # = 729
+	# A randomly generated sequence.
+	test7: `7 * (12 ^ 10 & 3 + 2 ** 11) + 8 % 9`
+	       `>> 9 & (9 - 4) * 5 >> 8 * 5 / 1 ^ 3`
+	       `| 1 | 2 >> 9 + 3 << (11 - 6) * 10 ^`
+	       `12 * 12 % 4 << 6 ** 2 / 4 ** 7 ^ 0`
+	       `- 1 << 12 | 11 % 3 ** 2 % (7 & 8 **`
+	       `5 - 8 | 7 >> 8 ** 8 | 2 & 7 << 12`
+	       `<< 2 ^ 11 - 12 * 7)`  # = -69
+	test8: @`@this.test1 - 1`     # = 1
+	# The only time that this form would be needed over the above
+	# is if you were referencing an enum or something.
+	test9: `@this.test1 - 1`      # = 1
+}

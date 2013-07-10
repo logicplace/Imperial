@@ -31,6 +31,7 @@ def register(rpl):
 	rpl.registerStruct(Format)
 	rpl.registerStruct(Map)
 	rpl.registerStruct(IOStatic)
+	rpl.registerStruct(Calc)
 	rpl.registerStruct(GenericGraphic)
 
 	rpl.registerType(Bin)
@@ -1738,6 +1739,30 @@ class IOStatic(rpl.Static):
 			# When references set it
 			self.data[key][0 if self.rpl.importing else 1] = value
 		#endif
+	#enddef
+#endclass
+
+class Calc(rpl.Static):
+	"""
+	Works the same as static, but all data is of the math type.
+	Allows for calculations in places where they're not directly allowed,
+	for some reason.
+	"""
+	typeName = "calc"
+
+	def __setitem__(self, key, value):
+		try:
+			self.data[key] = self.rpl.wrap("math", value.string(), value.container, value.mykey, *value.pos)
+		except RPLBadType:
+			# If .string() or wrapping fails, try it as a number.
+			try: self.data[key] = value.number()
+			except RPLBadType:
+				raise RPLError(
+					"Entries in calc must be math.",
+					value.container, value.mykey, value.pos
+				)
+			#endtry
+		#endtry
 	#enddef
 #endclass
 

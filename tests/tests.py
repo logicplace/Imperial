@@ -368,6 +368,27 @@ class TestReferences(RPLTestCase):
 	#enddef
 #endclass
 
+class TestCalc(RPLTestCase):
+	@classmethod
+	def setUpClass(cls):
+		cls.refers = rpl.RPL()
+		cls.refers.parse(os.path.join("tests", "rpls", "calc.rpl"))
+	#enddef
+
+	def testStuff(self):
+		x = TestCalc.refers.child("tests")
+		self.check(x, "test1", "math", 2)
+		self.check(x, "test2", "math", 6)
+		self.check(x, "test3", "math", 9)
+		self.check(x, "test4", "math", 389)
+		self.check(x, "test5", "math", 704)
+		self.check(x, "test6", "math", 729)
+		self.check(x, "test7", "math", -69)
+		self.check(x, "test8", "math", 1)
+		self.check(x, "test9", "math", 1)
+	#enddef
+#endclass
+
 class TestRPL(RPLTestCase):
 	@classmethod
 	def setUpClass(cls):
@@ -590,6 +611,7 @@ if __name__ == "__main__":
 	if helper.oneOfIn(["all", "std", "map", "maplist"], run): suite.append(TestMapList)
 	if helper.oneOfIn(["all", "std", "table"], run): suite.append(TestTable)
 	if helper.oneOfIn(["all", "std", "graphic"], run): suite.append(TestGraphic)
+	if helper.oneOfIn(["all", "std", "calc"], run): suite.append(TestCalc)
 	if helper.oneOfIn(["all", "min"], run): suite.append(TestMin)
 	if helper.oneOfIn(["all", "typeset"], run): suite.append(TestTypeset)
 	try:

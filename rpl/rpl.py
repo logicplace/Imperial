@@ -33,6 +33,8 @@ from collections import OrderedDict as odict
 
 class RPLError(Exception):
 	def __init__(self, error, container=None, key=None, pos=None):
+		try: container = container.name
+		except AttributeError: pass
 		self.positioned = False
 		pre = ""
 		if container and key:
@@ -539,7 +541,10 @@ class RPL(RPLObject):
 						error = "Unused " + dtype
 					#endif
 				#endif
-			except RPLError as x: error = x.args[0]
+			except RPLError as x:
+				if x.positioned: raise
+				error = x.args[0]
+			#endtry
 
 			if error:
 				raise RPLError("Error in line %i char %i: %s" % (
@@ -2975,23 +2980,23 @@ class Math(Literal, Number):
 					#elif level < 2: return setPAndRet(cur)
 					elif x == "+" and i == idx[0]: cur = (0, groupRight(p, 2))
 					elif x == "-" and i == idx[0]: cur = (1, groupRight(p, 2))
-					elif level < 3: return setPAndRet(cur, idx, i + 1)
+					elif level < 3: return setPAndRet(cur, idx, i)
 					elif x == "**": cur = (2, cur, groupRight(p, 2))
-					elif level < 4: return setPAndRet(cur, idx, i + 1)
+					elif level < 4: return setPAndRet(cur, idx, i)
 					elif x == "*": cur = (3, cur, groupRight(p, 3))
 					elif x == "/": cur = (4, cur, groupRight(p, 3))
 					elif x == "%": cur = (5, cur, groupRight(p, 3))
-					elif level < 5: return setPAndRet(cur, idx, i + 1)
+					elif level < 5: return setPAndRet(cur, idx, i)
 					elif x == "+": cur = (6, cur, groupRight(p, 4))
 					elif x == "-": cur = (7, cur, groupRight(p, 4))
-					elif level < 6: return setPAndRet(cur, idx, i + 1)
+					elif level < 6: return setPAndRet(cur, idx, i)
 					elif x == "<<": cur = (8, cur, groupRight(p, 5))
 					elif x == ">>": cur = (9, cur, groupRight(p, 5))
-					elif level < 7: return setPAndRet(cur, idx, i + 1)
+					elif level < 7: return setPAndRet(cur, idx, i)
 					elif x == "&": cur = (10, cur, groupRight(p, 6))
-					elif level < 8: return setPAndRet(cur, idx, i + 1)
+					elif level < 8: return setPAndRet(cur, idx, i)
 					elif x == "^": cur = (11, cur, groupRight(p, 7))
-					elif level < 9: return setPAndRet(cur, idx, i + 1)
+					elif level < 9: return setPAndRet(cur, idx, i)
 					elif x == "|": cur = (12, cur, groupRight(p, 8))
 				except IndexError:
 					raise RPLError(
@@ -3016,11 +3021,11 @@ class Math(Literal, Number):
 	def eval(self, op, var):
 		# Statics.
 		if type(op) is not tuple:
+			if op[0] == "@": return RPLRef(self.rpl, self.container, self.mykey, op[1:], *self.pos).number()
 			try: return int(op)
 			except ValueError:
 				if op in var: return var[op]
-				try: return op.number()
-				except AttributeError:
+				else:
 					raise RPLError(
 						'Erroneous value in expression "%s"' % op,
 						self.container, self.mykey, self.pos
@@ -3058,4 +3063,5 @@ class Math(Literal, Number):
 
 	def get(self, var={}): return self.eval(self.data, var)
 	def number(self, var={}): return self.eval(self.data, var)
+	def string(self): RPLData.string(self)
 #endclass
