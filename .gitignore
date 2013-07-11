@@ -3,3 +3,5 @@ release
 build
 docs
 tests/rpls/*/test.*
+notes.md
+
