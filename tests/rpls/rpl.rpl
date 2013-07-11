@@ -13,9 +13,7 @@ static {
 	static sub {
 		lit: :D
 	}
-
-	# Regression test:
-	a: one letter key
+	escape: "$$"
 }
 
 static AndAnotherStatic {
@@ -25,4 +23,5 @@ static AndAnotherStatic {
 static regression {
 	endoflistnospacenumber: [lit, 1]
 	oneletter: a
+	a: one letter key
 }

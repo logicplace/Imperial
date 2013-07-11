@@ -17,6 +17,17 @@ calc tests {
 	       `<< 2 ^ 11 - 12 * 7)`  # = -69
 	test8: @`@this.test1 - 1`     # = 1
 	# The only time that this form would be needed over the above
-	# is if you were referencing an enum or something.
+	# is if you were referencing an enum or something. This is
+	# because the above form prefers a string, and the bottom
+	# enforces a number.
 	test9: `@this.test1 - 1`      # = 1
+
+	# Base tests.
+	test10: '$$deadbeef'          # = 3735928559
+	test11: '0xbeadbabe'          # = 3199056574
+	test12: '0777'                # = 511
+	test13: '0o41'                # = 33
+	test14: '%00110011'           # = 51
+	test15: '0b11001100'          # = 204
+	test16: 'butts_36'            # = 19914112
 }

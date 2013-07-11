@@ -151,13 +151,20 @@ class TestParse(RPLTestCase):
 			[1, 2, 3]))
 		])
 
-		self.check(static0, "a", "literal", "one letter key")
+		self.check(static0, "escape", "string", "$")
 
 		for y in static0:
 			self.assertEqual(y.name, "sub", 'Unexpected sub "%s"' % y.name)
 			self.checkLen(y, 1)
 			self.check(y, "lit", "literal", ":D")
 		#endfor
+
+		regression = TestParse.basic.child("regression")
+		self.comp(regression, "endoflistnospacenumber", "list", [
+			("literal", "lit"), ("number", 1)
+		])
+		self.check(regression, "oneletter", "literal", "a")
+		self.check(regression, "a", "literal", "one letter key")
 	#enddef
 #endclass
 
@@ -386,6 +393,13 @@ class TestCalc(RPLTestCase):
 		self.check(x, "test7", "math", -69)
 		self.check(x, "test8", "math", 1)
 		self.check(x, "test9", "math", 1)
+		self.check(x, "test10", "math", 0xdeadbeef)
+		self.check(x, "test11", "math", 0xbeadbabe)
+		self.check(x, "test12", "math", 0777)
+		self.check(x, "test13", "math", 041)
+		self.check(x, "test14", "math", 0b00110011)
+		self.check(x, "test15", "math", 0b11001100)
+		self.check(x, "test16", "math", int("butts", 36))
 	#enddef
 #endclass
 

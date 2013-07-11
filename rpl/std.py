@@ -1752,16 +1752,17 @@ class Calc(rpl.Static):
 
 	def __setitem__(self, key, value):
 		try:
-			self.data[key] = self.rpl.wrap("math", value.string(), value.container, value.mykey, *value.pos)
+			value.string()
+			self.data[key] = self.rpl.wrap("math", value.escaped(), value.container, value.mykey, *value.pos)
 		except RPLBadType:
 			# If .string() or wrapping fails, try it as a number.
-			try: self.data[key] = value.number()
+			try: value.number()
 			except RPLBadType:
 				raise RPLError(
 					"Entries in calc must be math.",
 					value.container, value.mykey, value.pos
 				)
-			#endtry
+			else: self.data[key] = value
 		#endtry
 	#enddef
 #endclass

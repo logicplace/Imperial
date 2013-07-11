@@ -33,8 +33,13 @@ from collections import OrderedDict as odict
 
 class RPLError(Exception):
 	def __init__(self, error, container=None, key=None, pos=None):
+		# Container can be a string or a RPLStruct.
+		# So ensure that the name is used, rather than the repr.
 		try: container = container.name
 		except AttributeError: pass
+		# This variable tells the parser that this already has position
+		# information, as some errors during parsing may not add any,
+		# and the user should really have some.
 		self.positioned = False
 		pre = ""
 		if container and key:
@@ -142,10 +147,18 @@ class RPLObject(object):
 		parent(RPLObject): The direct parent of this struct.
 			None is the same as the root.
 		"""
+		# A reference to the top-level RPL class.
 		self.rpl = top = top or self
+		# Ordered key-value pairs.
 		self.data = odict()
+		# Ordered children, indexed by struct name.
 		self.children = odict()
+		# Name of the struct as given by the user or system.
 		self.name = name
+		# Name of the struct as it would be given by the system.
+		# That is, the type name concatenated with the index of appearance.
+		self.gennedName = None
+		# A reference to the direct parent. None is equivalent to the top level.
 		self.parent = parent
 
 		# The ? is here because most file systems don't allow them in names.
@@ -158,6 +171,7 @@ class RPLObject(object):
 
 		# This contains names of attributes that should not be copied in a deep
 		# copy. This is to prevent recursion as well as unnecessary copies.
+		# You may add your own with self.nocopy.append("name") in the __init__
 		self.nocopy = ["rpl", "parent", "keys", "structs", "virtuals"]
 	#enddef
 
@@ -175,6 +189,7 @@ class RPLObject(object):
 			return new
 		#endif
 
+		# But anything else must be registered.
 		if structType not in self.structs:
 			raise RPLError("%s isn't allowed as a substruct of %s." % (
 				structType, "root" if self == self.rpl else self.typeName
@@ -220,7 +235,8 @@ class RPLObject(object):
 		typeName may be a string or the class that it will grab the string from.
 		"""
 		# Grab string name if this was a class.
-		if issubclass(typeName.__class__, RPLStruct): typeName = typeName.typeName
+		try: typeName = typeName.typeName
+		except AttributeError: pass
 
 		ret = []
 		# Find all *immediate* children with this type.
@@ -414,7 +430,7 @@ class RPL(RPLObject):
 		currentStruct = None       # What struct we are currently parsing.
 		counts = {}                # How many of a certain struct type we've enountered.
 		parents = []               # Current hierarchy of structs and lists.
-		notCaring = False
+		notCaring = False          # Used for onlyCaseAboutTypes.
 
 		for token in RPL.specification.finditer(raw):
 			groups = token.groups() # Used later.
@@ -2455,7 +2471,7 @@ class String(RPLData):
 	typeName = "string"
 
 	escape = re.compile(r'\$(\$|[0-9a-fA-F]{2})')
-	binchr = re.compile(r'[\x00-\x08\x0a-\x1f\x7f-\xff]')
+	binchr = re.compile(r'[\x00-\x08\x0a-\x1f\x7f-\xff$]')
 	def set(self, data):
 		if type(data) is str: data = unicode(data)
 		elif type(data) is not unicode:
@@ -2469,6 +2485,10 @@ class String(RPLData):
 	#enddef
 
 	def string(self): return self.data
+
+	def escaped(self):
+		return String.binchr.sub(String.replOut, self.string())
+	#enddef
 
 	def __unicode__(self):
 		return '"' + String.binchr.sub(String.replOut, self.string()) + '"'
@@ -2934,6 +2954,19 @@ class Math(Literal, Number):
 	 |
 	Division is integer. ** is power of.
 	Variables may be passed, see respective key for details.
+	You may use references as expected and may also alter the base of a number:
+	 Hex: $$
+	      Note this is two because one would write a hex char into the string.
+	      Two may be used to escape the $, and therefor leave it to
+	      interpretation by the math type.
+	 Hex: 0x
+	 Octal: 0
+	 Octal: 0o
+	 Binary: %
+	         This works like a unary operator.
+	 Binary: 0b
+	 General: number_base
+	          For example 11_5 would be "11 in base 5" which is 6 in decimal.
 	"""
 	typeName = "math"
 
@@ -2957,8 +2990,8 @@ class Math(Literal, Number):
 				x = tokens[i]
 				p = [i+1]
 				try:
+					# Number, variable, reference, or error to be reported later.
 					if x not in ["(",")","**","*","/","%","+","-","<<",">>","&","^","|"]:
-						# Number, variable, reference, or error to be reported later.
 						if cur is not None:
 							raise RPLError(
 								"Number with no operation.",
@@ -2966,7 +2999,10 @@ class Math(Literal, Number):
 							)
 						#endif
 						cur = x
-					#elif level < 1: return setPAndRet(cur)
+					elif level < 1: return setPAndRet(cur)
+					# Binary marker.
+					elif x == "%" and i == idx[0]: cur = "%" + groupRight(p, 0)[1]
+					# Grouping.
 					elif x == "(": cur = groupRight(p, 9)
 					elif x == ")":
 						if level > 9:
@@ -2978,9 +3014,11 @@ class Math(Literal, Number):
 						elif level == 9: return setPAndRet(cur, idx, i + 1)
 						else: return setPAndRet(cur, idx, i)
 					#elif level < 2: return setPAndRet(cur)
+					# Unary operations
 					elif x == "+" and i == idx[0]: cur = (0, groupRight(p, 2))
 					elif x == "-" and i == idx[0]: cur = (1, groupRight(p, 2))
 					elif level < 3: return setPAndRet(cur, idx, i)
+					# Binary operations.
 					elif x == "**": cur = (2, cur, groupRight(p, 2))
 					elif level < 4: return setPAndRet(cur, idx, i)
 					elif x == "*": cur = (3, cur, groupRight(p, 3))
@@ -3009,9 +3047,19 @@ class Math(Literal, Number):
 			if level == 9:
 				raise RPLError(
 					"Unended parenthesis in expression.",
-					self.container, self.mykey, self.pos
+					self.container, self.mykey, self.pos # TODO: Adjust pos
 				)
 			#endif
+
+			if cur is None:
+				raise RPLError(
+					"Expected rvalue.",
+					self.container, self.mykey, self.pos # TODO: Adjust pos
+				)
+			#endif
+
+			# 0 is effectively a nop.
+			if type(cur) is not tuple: cur = (0, cur)
 			return setPAndRet(cur, idx, i)
 		#enddef
 		idx = [0]
@@ -3022,10 +3070,25 @@ class Math(Literal, Number):
 		# Statics.
 		if type(op) is not tuple:
 			if op[0] == "@": return RPLRef(self.rpl, self.container, self.mykey, op[1:], *self.pos).number()
-			try: return int(op)
+			try:
+				if op[0] == "$": return int(op[1:], 16)
+				elif op[0:2].lower() == "0x": return int(op[2:], 16)
+				elif op[0:2].lower() == "0o": return int(op[2:], 8)
+				elif op[0] == "%": return int(op[1:], 2)
+				elif op[0:2].lower() == "0b": return int(op[2:], 2)
+				elif op[0] == "0": return int(op, 8)
+			except ValueError as err:
+				raise RPLError(
+					'Erroneous alternate base sequence "%s"' % op,
+					self.container, self.mykey, self.pos
+				)
+			try:
+				num, base = tuple(op.split("_"))
+				return int(num, int(base))
 			except ValueError:
-				if op in var: return var[op]
-				else:
+				try: return int(op)
+				except ValueError:
+					if op in var: return var[op]
 					raise RPLError(
 						'Erroneous value in expression "%s"' % op,
 						self.container, self.mykey, self.pos
