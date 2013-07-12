@@ -643,7 +643,7 @@ class RPL(RPLObject):
 						# Left Type, Left...etc.
 						lt, l = RPL.numOrHex(bounds[0])
 						rt, r = RPL.numOrHex(bounds[1])
-						numList += [(lt, l)] + [("number", x), for x in (
+						numList += [(lt, l)] + [("number", x) for x in (
 							list(range(l + 1, r)) if l < r else list(range(l - 1, r, -1))
 						)] + [(rt, r)]
 					elif len(times) == 2:
@@ -673,7 +673,7 @@ class RPL(RPLObject):
 				# Number.
 				add = ("number", int(num))
 			#endif
-		elif lit:
+		elif lit is not None:
 			add = ("literal", lit.strip())
 		elif not pp and flow == "[":
 			# Only parse lists when a string is passed.
@@ -1275,7 +1275,7 @@ class RPLTCList(object):
 					except RPLError: pass
 				#endfor
 				raise RPLError(
-					u"No permuation of single list data worked."
+					u"No permuation of single list data worked.",
 					data.container, data.mykey, data.pos
 				)
 			else: raise RPLError(u"Expected list.", data.container, data.mykey, data.pos)
@@ -1444,7 +1444,7 @@ class RPLStruct(RPLObject):
 		#endtry
 
 		# We only want to check virtuals if we have to.
-		if key in self.data or key in self.keys and key in self.virtuals: key = self.virtuals[key]
+		if key not in self.data and key not in self.keys and key in self.virtuals: key = self.virtuals[key]
 		if key in self.data or key in self.keys:
 			x = self
 			while x and key not in x.data: x = x.parent
@@ -2559,7 +2559,7 @@ class String(RPLData):
 		self.data = String.escape.sub(String.replIn, data)
 	#enddef
 
-	def string(self): return self.data
+	def string(self): return self.get()
 
 	def escaped(self):
 		return String.binchr.sub(String.replOut, self.string())
@@ -2672,8 +2672,6 @@ class RefString(String):
 		#endfor
 		return ret
 	#enddef
-
-	def string(self): return self.get()
 
 	def __unicode__(self):
 		return '@`' + String.binchr.sub(String.replOut, self.string()) + '`'
