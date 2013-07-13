@@ -249,11 +249,12 @@ class RPLObject(object):
 	def __deepcopy__(self, memo={}):
 		# This allows for much quicker clones.
 		ret = object.__new__(self.__class__)
+		memo["parent"] = ret
 		for k, x in self.__dict__.iteritems():
 			# Point to functions and things listed in nocopy.
 			if k in self.nocopy or callable(x): setattr(ret, k, x)
 			# Copy everything else.
-			else: setattr(ret, k, copy.deepcopy(x))
+			else: setattr(ret, k, copy.deepcopy(x, memo))
 		#endfor
 		return ret
 	#enddef
@@ -1532,40 +1533,53 @@ class RPLStruct(RPLObject):
 
 	def get(self, data=None):
 		"""
-		These handle references in terms of cloneables, ensuring "this" refers
-		to the appropriate instance rather than the uninstanced struct.
+		Retrieves Python data from RPLData with no regard to basic type.
+		If data is None or omitted, the struct's basic data is returned.
+
+		Most importantly, struct.get("key") looks nicer to me than struct["key"].get()!
 		"""
 		# Handle in terms of basic data.
 		if data is None: return self.basic().get()
 
-		# As docstring says..
+		# Retrieve reference to RPLData from key.
 		key = "???"
 		if type(data) in [str, unicode]:
 			key = data
 			data = self[data]
 		#endif
 
-		if data.reference(): return data.get(this=self)
-		else:
-			try: data.get
-			except AttributeError: raise RPLError("Failed retrieval of %s in %s." % (key, self.name))
-			else: return data.get()
-		#endif
+		try: data.get
+		except AttributeError: raise RPLError("Failed retrieval of %s in %s." % (key, self.name))
+		else: return data.get()
 	#endif
 
 	def set(self, data, val):
 		"""
-		These handle references in terms of cloneables, ensuring "this" refers
-		to the appropriate instance rather than the uninstanced struct.
+		Set data to a key or RPLData.
+		The typing is either:
+		  struct.set(RPLData, Python data)
+		  struct.set("key", RPLData)
 		"""
-		if data.reference(): return data.set(val, this=self)
+		# Set data by key form.
+		if type(data) in [str, unicode]:
+			if isinstance(val, RPLData): self[data] = val
+			else: raise RPLError("Cannot set Python data to a key in this form: %s.%s." % (self.name, data))
+		#endif
+
+		# Set data.
+		try: data.set
+		except AttributeError: raise RPLError("Failed setting data in %s." % (self.name))
 		else: return data.set(val)
 	#endif
 
 	def resolve(self, data=None):
 		"""
-		These handle references in terms of cloneables, ensuring "this" refers
-		to the appropriate instance rather than the uninstanced struct.
+		Resolves a reference to the RPLData it points to.
+		If data is not a reference, it returns itself.
+		This is essentially how .get() works, except that it returns the RPLData
+		instead of the Python data.
+		If data is None or omitted, the RPLData of this struct's basic data is
+		returned.
 		"""
 		# Handle in terms of basic data.
 		if data is None: return self.basic().resolve()
@@ -1577,18 +1591,16 @@ class RPLStruct(RPLObject):
 			data = self[data]
 		#endif
 
-		if data.reference(): return data.resolve(this=self)
-		else:
-			try: data.resolve
-			except AttributeError: raise RPLError("Failed resolution of %s in %s." % (key, self.name))
-			else: return data.resolve()
-		#endif
+
+		try: data.resolve
+		except AttributeError: raise RPLError("Failed resolution of %s in %s." % (key, self.name))
+		else: return data.resolve()
 	#endif
 
 	def string(self, data=None):
 		"""
-		These handle references in terms of cloneables, ensuring "this" refers
-		to the appropriate instance rather than the uninstanced struct.
+		Retrieves Python data from RPLData as a string type.
+		If data is None or omitted, the struct's basic data is returned as a string.
 		"""
 		# Handle in terms of basic data.
 		if data is None: return self.basic().string()
@@ -1600,18 +1612,15 @@ class RPLStruct(RPLObject):
 			data = self[data]
 		#endif
 
-		if data.reference(): return data.string(this=self)
-		else:
-			try: data.string
-			except AttributeError: raise RPLError("Failed string retrieval of %s in %s." % (key, self.name))
-			else: return data.string()
-		#endif
+		try: data.string
+		except AttributeError: raise RPLError("Failed string retrieval of %s in %s." % (key, self.name))
+		else: return data.string()
 	#endif
 
 	def number(self, data=None):
 		"""
-		These handle references in terms of cloneables, ensuring "this" refers
-		to the appropriate instance rather than the uninstanced struct.
+		Retrieves Python data from RPLData as a number type.
+		If data is None or omitted, the struct's basic data is returned as a number.
 		"""
 		# Handle in terms of basic data.
 		if data is None: return self.basic().number()
@@ -1623,18 +1632,15 @@ class RPLStruct(RPLObject):
 			data = self[data]
 		#endif
 
-		if data.reference(): return data.number(this=self)
-		else:
-			try: data.number
-			except AttributeError: raise RPLError("Failed numerical retrieval of %s in %s." % (key, self.name))
-			else: return data.number()
-		#endif
+		try: data.number
+		except AttributeError: raise RPLError("Failed numerical retrieval of %s in %s." % (key, self.name))
+		else: return data.number()
 	#endif
 
 	def list(self, data=None):
 		"""
-		These handle references in terms of cloneables, ensuring "this" refers
-		to the appropriate instance rather than the uninstanced struct.
+		Retrieves Python data from RPLData as a list type.
+		If data is None or omitted, the struct's basic data is returned as a list.
 		"""
 		# Handle in terms of basic data.
 		if data is None: return self.basic().list()
@@ -1646,23 +1652,19 @@ class RPLStruct(RPLObject):
 			data = self[data]
 		#endif
 
-		if data.reference(): return data.list(this=self)
-		else:
-			try: data.list
-			except AttributeError: raise RPLError("Failed list retrieval of %s in %s." % (key, self.name))
-			else: return data.list()
-		#endif
+		try: data.list
+		except AttributeError: raise RPLError("Failed list retrieval of %s in %s." % (key, self.name))
+		else: return data.list()
 	#endif
 
 	def pointer(self, data):
 		"""
-		These handle references in terms of cloneables, ensuring "this" refers
-		to the appropriate instance rather than the uninstanced struct.
+		Returns the RPLStruct pointed to be a reference.
 		"""
 		# As docstring says..
 		if type(data) in [str, unicode]: data = self[data]
 		if data.struct(): return data
-		try: return data.pointer(this=self)
+		try: return data.pointer()
 		except AttributeError: raise RPLBadType("Can only use pointer on references.")
 	#endif
 
@@ -1677,7 +1679,7 @@ class RPLStruct(RPLObject):
 	#enddef
 
 	def __deepcopy__(self, memo={}):
-		ret = RPLObject.__deepcopy__(self)
+		ret = RPLObject.__deepcopy__(self, memo)
 		# clones is pointer here, but we don't want the attribute at all.
 		delattr(ret, "clones")
 		return ret
@@ -2339,7 +2341,7 @@ class RPLRef(object):
 
 	def parts(self): return self.refstruct, self.keysets
 
-	def pointer(self, callers=[], this=None):
+	def pointer(self, callers=[]):
 		# When a reference is made, this function should know what struct made
 		# the reference ("this", ie. self.container) BUT also the chain of
 		# references up to this point..
@@ -2354,7 +2356,7 @@ class RPLRef(object):
 				try: ret = callers[-1 - len(heir.group(2))]
 				except IndexError: raise RPLError("No %s." % self.refstruct)
 			# "this" or parents only
-			else: ret = this or self.container
+			else: ret = self.container
 			# "parent"
 			if heir and heir.group(3):
 				ret = ret.parent
@@ -2373,11 +2375,11 @@ class RPLRef(object):
 		return ret
 	#enddef
 
-	def get(self, callers=[], retCl=False, this=None):
+	def get(self, callers=[], retCl=False):
 		"""
 		Return referenced value.
 		"""
-		ret = self.pointer(callers, this)
+		ret = self.pointer(callers)
 		ti = 0 # Total Index
 		callersAndSelf = callers + [self]
 		for ks in self.keysets:
@@ -2411,11 +2413,11 @@ class RPLRef(object):
 		#endif
 	#endif
 
-	def set(self, data, callers=[], retCl=False, this=None):
+	def set(self, data, callers=[], retCl=False):
 		"""
 		Set referenced value (these things are pointers, y'know).
 		"""
-		ret = self.pointer(callers, this)
+		ret = self.pointer(callers)
 
 		ti = 0
 		lks = len(self.keysets) - 1 # Last Key Set
@@ -2458,10 +2460,10 @@ class RPLRef(object):
 		return True
 	#enddef
 
-	def resolve(self, this=None): return self.get(retCl=True, this=this)
-	def string(self, this=None): return self.get(retCl=True, this=this).string()
-	def number(self, this=None): return self.get(retCl=True, this=this).number()
-	def list(self, this=None): return self.get(retCl=True, this=this).list()
+	def resolve(self): return self.get(retCl=True)
+	def string(self): return self.get(retCl=True).string()
+	def number(self): return self.get(retCl=True).number()
+	def list(self): return self.get(retCl=True).list()
 	def reference(self): return True
 	def struct(self): return False
 	def keyless(self): return not bool(self.keysets)
@@ -2470,8 +2472,9 @@ class RPLRef(object):
 		ret = object.__new__(self.__class__)
 		for k, x in self.__dict__.iteritems():
 			if k in self.nocopy or callable(x): setattr(ret, k, x)
-			else: setattr(ret, k, copy.deepcopy(x))
+			else: setattr(ret, k, copy.deepcopy(x, memo))
 		#endfor
+		ret.container = memo["parent"]
 		return ret
 	#enddef
 #endclass
@@ -2533,7 +2536,7 @@ class RPLData(object):
 		ret = object.__new__(self.__class__)
 		for k, x in self.__dict__.iteritems():
 			if k in self.nocopy or callable(x): setattr(ret, k, x)
-			else: setattr(ret, k, copy.deepcopy(x))
+			else: setattr(ret, k, copy.deepcopy(x, memo))
 		#endfor
 		return ret
 	#enddef
