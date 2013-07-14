@@ -1673,7 +1673,7 @@ class RPLStruct(RPLObject):
 
 	def clone(self):
 		new = copy.deepcopy(self)
-		new.rpl, new.parent, new.donor = self.rpl, self.parent, self
+		new.donor = self
 		self.clones.append(new)
 		return new
 	#enddef

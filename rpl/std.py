@@ -1164,7 +1164,7 @@ class Data(DataFormat, rpl.Serializable):
 				# Set to managed.
 				struct.unmanaged = False
 				for x in struct.format:
-					self.format[x] = deepcopy(struct.format[x])
+					self.format[x] = deepcopy(struct.format[x], {"parent": self})
 					# Update the references (this relies on the above being list form..
 					# that means the format should only be used in format: calls..
 					for d in self.format[x]:
