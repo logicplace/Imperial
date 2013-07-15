@@ -515,8 +515,9 @@ class DataFormat(object):
 		# String only uses default data size. Number only uses bin as type
 		self.parentClass.register(self)
 		self.registerKey("endian", "string:(little, big)", "little")
-		self.registerKey("pad", "string", "\x00")
-		self.registerKey("padside", "string:(left, right, center, rcenter)", "right")
+		self.registerKey("padding", "string", "\x00")
+		self.registerVirtual("pad", "padding")
+		self.registerKey("align", "string:(left, right, center, rcenter)", "right")
 		self.registerKey("sign", "string:(unsigned, signed)", "unsigned")
 		self.registerKey("x", "string|[string|reference, number|string:(expand), string|math]+1", "")
 	#enddef
@@ -562,14 +563,14 @@ class DataFormat(object):
 				elif val in ["little", "le"]: tmp["endian"] = "little"
 				elif val in ["big", "be"]: tmp["endian"] = "big"
 				elif val in ["signed", "unsigned"]: tmp["sign"] = val
-				elif val in ["left", "right", "center", "rcenter"]: tmp["padside"] = val
+				elif val in ["left", "right", "center", "rcenter"]: tmp["align"] = val
 				elif val in ["end"]: tmp["end"] = True
-				elif len(val) == 1: tmp["padchar"] = val
+				elif len(val) == 1: tmp["padding"] = val
 			#endfor
-			if "endian" not in tmp: tmp["endian"] = self["endian"].get()
-			if "sign" not in tmp: tmp["sign"] = self["sign"].get()
-			if "padside" not in tmp: tmp["padside"] = self["padside"].get()
-			if "padchar" not in tmp: tmp["padchar"] = self["pad"].get()
+			if "endian"  not in tmp: tmp["endian"]  = self["endian"].string()
+			if "sign"    not in tmp: tmp["sign"]    = self["sign"].string()
+			if "align"   not in tmp: tmp["align"]   = self["align"].string()
+			if "padding" not in tmp: tmp["padding"] = self["padding"].string()
 			# If an offset wasn't specified, calculate it from the previous
 			# offset plus the previous size. (If it scales from the bottom
 			# it must be specified!)
@@ -1070,7 +1071,40 @@ class Format(DataFormat, rpl.RPLStruct):
 	"""
 	Represents the format of packed data.
 	Same as [data] but does not import or export.
-	<imp Data.all />
+	<all>
+	To describe the format, one must add keys prefixed with "x"
+	Order is important, of course. The format for a field's description is:
+	[type, size, offset?, endian?, sign?, pad char?, alignment?, end?]
+	All entries with a ? are optional, and order of them doesn't matter.
+	    Type: Datatype by name, for example: string, number
+	    Size: Size of the field in bytes
+	    Offset: Offset from base to where this entry is. By default this is
+	            calculated from the sizes, but there are times it may be
+	            necessary to supply it (dynamic sizing in the middle).
+	    Endian: Only relevant to numbers, can be "little" or "big"
+	    Sign: Only relevant to numbers, can be "signed" or "unsigned"
+	    Pad char: Only relevant to strings, it's the char to pad with.
+	    Alignment: Only relevant to strings, can be "left", "right", "center",
+	               or "rcenter"
+	    End: Rather than size, Size is actually the address to stop reading.
+	         Use the literal word "end"
+	<endian>
+	endian:  Default endian, may be "little" or "big". Defaults to "little"</endian>
+	<padding>
+	padding: Default padding character, default is "$00"
+	pad:     Alias of padding.</pad>
+	<padside>
+	align:   Default padside, may be "left", "right", "center", or "rcenter".
+	         Default is "right"</padside>
+	<sign>
+	sign:    Default sign, may be "signed" or "unsigned". Defaults to "unsigned"</sign>
+	<pretty>
+	pretty:  Pretty print data, particularly relevant to lists.</pretty>
+	<comment>
+	comment: Comment to write to the file. Great for when sharing the file.</comment>
+	<format>
+	format:  Copy the x keys from given format struct *at this point* in the
+	         data struct. This is a write-only key.</format></all>
 	"""
 	typeName = "format"
 
@@ -1110,39 +1144,9 @@ class Format(DataFormat, rpl.RPLStruct):
 class Data(DataFormat, rpl.Serializable):
 	"""
 	Manages un/structured binary data.
-	<all>
-	To describe the format, one must add keys prefixed with "x"
-	Order is important, of course. The format for a field's description is:
-	[type, size, offset?, endian?, sign?, pad char?, pad side?, end?]
-	All entries with a ? are optional, and order of them doesn't matter.
-	    Type: Datatype by name, for example: string, number
-	    Size: Size of the field in bytes
-	    Offset: Offset from base to where this entry is. By default this is
-	            calculated from the sizes, but there are times it may be
-	            necessary to supply it (dynamic sizing in the middle).
-	    Endian: Only relevant to numbers, can be "little" or "big"
-	    Sign: Only relevant to numbers, can be "signed" or "unsigned"
-	    Pad char: Only relevant to strings, it's the char to pad with.
-	    Pad side: Only relevant to strings, can be "left", "right", "center",
-	              or "rcenter"
-	    End: Rather than size, Size is actually the address to stop reading.
-	         Use the literal word "end"
-	<endian>
-	endian:  Default endian, may be "little" or "big". Defaults to "little"</endian>
-	<pad>
-	pad:     Default padding character, default is "$00"</pad>
-	<padside>
-	padside: Default padside, may be "left", "right", "center", or "rcenter".
-	         Default is "right"</padside>
-	<sign>
-	sign:    Default sign, may be "signed" or "unsigned". Defaults to "unsigned"</sign>
-	<pretty>
-	pretty:  Pretty print data, particularly relevant to lists.</pretty>
-	<comment>
-	comment: Comment to write to the file. Great for when sharing the file.</comment>
-	<format>
-	format:  Copy the x keys from given format struct *at this point* in the
-	         data struct. This is a write-only key.</format></all>
+	<if all><imp rpl.Serializable.all />
+	</if>
+	<imp Format.all />
 	"""
 	typeName = "data"
 
@@ -1733,7 +1737,7 @@ class IOStatic(rpl.Static):
 			except RPLBadType:
 				raise RPLError("IOStatic requires each entry to be a list of two values.")
 			#endtry
-			# This is supposed to be a static! So it should be fine to .get() here.
+			# This is supposed to be a static! So it should be fine to .list() here.
 			self.data[key] = value.list()
 		else:
 			# When references set it
@@ -1852,10 +1856,11 @@ class Pixel(rpl.String):
 		 * Index in a palette
 		 * 0 is ignored
 		"""
-		self.source = data
+		rpl.String.set(self, data)
+		self.source = self.data
 		self.bigEndian = bigEndian
 
-		tokens = Pixel.specification.match(data)
+		tokens = Pixel.specification.match(self.data)
 		if not tokens: raise RPLError("Invalid pixel format.")
 		self.type = tokens.group(2)
 		self.bits = (lambda(x): (1 if tokens.group(2) in "bB" else 4)*x)(

@@ -22,6 +22,9 @@ import re
 import rpl, std, helper
 
 def register(rpl):
+	# Like a forced lib entry. std must be loaded for color type.
+	std.register(rpl)
+
 	rpl.registerStruct(Tile)
 	rpl.registerStruct(Tilemap)
 	rpl.registerStruct(Tile3)
@@ -34,7 +37,9 @@ def register(rpl):
 	rpl.registerType(Pokestr)
 
 	rpl.updateROM(
+		# ID
 		0x21ac, { "length":  4 },
+		# Name
 		0x21b0, { "length": 12 },
 		nametype = "pokestr"
 	)
@@ -42,11 +47,11 @@ def register(rpl):
 
 def printHelp(moreInfo=[]):
 	helper.genericHelp(globals(), moreInfo,
-		"min is the library for Pokemon Mini ROMs.", "min", [
+		"min is the library for Pokémon mini ROMs.", "min", [
 			# Structs
-			Tile,   Tilemap,
-			Tile3,  Tilemap3,
-			Sprite, Spritemap,
+			Tile,    Tilemap,
+			Tile3,   Tilemap3,
+			Sprite,  Spritemap,
 			Sprite3, Spritemap3,
 			# Types
 			Pokestr,
@@ -55,6 +60,7 @@ def printHelp(moreInfo=[]):
 #enddef
 
 def splitBits(byte):
+	# Used for dismantling graphics.
 	return (
 		(byte & 0x80) >> 7,
 		(byte & 0x40) >> 6,
@@ -105,6 +111,8 @@ class Tile(std.Graphic):
 
 	def __getitem__(self, key):
 		if key == "base" and "base" not in self.data and self.baseOffset is not None:
+			# This is a substruct of a tilemap, and must find its base in respect
+			# to its location in the struct.
 			return rpl.Number(
 				self.parent["base"].number() + self.parent.mapSize() + self.baseOffset
 			)
@@ -112,6 +120,7 @@ class Tile(std.Graphic):
 	#enddef
 
 	def getPalette(self):
+		# Returns the palette with respect to invert.
 		return (
 			[self["black"].tuple(), self["white"].tuple()]
 			if self["invert"].get() else
@@ -194,17 +203,17 @@ class Tilemap(Tile):
 
 	def mapSize(self):
 		highestIdx = 0
-		for v in self["map"].get():
+		for v in self["map"].list():
 			if isinstance(v, rpl.Number): highestIdx = max(highestIdx, v.get())
 		#endfor
 		return 8 * (highestIdx + 1)
 	#enddef
 
 	def importData(self, rom, folder):
-		tilemap, base = self["map"].get(), self["base"].number()
+		tilemap, base = self["map"].list(), self["base"].number()
 		#rom.seek(base)
 		self.definePalette(self.getPalette())
-		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
+		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
 				t, x, y = t.get(), x * 8, y * 8
@@ -218,13 +227,13 @@ class Tilemap(Tile):
 
 	def prepareImage(self):
 		std.Graphic.prepareImage(self)
-		tilemap, blank = self["map"].get(), self["blank"].tuple()
+		tilemap, blank = self["map"].list(), self["blank"].tuple()
 
 		# Loop through map and export each tile.
 		self.rpl.rom.seek(self["base"].number())
 		bytes = self.rpl.rom.read(self.mapSize())
 		palette = self.getPalette()
-		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
+		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 8, y * 8
@@ -278,6 +287,8 @@ class Tile3(Tile):
 		if (key in ["base1", "base2"] and key not in self.data and
 			self.baseOffset[idx] is not None
 		):
+			# This is a substruct of a tilemap3, and must find its base in respect
+			# to its location in the struct.
 			return rpl.Number(
 				self.parent[key] +
 				self.parent.mapSize() + self.baseOffset
@@ -286,6 +297,7 @@ class Tile3(Tile):
 	#enddef
 
 	def getPalette(self):
+		# Returns the palette with respect to invert.
 		return (
 			[self["black"].tuple(), self["white"].tuple(), self["gray"].tuple()]
 			if self["invert"].get() else
@@ -298,7 +310,7 @@ class Tile3(Tile):
 		for i, x, y in std.ReadDir("DULR").rect(8, 8):
 			tmp = self.indexOf(data[x, y])
 			if tmp == 2:
-				if (i + x % 2) % 2: pixel1 |= 1 << shift
+				if (x + y + 1) % 2: pixel1 |= 1 << shift
 				else:               pixel2 |= 1 << shift
 			else:
 				pixel1 |= tmp << shift
@@ -352,9 +364,8 @@ class Tile3(Tile):
 class Tilemap3(Tile3, Tilemap):
 	"""
 	Manages three-color tiles.
-	Tiles are two 8x8 images of form 0bw and reading DULR that are
-	combined by t1 & t2 being black, t1 nor t2 being white, and
-	t1 ^ t2 being gray.
+	Tiles are two 8x8 images of form 0bw and reading DULR that are combined by
+	t1 & t2 being black, t1 nor t2 being white, and t1 ^ t2 being gray.
 	Tilemaps index multiple [usually sequential] tiles.
 	<imp Tile3.all Tilemap.tilemap />
 	"""
@@ -374,9 +385,9 @@ class Tilemap3(Tile3, Tilemap):
 	#enddef
 
 	def importData(self, rom, folder):
-		tilemap, base1, base2 = self["map"].get(), self["base1"].number(), self["base2"].number()
+		tilemap, base1, base2 = self["map"].list(), self["base1"].number(), self["base2"].number()
 		self.definePalette(self.getPalette())
-		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
+		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
 			if i >= len(tilemap): break
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
@@ -390,7 +401,7 @@ class Tilemap3(Tile3, Tilemap):
 
 	def prepareImage(self):
 		std.Graphic.prepareImage(self)
-		tilemap, blank = self["map"].get(), self["blank"].tuple()
+		tilemap, blank = self["map"].list(), self["blank"].tuple()
 
 		# Loop through map and export each tile.
 		mapSize = self.mapSize()
@@ -399,7 +410,7 @@ class Tilemap3(Tile3, Tilemap):
 		self.rpl.rom.seek(self["base2"].number())
 		bytes2 = self.rpl.rom.read(mapSize)
 		palette = self.getPalette()
-		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
+		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 8, y * 8
@@ -418,8 +429,8 @@ class Tilemap3(Tile3, Tilemap):
 class Sprite(std.Graphic):
 	"""
 	Manage a single two-color sprite.
-	Sprites are 16x16 images of form UL mask, BL mask, UL draw, BL draw,
-	UR mask, BR mask, UR draw, BR draw.
+	Sprites are 16x16 images of form UL mask, BL mask, UL draw, BL draw, UR mask,
+	BR mask, UR draw, BR draw.
 	Mask sections are of form 0ba and reading DULR.
 	Draw sections are of form 0bw and reading DULR.
 	<all><if all><imp std.Graphic.all rpl.Serializable.all /></if>
@@ -535,8 +546,8 @@ class Sprite(std.Graphic):
 class Spritemap(Sprite):
 	"""
 	Manage multiple two-color sprites.
-	Sprites are 16x16 images of form UL mask, BL mask, UL draw, BL draw,
-	UR mask, BR mask, UR draw, BR draw.
+	Sprites are 16x16 images of form UL mask, BL mask, UL draw, BL draw, UR mask,
+	BR mask, UR draw, BR draw.
 	Mask sections are of form 0ba and reading DULR.
 	Draw sections are of form 0bw and reading DULR.
 	<imp Sprite.all Tilemap.tilemap />
@@ -571,9 +582,9 @@ class Spritemap(Sprite):
 	#enddef
 
 	def importData(self, rom, folder):
-		tilemap, base = self["map"].get(), self["base"].number()
+		tilemap, base = self["map"].list(), self["base"].number()
 		self.definePalette(self.getPalette())
-		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
+		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
 				x, y = x * 16, y * 16
@@ -587,14 +598,14 @@ class Spritemap(Sprite):
 
 	def prepareImage(self):
 		std.Graphic.prepareImage(self)
-		tilemap, blank = self["map"].get(), self["blank"].tuple()
+		tilemap, blank = self["map"].list(), self["blank"].tuple()
 		secx = [blank] * 256
 
 		# Loop through map and export each sprite.
 		self.rpl.rom.seek(self["base"].number())
 		bytes = self.rpl.rom.read(self.mapSize())
 		palette = self.getPalette()
-		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
+		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 16, y * 16
@@ -769,9 +780,9 @@ class Spritemap3(Sprite3, Spritemap):
 	#enddef
 
 	def importData(self, rom, folder):
-		tilemap, base1, base2 = self["map"].get(), self["base1"].number(), self["base2"].number()
+		tilemap, base1, base2 = self["map"].list(), self["base1"].number(), self["base2"].number()
 		self.definePalette(self.getPalette())
-		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
+		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
 				t, x, y = t.get() * 64, x * 16, y * 16
@@ -784,7 +795,7 @@ class Spritemap3(Sprite3, Spritemap):
 
 	def prepareImage(self):
 		std.Graphic.prepareImage(self)
-		tilemap, blank = self["map"].get(), self["blank"].tuple()
+		tilemap, blank = self["map"].list(), self["blank"].tuple()
 		secx = [blank] * 256
 
 		# Loop through map and export each sprite.
@@ -794,7 +805,7 @@ class Spritemap3(Sprite3, Spritemap):
 		self.rpl.rom.seek(self["base2"].number())
 		bytes2 = self.rpl.rom.read(mapSize)
 		palette = self.getPalette()
-		for i, x, y in self["dir"].rect(*[x.get() for x in self["dimensions"].get()]):
+		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 16, y * 16
@@ -841,19 +852,19 @@ class Pokestr(rpl.Literal):
 	})
 
 	raw = (
-		u"".join(map(lambda x: unichr(x), helper.range(0x21))) +
+		u"".join([unichr(x) for x in helper.range(0x21)]) +
 		u" !\"#$%&'()*+,-./"
 		u"0123456789:;<=>?"
 		u"@ABCDEFGHJIKLMNO"
 		u"PQRSTUVWXYZ[¥]^_"
 		u"`abcdefghijklmno"
 		u"pqrstuvwxyz{:}~" +
-		u"".join(map(lambda x: unichr(x), helper.range(0x7f, 0xa0))) +
+		u"".join([unichr(x) for x in helper.range(0x7f, 0xa0)]) +
 		u"　。「」、・ヲァィゥェォャュョッ"
 		u"ーアイウエオカキクケコサシスセソ"
 		u"タチツテトナニヌネノハヒフヘホマ"
 		u"ミムメモヤユヨラリルレロワン゛゜" +
-		u"".join(map(lambda x: unichr(x), helper.range(0xe0, 0x100)))
+		u"".join([unichr(x) for x in helper.range(0xe0, 0x100)])
 	)
 
 	convUnserialize = re.compile(r'(.)([゛゜])', re.UNICODE)
@@ -864,14 +875,15 @@ class Pokestr(rpl.Literal):
 			try: new += Pokestr.upperSets[x]
 			except KeyError:
 				if ord(x) <= 0xff: new += x
-				else: raise RPLError('Unicode char "%s" not in %s ecnoding.' % (x, self.typeName))
+				else: raise RPLError('Unicode char "%s" not in %s encoding.' % (x, self.typeName))
 			#endtry
 		#endfor
-		return new
+		kwargs["string"] = new
+		return rpl.String.serialize(kwargs)
 	#enddef
 
 	def unserialize(self, data, **kwargs):
-		new = u"".join(map(lambda x: Pokestr.raw[ord(x)], data))
+		new = u"".join([Pokestr.raw[ord(x)] for x in data])
 		self.data = convUnserialize.sub(Pokestr.joinKatakana, new)
 	#enddef
 

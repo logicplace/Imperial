@@ -33,6 +33,7 @@ static {
 		data Data16 {
 			file: @File.datname4
 			format: @Head
+			padding: "$00"
 		}
 
 		graphic Image16 {
@@ -47,6 +48,7 @@ static {
 		data Data256 {
 			file: @File.datname8
 			format: @Head
+			padding: "$00"
 		}
 
 		graphic Image256 {
@@ -61,6 +63,7 @@ static {
 		data Data24b {
 			file: @File.datname24
 			format: @Head
+			padding: "$00"
 		}
 
 		graphic Image24b {
