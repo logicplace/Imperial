@@ -1245,7 +1245,7 @@ class GenericGraphic(Graphic):
 	#enddef
 
 	def padfuncDef(self, width, height):
-		padmethod, padmod = tuple([x.get() for x in self["padding"].get()])
+		padmethod, padmod = tuple(self.list("padding", "get"))
 		if self.rpl.importing:
 			if padmethod == "row":
 				widthmo = width - 1
@@ -1309,14 +1309,14 @@ class GenericGraphic(Graphic):
 
 	def importData(self, rom, folder):
 		read = self["read"].get()
-		width, height = tuple([x.get() for x in self["dimensions"].get()])
+		width, height = tuple(self.list("dimensions", "number"))
 
 		# Create padding function...
 		prev = 0
 		padfunc = self.padfuncDef(width, height)
 
 		# Prepare palette
-		self.definePalette([x.tuple() for x in self["palette"].get()])
+		self.definePalette(self.list("palette", "tuple"))
 
 		# Prepare data
 		leftover = 0
@@ -1343,7 +1343,7 @@ class GenericGraphic(Graphic):
 
 	def prepareImage(self):
 		Graphic.prepareImage(self)
-		width, height = tuple([x.get() for x in self["dimensions"].get()])
+		width, height = tuple(self.list("dimensions", "number"))
 		numPixels = width * height
 
 		# Create padding function...
@@ -1355,11 +1355,11 @@ class GenericGraphic(Graphic):
 		bytes = self.len(numPixels, padfunc, pixels)
 
 		# Prepare palette
-		palette = [x.tuple() for x in self["palette"].get()]
+		palette = self.list("palette", "tuple")
 
 		# Read pixels
-		self.rpl.rom.seek(self["base"].number())
-		reverse = self["reverse"].get({
+		self.rpl.rom.seek(self.number("base"))
+		reverse = self.resolve("reverse").get({
 			"w": width, "width": width,
 			"h": height, "height": height,
 		})
@@ -1390,7 +1390,7 @@ class GenericGraphic(Graphic):
 		# UDRL: ROTATE_90
 		# DULR: ROTATE_270
 		# DURL: ROTATE_90, FLIP_TOP_BOTTOM
-		primary, secondary = self["read"].ids()
+		primary, secondary = self.resolve("read").ids()
 		# if xxDU
 		if secondary == 3: self.image = self.image.transpose(Image.FLIP_TOP_BOTTOM)
 		# if xxLR
@@ -1405,12 +1405,12 @@ class GenericGraphic(Graphic):
 
 	def len(self, numPixels=None, padfunc=None, pixels=None):
 		if numPixels is None or padfunc is None:
-			width, height = tuple([x.get() for x in self["dimensions"].get()])
+			width, height = tuple(self.list("dimensions", "number"))
 			numPixels = width * height
 			padfunc = self.padfuncDef(width, height)
 		#endif
 		prev, bytes, leftovers = 0, 0, ["", 0]
-		pixels = pixels or self["pixel"].get()
+		pixels = pixels or self.list("pixel")
 		# TODO: Make more efficient for repeated rows or uniform pixel size...
 		for i in helper.range(numPixels):
 			pixel = pixels[i % len(pixels)]

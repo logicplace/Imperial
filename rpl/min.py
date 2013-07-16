@@ -106,6 +106,7 @@ class Tile(std.Graphic):
 		self.registerKey("black", "color", "black")
 		self.registerKey("invert", "bool", "false")
 
+		# Allows this registration function to be shared with Tilemap.
 		if not tilemap: self.unregisterKey("dimensions")
 	#enddef
 
@@ -213,7 +214,7 @@ class Tilemap(Tile):
 		tilemap, base = self["map"].list(), self["base"].number()
 		#rom.seek(base)
 		self.definePalette(self.getPalette())
-		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
+		for i, x, y in self["dir"].rect(*self.list("dimensions", "number")):
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
 				t, x, y = t.get(), x * 8, y * 8
@@ -233,7 +234,7 @@ class Tilemap(Tile):
 		self.rpl.rom.seek(self["base"].number())
 		bytes = self.rpl.rom.read(self.mapSize())
 		palette = self.getPalette()
-		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
+		for i, x, y in self["dir"].rect(*self.list("dimensions", "number")):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 8, y * 8
@@ -387,7 +388,7 @@ class Tilemap3(Tile3, Tilemap):
 	def importData(self, rom, folder):
 		tilemap, base1, base2 = self["map"].list(), self["base1"].number(), self["base2"].number()
 		self.definePalette(self.getPalette())
-		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
+		for i, x, y in self["dir"].rect(*self.list("dimensions", "number")):
 			if i >= len(tilemap): break
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
@@ -410,7 +411,7 @@ class Tilemap3(Tile3, Tilemap):
 		self.rpl.rom.seek(self["base2"].number())
 		bytes2 = self.rpl.rom.read(mapSize)
 		palette = self.getPalette()
-		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
+		for i, x, y in self["dir"].rect(*self.list("dimensions", "number")):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 8, y * 8
@@ -459,6 +460,8 @@ class Sprite(std.Graphic):
 		self.registerKey("setalpha", "color", "magenta")
 		self.registerKey("invert", "bool", "false")
 		self.registerKey("inverta", "bool", "false")
+
+		# Allows this registration function to be shared with Spritemap.
 		if not spritemap: self.unregisterKey("dimensions")
 	#enddef
 
@@ -584,7 +587,7 @@ class Spritemap(Sprite):
 	def importData(self, rom, folder):
 		tilemap, base = self["map"].list(), self["base"].number()
 		self.definePalette(self.getPalette())
-		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
+		for i, x, y in self["dir"].rect(*self.list("dimensions", "number")):
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
 				x, y = x * 16, y * 16
@@ -605,7 +608,7 @@ class Spritemap(Sprite):
 		self.rpl.rom.seek(self["base"].number())
 		bytes = self.rpl.rom.read(self.mapSize())
 		palette = self.getPalette()
-		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
+		for i, x, y in self["dir"].rect(*self.list("dimensions", "number")):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 16, y * 16
@@ -782,7 +785,7 @@ class Spritemap3(Sprite3, Spritemap):
 	def importData(self, rom, folder):
 		tilemap, base1, base2 = self["map"].list(), self["base1"].number(), self["base2"].number()
 		self.definePalette(self.getPalette())
-		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
+		for i, x, y in self["dir"].rect(*self.list("dimensions", "number")):
 			t = tilemap[i]
 			if isinstance(t, rpl.Number):
 				t, x, y = t.get() * 64, x * 16, y * 16
@@ -805,7 +808,7 @@ class Spritemap3(Sprite3, Spritemap):
 		self.rpl.rom.seek(self["base2"].number())
 		bytes2 = self.rpl.rom.read(mapSize)
 		palette = self.getPalette()
-		for i, x, y in self["dir"].rect(*[x.number() for x in self["dimensions"].list()]):
+		for i, x, y in self["dir"].rect(*self.list("dimensions", "number")):
 			t = tilemap[i].get()
 			if t != "i":
 				x, y = x * 16, y * 16

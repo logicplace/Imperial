@@ -1654,13 +1654,13 @@ class RPLStruct(RPLObject):
 		else: return data.number()
 	#endif
 
-	def list(self, data=None):
+	def list(self, data=None, of=None):
 		"""
 		Retrieves Python data from RPLData as a list type.
 		If data is None or omitted, the struct's basic data is returned as a list.
 		"""
 		# Handle in terms of basic data.
-		if data is None: return self.basic().list()
+		if data is None: return self.basic().list(of)
 
 		# As docstring says..
 		key = "???"
@@ -1671,7 +1671,7 @@ class RPLStruct(RPLObject):
 
 		try: data.list
 		except AttributeError: raise RPLError("Failed list retrieval of %s in %s." % (key, self.name))
-		else: return data.list()
+		else: return data.list(of)
 	#endif
 
 	def pointer(self, data):
@@ -1840,7 +1840,7 @@ class ROM(RPLStruct):
 			rang = list(range(rang.number(), eof))
 		except RPLBadType:
 			# Not all were numbers.
-			rang = [x.get() for x in rang.get()]
+			rang = rang.list("get")
 			try:
 				if rang[-1] == "e":
 					if rang[-2] == "b": r = list(range(0, eof))
@@ -2132,7 +2132,7 @@ class Serializable(RPLStruct):
 					"b": 0, "begin": 0, "s": 0, "start": 0,
 					"c": 1, "cur": 1, "current": 1,
 					"e": 2, "end": 2
-				}[v[0].get()], v[1].get()
+				}[v[0].string()], v[1].number()
 			except (RPLBadType, AttributeError):
 				# Check if it's a RPLData, more or less.
 				try: value.get
@@ -2501,7 +2501,7 @@ class RPLRef(object):
 	def resolve(self): return self.get(retCl=True)
 	def string(self): return self.get(retCl=True).string()
 	def number(self): return self.get(retCl=True).number()
-	def list(self): return self.get(retCl=True).list()
+	def list(self, of=None): return self.get(retCl=True).list(of=of)
 	def reference(self): return True
 	def struct(self): return False
 	def keyless(self): return not bool(self.keysets)
@@ -2535,7 +2535,7 @@ class RPLData(object):
 	def resolve(self): return self
 	def string(self): raise RPLBadType("%s cannot be interpreted as a string." % self.typeName)
 	def number(self): raise RPLBadType("%s cannot be interpreted as a number." % self.typeName)
-	def list(self): raise RPLBadType("%s cannot be interpreted as a list." % self.typeName)
+	def list(self, of=None): raise RPLBadType("%s cannot be interpreted as a list." % self.typeName)
 	def reference(self): return False
 	def struct(self): return False
 
@@ -2851,7 +2851,23 @@ class List(RPLData):
 		self.data = data
 	#enddef
 
-	def list(self): return self.data
+	@staticmethod
+	def listOr(data, of):
+		# Try it without an of so that RPLBadType isn't raised for any of the
+		# type assertions on contents, only the list itself.
+		try: data.list()
+		except RPLBadType:
+			if   of == "get":    return data.get()
+			elif of == "number": return data.number()
+			elif of == "string": return data.string()
+			else: return getattr(data, of)()
+		else: return data.list(of)
+	#enddef
+
+	def list(self, of=None):
+		if of is None: return self.data
+		return [List.listOr(x, of) for x in self.data]
+	#endif
 
 	def __unicode__(self):
 		return "[ " + ", ".join(map(unicode, self.data)) + " ]"
