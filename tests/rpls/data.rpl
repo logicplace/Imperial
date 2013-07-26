@@ -1,30 +1,3 @@
-#data BMP {
-#	endian: little
-#	sign: unsigned
-#
-#	# BMP Header
-#	xmagic: [string, 2] # BM
-#	xsize: [number, 4]
-#	xreserve1: [number, 2]
-#	xreserve2: [number, 2]
-#	xstart: [hexnum, 4]
-#
-#	# BITMAPINFOHEADER (assume this for now)
-#	xheadsize: [number, 4]
-#	xwidth: [number, 4, signed]
-#	xheight: [number, 4, signed]
-#	xcolorplanes: [number, 2]
-#	xbbp: [number, 2]
-#	xcompression: [number, 4]
-#	ximagesize: [number, 4]
-#	xhresolution: [number, 4]
-#	xvresolution: [number, 4]
-#	xnumpallet: [number, 4]
-#	xnumimportant: [number, 4]
-#	xpallet: [number, 4]
-#	xpixels: [number, 4]
-#}
-
 RPL { lib: std }
 
 iostatic File {

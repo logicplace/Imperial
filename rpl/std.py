@@ -26,6 +26,9 @@ from math import ceil
 from StringIO import StringIO
 from collections import OrderedDict as odict
 
+try: import JSLON
+except ImportError: JSLON = None
+
 def register(rpl):
 	rpl.registerStruct(Data)
 	rpl.registerStruct(Format)
@@ -47,6 +50,7 @@ def printHelp(moreInfo=[]):
 			Data, Format,
 			Map, IOStatic,
 			GenericGraphic,
+			Calc,
 			# Types
 			Bin, Pixel,
 			Color, ReadDir,
@@ -54,101 +58,327 @@ def printHelp(moreInfo=[]):
 	)
 #enddef
 
+class DataStatic(rpl.Static):
+	def __init__(self, top, name, parent=None):
+		rpl.Static.__init__(self, top, name, parent)
+		self.comment = None
+	#enddef
+
+	def addChild(self, structType, name):
+		"""
+		Accepts only statics, and keeps lists of counted structs.
+		"""
+		child = DataStatic(self.rpl, name, self)
+		if name in self.children: self.children[name].append(child)
+		else: self.children[name] = [child]
+		return child
+	#enddef
+
+	def oneUp(self):
+		for k, v in self.children.iteritems():
+			for x in v:
+				x.oneUp()
+				if len(x.data) == 0 and len(x.children) == 1:
+					self.children[k] = x.children.values()[0]
+				#endif
+			#endfor
+		#endfor
+	#enddef
+
+	@staticmethod
+	def canBeList(data):
+		# If this is a list, it's already in expected form.
+		if type(data) is list: pass
+		# If this is not a list and only has one key (no children) it's okay.
+		elif len(data.data) == 1 and not data.children: return True
+		# If it has no keys, check its child.
+		elif len(data.data) == 0 and len(data.children) == 1: return canBeList(data.children.values()[0])
+		# Was not a list and had more than one keys + children.
+		else: return False
+
+		# Check all data.
+		for x in data:
+			if len(x.data) + len(x.children) > 1: return False
+			if x.children and not DataStatic.canBeList(x.children.values()[0]): return False
+		#endfor
+		return True
+	#enddef
+
+	lineEnd = re.compile(r'(?:\r?\n|\n\r?|\r)(?!\n|\r|$)')
+	def __unicode__(self, pretty=True, tabs=u"", isList=False):
+		if self.comment:
+			ret = tabs + u"# " + DataStatic.lineEnd.sub(
+				os.linesep + tabs + u"# ", self.comment
+			) + os.linesep
+		else: ret = u""
+
+		# Create exported name.
+		if self.gennedName: name = u""
+		else: name = u" " + self.name
+
+		# Create list of keys.
+		keys = []
+		for k, v in self.data.iteritems():
+			v = unicode(v)
+			# Check if it ends in a comment.
+			parsed = [x.group(0) for x in rpl.RPL.specification.finditer(v)]
+			if v.strip() and parsed[-1].lstrip()[0] == "#":
+				end, hascomma = os.linesep if v[-len(os.linesep):] != os.linesep else u"", True
+			else: end, hascomma = u"", parsed[-1].lstrip()[0] == ","
+			if isList: keys.append((v + end, hascomma))
+			else:
+				next = k + u": "
+				keys.append((next + DataStatic.lineEnd.sub(os.linesep + tabs + u" " * len(next), v) + end, hascomma))
+			#endif
+		#endfor
+
+		# Create list of children.
+		children = []
+		for k, v in self.children.iteritems():
+			if isList or DataStatic.canBeList(v):
+				if isList: next = u""
+				else: next = u"%s: " % k
+				if type(v) is list: l = [x.__unicode__(pretty, tabs + u"\t", True) for x in v]
+				else: l = [v.__unicode__(pretty, tabs + u"\t", True)]
+				if pretty: next += u"[" + os.linesep + (tabs + u"\t").join(l) + os.linesep + tabs + u"]"
+				else: next += u"[" + u", ".join(l) + u"]"
+				if isList: children.append(next)
+				else: keys.append((next, True))
+			else:
+				for x in (v if type(v) is list else [v]): children.append(x.__unicode__(pretty, tabs + u"\t"))
+			#endif
+		#endfor
+
+		if keys: keys[-1] = (keys[-1][0], True)
+
+		if not keys and not children: raise RPLError("Empty...?")
+		if isList: return keys[0][0] if keys else children[0]
+
+		if pretty:
+			ret += u"%sstatic%s {" % (tabs, name)
+			for x, c in keys: ret += os.linesep + tabs + u"\t" + x
+			return (
+				ret + (os.linesep * 2 if children else u"") +
+				os.linesep.join(children) + os.linesep + tabs + u"}"
+			)
+		else:
+			ret += u"%sstatic%s {" % (tabs, name)
+			last, n = "", -len(os.linesep)
+			for x, c in keys:
+				if os.linesep in x and last[n:] != os.linesep: ret += os.linesep
+				ret += x + (u"" if c else u", ")
+				last = x
+			#endfor
+			return (
+				ret + (os.linesep if children else u"") +
+				os.linesep.join(children) + u"}"
+			)
+		#endif
+	#enddef
+
+	def __getitem__(self, key):
+		if key in self.children: return rpl.List(self.children[key])
+		return self.data[key]
+	#enddef
+
+	def __contains__(self, key):
+		return key in self.data or key in self.children
+	#enddef
+#endclass
+
 class DataFile(rpl.Share):
+	def add(self, key, item, to):
+		"""
+		Add item to data.
+		"""
+		if not isinstance(item, rpl.RPLData):
+			raise RPLError("Tried to add non-data to data file.")
+		#endif
+
+		to[key] = item
+	#enddef
+#endclass
+
+class RPLDataFile(DataFile):
 	"""
 	.rpl export for data structs.
 	"""
-	def __init__(self, inFile=None):
-		self.base = []
-		self.comment = ""
-		if inFile is not None: self.read(inFile)
+	def __init__(self, pretty):
+		# NOTE: that I'm making the assumption that there will be no duplicate
+		# names at the base level, which is primarily because I'm making the
+		# further assumption that all cloneables will be unmanaged.
+		# Data files only support statics...
+		self.base = rpl.RPL()
+		self.base.structs = {}
+		self.base.registerStruct(DataStatic)
+
+		self.pretty = pretty
 	#enddef
 
 	def read(self):
 		"""
 		Read from .rpl data file.
 		"""
-		rpl = self.rpl
-		raw = helper.readFrom(self.path)
-
-		base = []
-		parents = []
-		for token in rpl.specification.finditer(raw):
-			groups = token.groups() # Used later
-			dstr, sstr, mstr, num, key, afterkey, flow, ref, lit = groups
-			sstr = dstr or sstr # Double or single
-
-			# Find the position (used for ref and errors)
-			pos = token.start()
-			line, char = raw.count("\n",0,pos) + 1, pos - raw.rfind("\n",0,pos) + 1
-
-			add, skipSubInst = None, None
-
-			try:
-				if flow and flow in "{}": raise RPLError("Structs not allowed in data files")
-				elif flow == "[":
-					# Begins list
-					parents.append([])
-				elif flow == "]":
-					# End list
-					if parents:
-						add = ("list", parents.pop())
-						skipSubInst = True
-					else: raise RPLError("] without a [.")
-				elif sstr or mstr or num or ref or lit:
-					add = rpl.parseData(groups, line=line, char=char)
-				else: continue
-
-				if add:
-					val = rpl.parseCreate(add, None, None, line, char, skipSubInst)
-
-					if parents: parents[-1].append(val)
-					else: base.append(val)
-				#endif
-			except RPLError as err:
-				helper.err("Error in line %i char %i: %s" % (
-					line, char, err.args[0]
-				))
-			#endtry
-		#endfor
-
-		self.base = base
+		self.base.parse(self.path, dupNames=True)
+		for child in self.base: child.oneUp()
 	#enddef
 
 	def write(self):
 		"""
 		Write data to a given file.
 		"""
-		# TODO: Prettyprinting
-		comment = "# " + self.comment if self.comment else ""
-		helper.writeTo(self.path, comment + os.linesep.join(map(unicode, self.base)))
+		helper.writeTo(self.path, self.base.__unicode__(self.pretty))
 	#enddef
 
-	def add(self, item):
+	def addStruct(self, struct, to=None):
 		"""
-		Add item to data. Must be RPLData type.
+		Add a sub/struct.
 		"""
-		if not isinstance(item, rpl.RPLData):
-			raise RPLError("Tried to add non-data to rpl data file.")
+		return (to or self.base).addChild("static", struct)
+	#enddef
+
+	def __getitem__(self, key):
+		return self.base.children[key]
+	#enddef
+
+	def __contains__(self, key):
+		return key in self.base.data or key in self.base.children
+	#enddef
+#endclass
+
+def JSONStringifyElement(v):
+	tv = type(v)
+	if   tv is dict: return JSONDict(v).stringify(pretty, tabs)
+	elif tv is list: return JSONList(v).stringify(pretty, tabs)
+	else:
+		# RPLData.__unicode__ may not always form valid JSON
+		# so this has to reinterpret that.
+		try: return JSONList(v.list()).stringify(pretty, tabs)
+		except RPLBadType:
+			try: return '"%s"' % v.string().replace('"', '\\"')
+			except RPLBadType:
+				return unicode(v.number())
+			#endtry
+		#endtry
+	#endif
+#enddef
+
+class JSONDict(dict):
+	def __init__(self, x={}):
+		self.comment = None
+		dict.__init__(self)
+	#enddef
+
+	def stringify(self, pretty, tabs=u""):
+		ret = u""
+		if pretty:
+			ret += u"{\n"
+			end = tabs + u"}"
+			tabs += u"\t"
+			if self.comment: ret += u"%s// %s" % (tabs, self.comment)
+			entry = tabs + u'"%s": %s,\n'
+		else:
+			ret += u"{ "
+			if self.comment: ret += u"/* %s */ " % (self.comment)
+			entry = '"%s": %s, '
+			end = u"}"
 		#endif
-		self.base.append(item)
+		for k, v in self.iteritems(): ret += entry % (k, JSONStringifyElement(v))
+		return ret + end
+	#enddef
+#endclass
+
+class JSONList(list):
+	def stringify(self, pretty, tabs=u""):
+		ret = u""
+		if pretty:
+			ret += u"[\n"
+			end = tabs + u"]"
+			tabs += u"\t"
+			entry = tabs + u'%s,\n'
+		else:
+			ret += u"[ "
+			entry = '%s, '
+			end = u"]"
+		#endif
+		for v in self: ret += entry % (JSONStringifyElement(v))
+		return ret + end
 	#enddef
 
-	def __getitem__(self, key): return self.base[key]
-	def __len__(self): return len(self.base)
+	def list(self): return self
+#endclass
 
-	def __iter__(self):
-		try: self.iter
-		except AttributeError: self.iter = -1
-		return self
+class JSONFile(DataFile):
+	"""
+	.json/.jslon export for data structs.
+	"""
+	def __init__(self, pretty):
+		if JSLON is None:
+			raise RPLError(
+				"Please install the JSLON library to export JSON files.\n"
+				"Download from: https://github.com/logicplace/jslon"
+			)
+		#endif
+		self.base = JSONDict()
+		self.pretty = pretty
 	#enddef
 
-	# Atypical implementation of next I think, but it makes the code look nicer.
-	def next(self):
-		try: self.iter += 1
-		except AttributeError: self.iter = 0
-		try: return self[self.iter]
-		except IndexError: raise StopIteration
+	def read(self):
+		"""
+		Read from JSON data file.
+		"""
+		self.base = JSLON.parse(helper.readFrom(self.path))
+	#enddef
+
+	def write(self):
+		"""
+		Write data to a given file.
+		"""
+		helper.writeTo(self.path, self.base.stringify(self.pretty))
+	#enddef
+
+	def addStruct(self, struct, to=None):
+		"""
+		Add a sub/struct.
+		"""
+		ret = (to or self.base)[struct.name] = JSONDict()
+		return ret
+	#enddef
+#endclass
+
+class BinFile(DataFile):
+	"""
+	.bin export for data structs.
+	"""
+	def __init__(self, pretty=None):
+		self.base = rpl.RPL()
+		# Load all libs...
+		self.base.load({
+			"lib": rpl.List([rpl.String for x in self.rpl.alreadyLoaded[len(self.base.alreadyLoaded):]])
+		}, True)
+	#enddef
+
+	def read(self):
+		"""
+		Read from binary data file.
+		"""
+		pass
+		#self.base.exportPrepare(
+	#enddef
+
+	def write(self):
+		"""
+		Write data to a given file.
+		"""
+		pass
+		#self.base.importData
+	#enddef
+
+	def addStruct(self, struct, to=None):
+		"""
+		Add a sub/struct.
+		"""
+		pass
 	#enddef
 #endclass
 
@@ -509,17 +739,19 @@ class DataFormat(object):
 		self._len = None
 		self.count = None
 		self.importing = False
+		self.onekey = None
 	#enddef
 
 	def register(self):
-		# String only uses default data size. Number only uses bin as type
 		self.parentClass.register(self)
 		self.registerKey("endian", "string:(little, big)", "little")
 		self.registerKey("padding", "string", "\x00")
 		self.registerVirtual("pad", "padding")
 		self.registerKey("align", "string:(left, right, center, rcenter)", "right")
 		self.registerKey("sign", "string:(unsigned, signed)", "unsigned")
+		self.registerKey("type", "string:(rpl, bin, json)", "")
 		self.registerKey("x", "string|[string|reference, number|string:(expand), string|math]+1", "")
+		self.registerKey("comment", "string", "")
 	#enddef
 
 	def parseFormat(self, key):
@@ -746,12 +978,27 @@ class DataFormat(object):
 				if not DataFormat.isCounted(typeName, True):
 					# Recast... TODO: Should this generate a validatation or
 					# is this enough?
-					self.data[key] = self.rpl.wrap(self.get(typeName), value.get())
+					self.data[key] = self.rpl.wrap(self.get(typeName), value.get(), self, key, *value.pos)
 				else: self.data[key] = value
 			#endif
 		else:
 			self.parentClass.__setitem__(self, key, value)
 		#endif
+	#enddef
+
+	def shareByType(self, filename, pretty):
+		extype = self.string("type") or filename.split(os.extsep)[-1]
+		if extype not in ["rpl", "json"]:#, "bin"]:
+			raise RPLError(
+				'Unknown export type "%s", use "type" key to explicitely define the export type.',
+				self
+			)
+		#endif
+		return self.rpl.share(filename, {
+			"rpl": RPLDataFile,
+			"json": JSONFile,
+			#"bin": BinFile,
+		}[extype], pretty)
 	#enddef
 
 	def importPrepare(self, rom, folder, filename=None, data=None, callers=[]):
@@ -761,54 +1008,53 @@ class DataFormat(object):
 			if self.parentClass != rpl.Serializable: return
 			filename = self.open(folder, "rpl", True)
 		#endif
-		if data:
-			if self.countExported() == 1: data = [data]
-			else: data = data.get()
-		else: data = self.rpl.share(filename, DataFile)
-		keys = [x for x in self.format]
+
+		if data is None:
+			data = self.shareByType(filename, False)[self.name]
+			one = False
+		else: one = self.oneExport()
+
+		keys = self.format.keys()
 		for k in keys: self.parseFormat(k)
+
 		for k in keys:
 			if k in self.command: continue
+			if one: use = data
+			elif k not in data:
+				raise RPLError(
+					'Key missing from data file: "%s"' % (filename),
+					self.name, k
+				)
+			else: use = data[k]
 			typeName = self.format[k]["type"]
-			if type(data) is list:
-				try: self[k] = data.pop(0)
-				except IndexError:
-					raise rpl.RPLError("Not enough data for %s. Cannot set %s." % (
-						self.name, k
-					))
-				#endtry
-			else:
-				try: self[k] = data.next()
-				except StopIteration:
-					raise rpl.RPLError("Not enough data for %s. Cannot set %s." % (
-						self.name, k
-					))
-				#endtry
-			#endif
 			if DataFormat.isCounted(typeName, True):
+				# If this is the only exported key, it was exported as a list
+				# instead of a struct/dict.
 				typeName = typeName.pointer()
 				typeName.unmanaged = False
 				if typeName.sizeFieldType == "len":
 					t = typeName.clone()
 					DataFormat.setLen(t, self.format[k]["size"])
-					try: t.importPrepare(rom, folder, filename, self[k], callers + [self])
-					except TypeError: t.importPrepare(rom, folder)
+					try: t.importPrepare(rom, folder, filename, use, callers + [self])
+					except TypeError as err:
+						# TODO: Can Python be more precise about what's
+						# raising the error than this?
+						if err.args[0].find("importPrepare") == -1: raise
+						t.importPrepare(rom, folder)
+					#endtry
 					self[k] = t
 				else:
-					#tmp = []
-					for x in self.get(self[k]):
+					for x in use.list():
 						t = typeName.clone()
 						try: t.importPrepare(rom, folder, filename, x, callers + [self])
 						except TypeError as err:
-							# TODO: Can Python be more precise about what's
-							# raising the error than this?
 							if err.args[0].find("importPrepare") == -1: raise
 							t.importPrepare(rom, folder)
-						#tmp.append(t)
+						#endtry
 					#endfor
-					self[k] = typeName#rpl.List(tmp)
+					self[k] = typeName
 				#endif
-			#endif
+			else: self[k] = use
 		#endfor
 	#enddef
 
@@ -885,56 +1131,49 @@ class DataFormat(object):
 		#endfor
 	#enddef
 
-	def exportDataLoop(self, rom, folder, datafile=None, callers=[]):
+	def exportDataLoop(self, rom, folder, datafile, to=None, key=None, callers=[]):
 		"""
 		Initially called from Data.exportData
 		Returns RPLData to write to the file
 		"""
-		ret = []
+		to = datafile.addStruct(key or self.name, to)
+		to.comment = self.string("comment")
 		# Ensures everything is loaded and tagged with commands, so nothing
 		# is accidentally exported.. TODO: Not optimal I don't think?
 		for k in self.format: self[k]
 		for k in self.format:
-			data = self[k]
-			typeName = self.format[k]["type"]
-			if DataFormat.isCounted(typeName):
-				try: data.exportDataLoop
-				except IndexError:
-					# Empty list.
-					data = rpl.List([])
-				except AttributeError:
-					# Handle things not specifically meant to be used as data types.
-					for x in self.list(data): x.exportData(rom, folder)
-					data = None
-				else:
-					# Handle things that are.
-					ls = [x.exportDataLoop(rom, folder, callers=callers + [self]) for x in data.clones]
-					data = rpl.List(ls)
-				#endtry
-			elif DataFormat.isCounted(typeName, True):
-				# Length as size field.
-				x = self.data[k]
-				try: x.exportDataLoop
-				except AttributeError:
-					# Handle things not specifically meant to be used as data types.
-					x.exportData(rom, folder)
-					data = None
-				else:
-					# Handle things that are.
-					data = x.exportDataLoop(rom, folder, callers=callers + [self])
-				#endif
-			#endif
 			# A command implies this data is inferred from the data that's
 			# being exported, so it shouldn't be exported itself.
-			if k not in self.command and data is not None:
-				if datafile is None: ret.append(data)
-				else: datafile.add(data)
-			#endif
+			if k in self.command: continue
+			typeName = self.format[k]["type"]
+			data = self.data[k]
+			if callers and callers[-1].name == "Data24b": print k, data
+			if DataFormat.isCounted(typeName, True):
+				if isinstance(data, rpl.RPLData): print data.get()
+				try: data.exportDataLoop
+				except AttributeError:
+					# Handle things that aren't.
+					if typeName.pointer().sizeFieldType == "len":
+						data.exportData(rom, folder)
+					else:
+						if data.clones:
+							for x in data.clones: x.exportData(rom, folder)
+						else: datafile.add(k, rpl.List([]), to)
+					#endif
+				else:
+					# Handle things that are specifically meant to be used as data types.
+					if typeName.pointer().sizeFieldType == "len":
+						data.exportDataLoop(rom, folder, datafile, to, k, callers + [self])
+					else:
+						if data.clones:
+							for x in data.clones:
+								x.exportDataLoop(rom, folder, datafile, to, k, callers + [self])
+							#endfor
+						else: datafile.add(k, rpl.List([]), to)
+					#endif
+				#endtry
+			else: datafile.add(k, data, to)
 		#endfor
-		if ret:
-			if self.countExported() > 1: return rpl.List(ret)
-			else: return ret[0]
-		#endif
 	#enddef
 
 	def calculateOffsets(self):
@@ -1049,21 +1288,27 @@ class DataFormat(object):
 		return size
 	#enddef
 
-	def countExported(self):
+	def oneExport(self):
 		"""
-		Returns how many different values are exported
+		If there's only one key exported, return the name. Otherwise False.
 		"""
-		if self.count is not None: return self.count
-		count = 0
+		if self.onekey is not None: return self.onekey
+		count, onekey = 0, None
 
 		# Ensure commands are set...
 		for k in self.format: self.parseFormat(k)
 
 		for k in self.format:
-			if k not in self.command: count += 1
+			if k not in self.command: count, onekey = count + 1, k
 		#endfor
-		self.count = count
-		return count
+
+		if count == 1:
+			self.onekey = onekey
+			return onekey
+		#endif
+
+		self.onekey = False
+		return False
 	#enddef
 #endclass
 
@@ -1098,8 +1343,6 @@ class Format(DataFormat, rpl.RPLStruct):
 	         Default is "right"</padside>
 	<sign>
 	sign:    Default sign, may be "signed" or "unsigned". Defaults to "unsigned"</sign>
-	<pretty>
-	pretty:  Pretty print data, particularly relevant to lists.</pretty>
 	<comment>
 	comment: Comment to write to the file. Great for when sharing the file.</comment>
 	<format>
@@ -1147,14 +1390,14 @@ class Data(DataFormat, rpl.Serializable):
 	<if all><imp rpl.Serializable.all />
 	</if>
 	<imp Format.all />
+	<pretty>
+	pretty:  Pretty print data, particularly relevant to lists.</pretty>
 	"""
 	typeName = "data"
 
 	def register(self):
 		DataFormat.register(self)
 		self.registerKey("pretty", "bool", "false")
-		#self.registerKey("format", "string", "")
-		self.registerKey("comment", "string", "")
 	#enddef
 
 	def __setitem__(self, key, data):
@@ -1186,24 +1429,9 @@ class Data(DataFormat, rpl.Serializable):
 
 	def exportData(self, rom, folder):
 		filename = self.open(folder, "rpl", True)
-		datafile = self.rpl.share(filename, DataFile)
-		datafile.comment = self["comment"].get()
+		datafile = self.shareByType(filename, bool(self.number("pretty")))
 		self.exportDataLoop(rom, folder, datafile)
 	#enddef
-
-#	def prepareForProc(self, cloneName, cloneKey, cloneRef):
-#		# This only matters here when exporting, it should already be prepared
-#		# when importing.
-#		if self.importing: return
-#		for k in self.format:
-#			dataType = self.get(self.parseFormat(k)["type"])
-#			# We only care about the format types
-#			if dataType[0:7] != "Format:": continue
-#			# If this needs to be prepared, run the get to read in the data
-#			if dataType[7:] == cloneName: self[k]
-#			# Note we don't break here because it can be referenced multiple times
-#		#endfor
-#	#enddef
 #endclass
 
 def reverseEvery(data, x):
@@ -1703,8 +1931,8 @@ class Map(rpl.RPLStruct):
 		#endif
 	#endif
 
-	def exportDataLoop(self, rom, folder, datafile=None, callers=[]):
-		return self.myData
+	def exportDataLoop(self, rom, folder, datafile, to, key, callers=[]):
+		datafile.add(key, self.myData, to)
 	#enddef
 
 	def basic(self):
@@ -2039,7 +2267,7 @@ class Pixel(rpl.String):
 	#enddef
 #endclass
 
-class Color(rpl.Named, rpl.HexNum, rpl.Literal, rpl.List):
+class Color(rpl.Named, rpl.Number):
 	typeName = "color"
 
 	names = {
@@ -2068,7 +2296,7 @@ class Color(rpl.Named, rpl.HexNum, rpl.Literal, rpl.List):
 				(data[2] & 0xff)
 			)
 			if len(data) == 4: self.data |= (255 - (data[3] & 0xff)) << 24
-		else: rpl.Named.set(self, data, ["int", "long"])
+		else: rpl.Named.set(self, data, ["int", "long", "list", "tuple"])
 	#enddef
 
 	def __unicode__(self):

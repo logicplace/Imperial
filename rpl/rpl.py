@@ -38,15 +38,16 @@ class RPLError(Exception):
 		# and the user should really have some.
 		self.positioned = False
 		pre = ""
+		posok = pos is not None and pos[0] is not None and pos[0] != -1
 		if container:
 			pre = "Error in %s" % (container)
 			if key is not None: pre += ".%s" % key
-			if pos[0] is not None:
+			if posok:
 				pre += " (line %i char %i)" % pos
 			#endif
 			pre += ": "
 			self.positioned = True
-		elif pos is not None and pos[0] is not None and pos[0] != -1:
+		elif posok:
 			pre = "Error in line %i char %i" % pos
 			self.positioned = True
 		#endif
@@ -277,7 +278,7 @@ class RPL(RPLObject):
 		 # Number or range (verify syntactically correct range later)
 		 # That is, any string of numbers, -, *, :, or :c: where c is one
 		 # lowercase letter.
-		 r'(%(r1)s%(r2)s%(r1)s:\-*+~%(r2)s*(?=[,\]\s]|$))|'
+		 r'(%(r1)s%(r2)s%(r1)s:\-*+~%(r2)s*(?=[,\]\}#\s]|$))|'
 		 # Key: Lowercase letters optionally followed by numbers.
 		 # Must be followed by a colon.
 		 r'(%(key)s):([ \t]*)|'
@@ -366,7 +367,7 @@ class RPL(RPLObject):
 		self.registerType(Math)
 	#enddef
 
-	def parse(self, inFile, onlyCareAboutTypes=[]):
+	def parse(self, inFile, onlyCareAboutTypes=[], **kwargs):
 		"""
 		Read in a file and parse it. The form is essentially structs with
 		key/value pairs in them. Each struct type has different functionality
@@ -485,7 +486,7 @@ class RPL(RPLObject):
 								genned = True
 							#endif
 
-							if structName in self.structsByName:
+							if structName in self.structsByName and not kwargs.get("dupNames", False):
 								raise RPLError('Struct name "%s" is already taken.' % structName)
 							else:
 								# TODO: This will die on substructs.
@@ -771,13 +772,15 @@ class RPL(RPLObject):
 		defs[key] = self.parseData(value, defs, key)
 	#enddef
 
-	def __unicode__(self):
+	def __unicode__(self, pretty=True):
 		"""
 		Write self as an RPL file.
 		Obviously this returns a string and does not actually write a file.
 		"""
-		# TODO: entire function
-		pass
+		ret = u""
+		n = u"\n\n" if pretty else u""
+		for child in self: ret += child.__unicode__(pretty) + n
+		return ret
 	#enddef
 
 	def registerType(self, classRef):
@@ -1431,12 +1434,24 @@ class RPLStruct(RPLObject):
 		self.virtuals[virtualName] = realName
 	#enddef
 
-	def __unicode__(self):
+	def __unicode__(self, pretty=True, tabs=u""):
 		"""
 		Write struct to RPL format.
 		"""
-		# TODO: Write this.
-		pass
+		if not pretty: tabs = u""
+		n = u"\n" if pretty else u""
+		nc = u"\n" if pretty else u","
+		sp = u" " if pretty else u""
+		ret = u"%s%s %s%s{%s" % (tabs, self.typeName, self.name, sp, n)
+		if pretty: tabs += u"\t"
+		for key, val in self.data.iteritems():
+			ret += u"%s%s:%s%s" % (tabs, key, sp, unicode(val))
+			# Only add a comma if one isn't there already.
+			if pretty or ret[-1] != ",": ret += nc
+		#endfor
+
+		for child in self: ret += n + child.__unicode__(pretty, tabs) + n
+		return ret + "}"
 	#enddef
 
 	def __getitem__(self, key):
@@ -2736,7 +2751,7 @@ class RefString(String):
 	#enddef
 
 	def __unicode__(self):
-		return '@`' + String.binchr.sub(String.replOut, self.string()) + '`'
+		return '@`' + String.binchr.sub(String.replOut, self.string()) + '`,'
 	#enddef
 #endclass
 

@@ -24,4 +24,5 @@ static regression {
 	endoflistnospacenumber: [lit, 1]
 	oneletter: a
 	a: one letter key
-}
+	commentnospacenumber: 1#23
+	endofstructnospacenumber: 1}

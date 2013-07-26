@@ -141,6 +141,7 @@ class Table(rpl.Serializable):
 			else:
 				try: clone.exportPrepare(rom, folder, callers + [self])
 				except TypeError: clone.exportPrepare(rom, folder)
+			#endtry
 			self.row.append(clone)
 			address += clone.len()
 		#endfor
@@ -150,10 +151,9 @@ class Table(rpl.Serializable):
 		for x in self.row: x.importDataLoop(rom, folder, rom.tell(), callers + [self])
 	#enddef
 
-	def exportDataLoop(self, rom, folder, datafile=None, callers=[]):
-		ret = []
-		for x in self.row: ret.append(x.exportDataLoop(rom, folder, datafile))
-		return rpl.List(ret)
+	def exportDataLoop(self, rom, folder, datafile, to, key, callers=[]):
+		to = datafile.addStruct(key, to)
+		for x in self.row: x.exportDataLoop(rom, folder, datafile, to, key, callers + [self])
 	#enddef
 
 	def calculateOffsets(self):
@@ -164,17 +164,6 @@ class Table(rpl.Serializable):
 		#endfor
 		return calcedOffset
 	#enddef
-
-#	def countExported(self):
-#		return len(self.row)
-#	#enddef
-
-#	def basic(self, callers=[]):
-#		"""
-#		Returns the name with a prefix, used for referencing this as a type.
-#		"""
-#		return rpl.Literal("Table:" + self.name)
-#	#enddef
 
 	def len(self):
 		"""

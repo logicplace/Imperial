@@ -1,1 +1,1 @@
-"hello"
+static MappedStr {xstr: "hello"}

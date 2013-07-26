@@ -165,6 +165,8 @@ class TestParse(RPLTestCase):
 		])
 		self.check(regression, "oneletter", "literal", "a")
 		self.check(regression, "a", "literal", "one letter key")
+		self.check(regression, "commentnospacenumber", "number", 1)
+		self.check(regression, "endofstructnospacenumber", "number", 1)
 	#enddef
 #endclass
 

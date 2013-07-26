@@ -1,2 +1,5 @@
-[ [ "id", 3 ], [ "name", 1 ], [ "isButts", 0 ], [ "price", 2 ] ]
-[ [ 0, "Sword", 0, 100 ], [ 1, "Bow", 0, 110 ], [ 2, "Butt", 1, 200 ], [ 3, "Potion", 0, 30 ], [ 4, "Pork Butt", 1, 50000 ] ]
+static Main {xdata: [[0, "Sword", 0, 100], [1, "Bow", 0, 110], [2, "Butt", 1, 200], [3, "Potion", 0, 30], [4, "Pork Butt", 1, 50000]]
+	static xcolumns {xname: "id", xtype: 3}
+	static xcolumns {xname: "name", xtype: 1}
+	static xcolumns {xname: "isButts", xtype: 0}
+	static xcolumns {xname: "price", xtype: 2}}

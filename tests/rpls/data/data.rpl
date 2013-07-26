@@ -1,1 +1,1 @@
-[ "abcdefgh", "buttmonkies", "samurai pizza cats!" ]
+static TestFile {xpstrs: ["abcdefgh", "buttmonkies", "samurai pizza cats!"]}
