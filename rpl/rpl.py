@@ -28,7 +28,7 @@ from collections import OrderedDict as odict
 ################################################################################
 
 class RPLError(Exception):
-	def __init__(self, error, container=None, key=None, pos=None):
+	def __init__(self, error, container=None, key=None, pos=None, verb="in", etype="Error"):
 		# Container can be a string or a RPLStruct.
 		# So ensure that the name is used, rather than the repr.
 		try: container = container.name
@@ -37,10 +37,10 @@ class RPLError(Exception):
 		# information, as some errors during parsing may not add any,
 		# and the user should really have some.
 		self.positioned = False
-		pre = ""
+		pre = etype
 		posok = pos is not None and pos[0] is not None and pos[0] != -1
 		if container:
-			pre = "Error in %s" % (container)
+			pre += " %s %s" % (verb, container)
 			if key is not None: pre += ".%s" % key
 			if posok:
 				pre += " (line %i char %i)" % pos
@@ -48,9 +48,9 @@ class RPLError(Exception):
 			pre += ": "
 			self.positioned = True
 		elif posok:
-			pre = "Error in line %i char %i" % pos
+			pre = " %s line %i char %i" % (verb, pos[0], pos[1])
 			self.positioned = True
-		#endif
+		else: pre += ": "
 		self.args = (pre + error,)
 	#enddef
 #endclass
@@ -421,7 +421,8 @@ class RPL(RPLObject):
 
 		You may see tests/rpls/rpl.rpl for an example.
 		"""
-		raw = helper.readFrom(inFile) # Raw data from file.
+		if kwargs.get("string", False): raw = inFile
+		else: raw = helper.readFrom(inFile) # Raw data from file.
 
 		# Prelit allows colons to be inside literals.
 		lastLit, prelit = None, "" # Helpers for literal forming.
@@ -3256,7 +3257,8 @@ class Math(Literal, Number):
 
 	def eval(self, op, var):
 		# Statics.
-		if type(op) is not tuple:
+		if type(op) in [int, long, float]: return op
+		elif type(op) is not tuple:
 			if op[0] == "@": return RPLRef(op[1:], self.rpl, self.container, self.mykey, *self.pos).number()
 			try:
 				if op[0] == "$": return int(op[1:], 16)
@@ -3307,13 +3309,103 @@ class Math(Literal, Number):
 			if cmd == 10: return lval & rval
 			if cmd == 11: return lval ^ rval
 			if cmd == 12: return lval | rval
+			# Internal operators.
+			if cmd == 30: return float(lval) / rval
 		#endif
 
 		raise RPLError("Impossibility in equasion.", self.container, self.mykey, self.pos)
 	#enddef
 
-	def get(self, var={}): return self.eval(self.data, var)
-	def number(self, var={}): return self.eval(self.data, var)
+	def warnfloat(self, x, var={}):
+		x = self.eval(x, var)
+		if type(x) is float and int(x) != x:
+			helper.err(RPLError(
+				"Resultant value was a float.",
+				self.container, self.mykey, self.pos, etype="Warning"
+			))
+		#endif
+		return int(x)
+	#enddef
+
+	def solveForX(self, eq, var={}, solveFor=None):
+		# Find reference with no value.
+		def dive(me, parents):
+			for i, x in enumerate(me[1:]):
+				i += 1
+				ppme = parents + [i]
+				if type(x) is tuple:
+					t = dive(x, ppme)
+					if t: return t
+				elif solveFor:
+					if x == solveFor: return ppme, x
+				elif x[0] == "@":
+					ref = RPLRef(x[1:], self.rpl, self.container, self.mykey, *self.pos)
+					try: ref.number()
+					except RPLKeyError: return ppme, ref
+				#endif
+			#endfor
+		#enddef
+		path, ref = dive(self.data, [])
+
+		if not path: return # Nothing to do
+
+		# Make new equasion.
+		cur = self.data
+		for idx in path:
+			op = cur[0]
+
+			if op == 1: eq = (1, eq)
+			elif op in [5, 10, 12]:
+				raise RPLError(
+					"Needed to solve %s but impossible to invert." % {
+						5: "%", 10: "&", 12: "|"
+					}[cur[0]], self.container, self.mykey, self.pos
+				)
+			# x somewhere in lvalue.
+			elif idx == 1:
+				if op in [8, 9]:
+					helper.err(RPLError("Inverting %s may be lossy." % (
+						"<<" if op == 8 else ">>"
+					), self.container, self.mykey, self.pos, etype="Warning"))
+				#endif
+
+				if   op == 2: eq = (2, eq, (30, 1, cur[2]))
+				elif op != 0:
+					eq = ({
+						3: 30, 4: 3, 6: 7, 7: 6, 8: 9, 9: 8, 11: 11, 30: 3
+					}[op], eq, cur[2])
+				#endif
+			# x somewhere in rvalue.
+			else:
+				if   op == 2:
+					raise RPLError(
+						"Needed to solve y^x but inversion is not supported.",
+						self.container, self.mykey, self.pos
+					)
+				elif op in [8, 9]:
+					raise RPLError(
+						"Needed to solve y %s x but impossible to invert." % (
+							"<<" if op == 8 else ">>"
+						), self.container, self.mykey, self.pos
+					)
+				elif op != 0:
+					eq = ({
+						3: 30, 4: 3, 6: 7, 7: 6, 11: 11, 30: 3
+					}[op], eq, cur[1])
+				#endif
+			#endif
+			cur = cur[idx]
+		#endfor
+
+		# Set value.
+		value = self.warnfloat(eq, var)
+		if solveFor: var[solveFor] = value
+		else: ref.set(value)
+		return value
+	#enddef
+
+	def get(self, var={}): return self.warnfloat(self.data, var)
+	def number(self, var={}): return self.warnfloat(self.data, var)
 	def string(self): RPLData.string(self)
 
 	def __unicode__(self, x=None):
