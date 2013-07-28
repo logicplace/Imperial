@@ -18,6 +18,9 @@
 		<style id="key" _name="Key Name" map-to="def:builtin"/>
 		<style id="number" _name="Number" map-to="def:decimal"/>
 		<style id="hex" _name="Hexadecimal" map-to="def:base-n-integer"/>
+		<style id="octal" _name="Octal" map-to="def:base-n-integer"/>
+		<style id="binary" _name="Binary" map-to="def:base-n-integer"/>
+		<style id="base" _name="Misc. Base Number" map-to="def:base-n-integer"/>
 		<style id="string" _name="String" map-to="def:string"/>
 		<style id="error" _name="Error" map-to="def:error"/>
 		<style id="escape" _name="Escaped character" map-to="def:special-char"/>
@@ -121,6 +124,35 @@
 			<match>@\%{struct-name}(?:(?:\.\%{key-name})(?:\[[0-9]+\])*)*</match>
 		</context>
 
+		<context id="math" style-ref="string" end-at-line-end="true">
+			<!-- Math does not require a + to start it, but this is an easy and okay looking way to identify it.
+			Also, if the string starts with a number or reference, you need to do this to make it a literal.
+			The other option would be to make it a string, but then the highlighter can't really identify it. -->
+			<start>\+(?=[^,\["'}\] \t])</start><end>(?=[#,\]}])</end>
+			<include>
+				<context ref="ref"/>
+				<context ref="hexnum"/>
+				<context id="hexnum2" style-ref="hex">
+					<match>0x[0-9a-fA-F]+</match>
+				</context>
+				<context id="octal" style-ref="octal">
+					<match>0o?[0-7]+</match>
+				</context>
+				<context id="binary" style-ref="binary">
+					<!-- The match for % for binary is not good, but there isn't much option for gEdit.
+					It would be best to just separate the % and number with a space when not meaning binary. -->
+					<match>(?:0b|(?&lt;![0-9a-zA-Z])(?&lt;![0-9a-zA-Z] )%)[01]+</match>
+				</context>
+				<context id="base" style-ref="base">
+					<match>[0-9a-zA-Z]+_(?:[12][0-9]|3[0-6]|[2-9])</match>
+				</context>
+				<context id="badbase" style-ref="error">
+					<match>[0-9a-zA-Z]+_[0-9]+</match>
+				</context>
+				<context ref="number"/>
+			</include>
+		</context>
+
 		<context id="literal" style-ref="string">
 			<match>[^,\["'}\] \t][^#,\]}]*</match>
 		</context>
@@ -144,6 +176,7 @@
 				<context ref="number"/>
 				<context ref="hexnum"/>
 				<context ref="ref"/>
+				<context ref="math"/>
 				<context ref="literal"/>
 			</include>
 		</context>
@@ -166,37 +199,17 @@
 						<context ref="hexnum"/>
 						<context ref="number"/>
 						<context ref="ref"/>
+						<context ref="math"/>
 						<context ref="literal"/>
 					</include>
 				</context>
 			</include>
 		</context>
 
-		<context id="rpl-data">
-			<include>
-				<context ref="def:shell-like-comment"/>
-				<context ref="list"/>
-				<context ref="string"/>
-				<context ref="refstr"/>
-				<context ref="mstring"/>
-				<context ref="hexnum"/>
-				<context ref="number"/>
-				<context ref="ref"/>
-				<context ref="literal"/>
-			</include>
-		</context>
-
-		<context id="rpl-reg">
+		<context id="rpl" class="no-spell-check">
 			<include>
 				<context ref="def:shell-like-comment"/>
 				<context ref="struct"/>
-			</include>
-		</context>
-
-		<context id="rpl" class="no-spell-check">
-			<include>
-				<context ref="rpl-reg"/>
-				<context ref="rpl-data"/>
 			</include>
 		</context>
 	</definitions>

@@ -1,12 +1,12 @@
 RPL { lib: std }
 
 calc tests {
-	test1: `1 + 1`                # = 2
-	test2: `3 * 2`                # = 6
-	test3: `3 ** 2`               # = 9
-	test4: `5 + 6 * 8 ** 2`       # = 389
-	test5: `(5 + 6) * 8 ** 2`     # = 704
-	test6: `(((8 + 1) * 3) ** 2)` # = 729
+	test1: +1 + 1                 # = 2
+	test2: +3 * 2                 # = 6
+	test3: +3 ** 2                # = 9
+	test4: +5 + 6 * 8 ** 2        # = 389
+	test5: +(5 + 6) * 8 ** 2      # = 704
+	test6: +(((8 + 1) * 3) ** 2)  # = 729
 	# A randomly generated sequence.
 	test7: `7 * (12 ^ 10 & 3 + 2 ** 11) + 8 % 9`
 	       `>> 9 & (9 - 4) * 5 >> 8 * 5 / 1 ^ 3`
@@ -15,19 +15,15 @@ calc tests {
 	       `- 1 << 12 | 11 % 3 ** 2 % (7 & 8 **`
 	       `5 - 8 | 7 >> 8 ** 8 | 2 & 7 << 12`
 	       `<< 2 ^ 11 - 12 * 7)`  # = -69
-	test8: @`@this.test1 - 1`     # = 1
-	# The only time that this form would be needed over the above
-	# is if you were referencing an enum or something. This is
-	# because the above form prefers a string, and the bottom
-	# enforces a number.
-	test9: `@this.test1 - 1`      # = 1
+	test8: +@this.test1 - 1       # = 1
 
 	# Base tests.
-	test10: '$$deadbeef'          # = 3735928559
-	test11: '0xbeadbabe'          # = 3199056574
-	test12: '0777'                # = 511
-	test13: '0o41'                # = 33
-	test14: '%00110011'           # = 51
-	test15: '0b11001100'          # = 204
-	test16: 'butts_36'            # = 19914112
+	test9:  +1                    # = 1
+	test10: +$deadbeef            # = 3735928559
+	test11: +0xbeadbabe           # = 3199056574
+	test12: +0777                 # = 511
+	test13: +0o41                 # = 33
+	test14: +%00110011            # = 51
+	test15: +0b11001100           # = 204
+	test16: +butts_36             # = 19914112
 }
