@@ -4,6 +4,7 @@ iostatic File {
 	name: [data.rpl, test.data.rpl]
 }
 
+# One test before data struct...
 format PascalStr {
 	endian: little
 	sign: unsigned
@@ -17,8 +18,54 @@ data TestFile {
 	sign: unsigned
 	file: @File.name
 
-	xpstrbase: [number, 4]
-	# TODO: More tests in header here
+	# Bases in file.
+	xpstrbase:        [number, 4]
+	xitembase:        [number, 4]
+	xexpansebasebase: [number, 4]
+	xlenendaddr:      [number, 4]
+	xcountendaddr:    [number, 4]
+
+	# Pascal strings:
 	xpstramt: [number, 2, @this.xpstrbase]
 	xpstrs: [@PascalStr, @this.xpstramt]
+
+	# Item listing:
+	xitemamt: [number, 2, @this.xitembase]
+	xitems: [@Item, @this.xitemamt]
+
+	# Expanse test:
+	xexpanse: [string, expand, @this.xexpansebase]
+	xexpansebase: [number, 4, @this.xexpansebasebase]
+
+	# Length end test:
+	xlenend: [string, @this.xlenendaddr, end]
+
+	# Count end test:
+	xcountend: [@PascalStr, @this.xcountendaddr, end]
+}
+
+# The rest can come after...
+format Item {
+	xid: [number, 2]
+	#xname: [@PascalStr, 1]
+	format: [@PascalStr, name]
+	#xdesc: [@PascalStr, 1]
+	format: [@PascalStr, desc]
+	xlevel: [number, 1]
+	# Stats:
+	xstr: [number, 2]
+	xdex: [number, 2]
+	xdef: [number, 2]
+	xcon: [number, 2]
+	# Attributes are dynamic!
+	xattramt: [number, 1]
+	xattrs: [@Attribute, @this.xattramt]
+}
+
+format Attribute {
+	#xname: [@PascalStr, 1]
+	format: [@PascalStr, name]
+	#xinteral: [@PascalStr, 1]
+	format: [@PascalStr, internal]
+	xchange: [number, 4]
 }

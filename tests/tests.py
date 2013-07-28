@@ -507,6 +507,9 @@ class IOTest(RPLTestCase):
 					"".join([chr(x[0]) + chr(x[1]) + chr(x[2]) for x in list(data.convert().getdata())]),
 					"".join([chr(x[0]) + chr(x[1]) + chr(x[2]) for x in list(test.convert().getdata())])
 				)
+			elif helper.allIn(exts, ["rpl", "txt", "json", "csv"]):
+				data = read([folder, file1], "rb").replace("\r\n", "\n").replace("\n\r", "\n").replace("\r", "\n").rstrip("\n")
+				test = read([folder, file2], "rb").replace("\r\n", "\n").replace("\n\r", "\n").replace("\r", "\n").rstrip("\n")
 			else:
 				data = read([folder, file1], "rb")
 				test = read([folder, file2], "rb")

@@ -143,7 +143,7 @@ class DataStatic(rpl.Static):
 				if pretty: next += u"[" + os.linesep + (tabs + u"\t").join(l) + os.linesep + tabs + u"]"
 				else: next += u"[" + u", ".join(l) + u"]"
 				if isList: children.append(next)
-				else: keys.append((next, True))
+				else: keys.append((next, False))
 			else:
 				for x in (v if type(v) is list else [v]): children.append(x.__unicode__(pretty, tabs + u"\t"))
 			#endif
@@ -752,6 +752,7 @@ class DataFormat(object):
 		self.registerKey("type", "string:(rpl, bin, json)", "")
 		self.registerKey("x", "string|[string|reference, number|string:(expand), string|math]+1", "")
 		self.registerKey("comment", "string", "")
+		self.registerKey("format", "[reference, string].0", "")
 	#enddef
 
 	def parseFormat(self, key):
@@ -852,6 +853,7 @@ class DataFormat(object):
 	#enddef
 
 	def __getitem__(self, key):
+		if key == "format": raise RPLError("Write-only key.", self, key)
 		if key in self.data and self.data[key].struct():
 			# TODO: Think this through more.
 			if self.data[key].sizeFieldType == "len": return self.data[key].basic()
@@ -865,6 +867,7 @@ class DataFormat(object):
 				if self.importing:
 					if key in self.command:
 						com = self.command[key]
+						fmtc1 = self.parseFormat(com[1])
 						if com[0] == "len":
 							if DataFormat.isCounted(fmt["type"], True):
 								# Grab projected size of referenced struct.
@@ -874,13 +877,13 @@ class DataFormat(object):
 								# TODO: Should this rather be a projected size?
 								self.data[key] = rpl.Number(len(
 									self[com[1]].serialize(**self.prepOpts(
-										self.format[com[1]], size=False
+										fmtc1, size=False
 									))
 								))
 							#endif
 						elif com[0] == "count":
 							try:
-								typeName = self.pointer(self.parseFormat(com[1])["type"])
+								typeName = self.pointer(fmtc1["type"])
 								self.data[key] = rpl.Number(len(self[com[1]].clones))
 							except RPLBadType: raise RPLError("Tried to count basic type.")
 						elif com[0] == "offset":
@@ -897,6 +900,13 @@ class DataFormat(object):
 					self.rpl.rom.seek(address)
 					size, expand = self.get(fmt["size"]), False
 					if size == "expand":
+						if fmt["end"]:
+							helper.err(RPLError(
+								"expand size with end is useless. Ignoring.",
+								self, key, self.data[key].pos, etype="Warning"
+							))
+							fmt["end"] = False
+						#endif
 						expand = True
 						keys = self.format.keys()
 						size = self.offsetOf(keys[
@@ -905,45 +915,49 @@ class DataFormat(object):
 						fmt["size"] = rpl.Number(size)
 					#endif
 					if DataFormat.isCounted(fmt["type"], True):
-						#tmp = []
-						ref = self.pointer(fmt["type"])
-						def tmpfunc(address):
-							t = ref.clone()
+						ref = self.pointer(fmt["type"]).clone()
+						def tmpfunc(address, t):
 							DataFormat.setBase(t, rpl.Number(address))
-							if t.sizeFieldType == "len": DataFormat.setLen(t, fmt["size"])
 							try: t.exportPrepare
 							except AttributeError: pass
 							else:
 								try: t.exportPrepare(self.rpl.rom, [], [self])
 								except TypeError: t.exportPrepare(self.rpl.rom, [])
 							#endif
-							#tmp.append(t)
-							return address + t.len(), t
+							return address + t.len()
 						#enddef
 
-						# Change this to end address to just use end's functionality
-						if expand: size += base
-						if fmt["end"] or expand:
-							count = 0
-							while address < size:
-								address, _ = tmpfunc(address)
-								count += 1
-							#endwhile
-							if address > size:
-								raise RPLError("Couldn't fit %s.%s into the available space perfectly." % (self.name, key))
-							#endif
-							# Adjust to the actual value..
-							fmt["size"] = rpl.Number(count)
-							self.data[key] = ref#rpl.List(tmp)
-						elif ref.sizeFieldType == "len":
+						if ref.sizeFieldType == "len":
+							# Use data until "size".
+							if fmt["end"]: fmt["size"], fmt["end"] = rpl.Number(size - address, self.rpl, self, key, *fmt["size"].pos), False
 							# Size is length.
-							address, self.data[key] = tmpfunc(address)
+							DataFormat.setLen(ref, fmt["size"])
+							address = tmpfunc(address, ref)
 						else:
-							# Size is count.
-							for i in helper.range(size): address, _ = tmpfunc(address)
-							self.data[key] = ref#rpl.List(tmp)
+							if fmt["end"] or expand:
+								# Change this to end address to just use end's functionality
+								if expand: size += base
+								count = 0
+								while address < size:
+									address = tmpfunc(address, ref.clone())
+									count += 1
+								#endwhile
+								if address > size:
+									raise RPLError("Couldn't fit %s.%s into the available space perfectly." % (self.name, key))
+								#endif
+								# Adjust to the actual value..
+								fmt["size"] = rpl.Number(count)
+							else:
+								# Size is count.
+								for i in helper.range(size): address = tmpfunc(address, ref.clone())
+							#endif
 						#endif
+						self.data[key] = ref
 					else:
+						if fmt["end"]:
+							size, fmt["end"] = size - address, False
+							fmt["size"] = rpl.Number(size, self.rpl, self, key, *fmt["size"].pos)
+						#endif
 						typeName = self.get(fmt["type"])
 						self.data[key] = self.rpl.wrap(typeName)
 						self.data[key].unserialize(
@@ -958,9 +972,42 @@ class DataFormat(object):
 	#enddef
 
 	def __setitem__(self, key, value):
+		if key == "format":
+			data = self.keys[key][0].verify(value)
+
+			if not data.reference():
+				try:
+					data, prefix = tuple(data.list())
+					prefix = prefix.string()
+				except RPLError: prefix = ""
+			else: prefix = ""
+
+			if data.reference() and data.keyless(): struct = data.pointer()
+			else: struct = self.rpl.structsByName[self.get(data)]
+			try: struct.format
+			except AttributeError:
+				raise RPLError("Attempted to reference non-format type.", self, key, value.pos)
+			else:
+				# Set to managed.
+				struct.unmanaged = False
+				for x in struct.format:
+					dest = "x" + prefix + x[1:] if prefix else x
+					self.format[dest] = deepcopy(struct.format[x], {"parent": self})
+					# Update the references (this relies on the above being list form..
+					# that means the format should only be used in format: calls..
+					for d in self.format[dest]:
+						if d.reference():
+							d.container = self
+							d.mykey = dest
+							# TODO: Don't like doing direct edits like this.
+							if prefix and self.refersToSelf(d): d.keysets[0] = ("x" + prefix + d.keysets[0][0][1:], d.keysets[0][1])
+						#endif
+					#endfor
+				#endfor
+			#endtry
 		# Special handling for keys starting with x
 		# Note: What you set here is NOT the data, so it CANNOT be referenced
-		if key[0] == "x":
+		elif key[0] == "x":
 			if key not in self.format:
 				self.parentClass.__setitem__(self, "x", value)
 				tmp = self.data["x"]
@@ -1032,27 +1079,27 @@ class DataFormat(object):
 				# instead of a struct/dict.
 				typeName = typeName.pointer()
 				typeName.unmanaged = False
+				myType = typeName.clone()
 				if typeName.sizeFieldType == "len":
-					t = typeName.clone()
-					DataFormat.setLen(t, self.format[k]["size"])
-					try: t.importPrepare(rom, folder, filename, use, callers + [self])
+					DataFormat.setLen(myType, self.format[k]["size"])
+					try: myType.importPrepare(rom, folder, filename, use, callers + [self])
 					except TypeError as err:
 						# TODO: Can Python be more precise about what's
 						# raising the error than this?
 						if err.args[0].find("importPrepare") == -1: raise
-						t.importPrepare(rom, folder)
+						myType.importPrepare(rom, folder)
 					#endtry
-					self[k] = t
+					self[k] = myType
 				else:
 					for x in use.list():
-						t = typeName.clone()
+						t = myType.clone()
 						try: t.importPrepare(rom, folder, filename, x, callers + [self])
 						except TypeError as err:
 							if err.args[0].find("importPrepare") == -1: raise
 							t.importPrepare(rom, folder)
 						#endtry
 					#endfor
-					self[k] = typeName
+					self[k] = myType
 				#endif
 			else: self[k] = use
 		#endfor
@@ -1093,12 +1140,12 @@ class DataFormat(object):
 				if com[0] in ["len", "count"]:
 					fmtc1 = self.format[com[1]]
 					if com[0] == "len" and fmtc1["end"]:
-						self[k] = data = rpl.Number(data.get() + fmtc1["offset"])
+						data = rpl.Number(data.number() + fmtc1["offset"])
 					elif com[0] == "count" and fmtc1["end"]:
 						# This was actually a count, not a size..
 						size = 0
 						for x in self.pointer(com[1]).clones: size += x.len()
-						self[k] = data = rpl.Number(size + fmtc1["offset"])
+						data = rpl.Number(size + fmtc1["offset"])
 					#endif
 				#endif
 			#endif
@@ -1210,7 +1257,6 @@ class DataFormat(object):
 						if fmt["end"]:
 							# TODO: Next entry should have an offset
 							DataFormat.setBase(x, rpl.Number(base + calcedOffset))
-							pass
 						else:
 							# Size is count
 							for c in tnr.clones:
@@ -1266,10 +1312,12 @@ class DataFormat(object):
 			#endif
 			if prevFmt["end"]: fmt["offset"] = size
 			else: fmt["offset"] = self.offsetOf(prevKey) + size
-			if fmt["end"]:
-				fmt["size"] = rpl.Number(self.get(fmt["size"]) - fmt["offset"])
-				fmt["end"] = False
-			#endif
+#			if fmt["end"]:
+#				tmp = self.get(fmt["size"]) - fmt["offset"]
+#				print self, key, tmp
+#				fmt["size"] = rpl.Number(tmp)
+#				fmt["end"] = False
+#			#endif
 			return fmt["offset"]
 		#endfor
 	#enddef
@@ -1281,8 +1329,8 @@ class DataFormat(object):
 			fmt = self.parseFormat(k)
 			data = self[k]
 			if DataFormat.isCounted(self.format[k]["type"]):
-				for x in self.get(data): size += x.len()
-			else: size += self.get(fmt["size"])
+				for x in data.clones: size += x.len()
+			else: size += self.number(fmt["size"])
 		#endfor
 		self._len = size
 		return size
@@ -1315,14 +1363,21 @@ class DataFormat(object):
 class Format(DataFormat, rpl.RPLStruct):
 	"""
 	Represents the format of packed data.
-	Same as [data] but does not import or export.
+	Same as [data] but does not import or export directly.
 	<all>
 	To describe the format, one must add keys prefixed with "x"
 	Order is important, of course. The format for a field's description is:
 	[type, size, offset?, endian?, sign?, pad char?, alignment?, end?]
 	All entries with a ? are optional, and order of them doesn't matter.
 	    Type: Datatype by name, for example: string, number
-	    Size: Size of the field in bytes
+	          This may also be a reference to a struct.
+	    Size: Size of the field in bytes or number of entries of this type.
+	          The latter can only be used when referencing a struct in the type
+	          field, but that struct's type can define whether it's regarded as
+	          length or count. Check the type's documentation for details.
+	          This may be set to "expand" to use the whole space until the next
+	          entry. Because of this, the next entry will likely need an explicit
+	          offset.
 	    Offset: Offset from base to where this entry is. By default this is
 	            calculated from the sizes, but there are times it may be
 	            necessary to supply it (dynamic sizing in the middle).
@@ -1332,7 +1387,7 @@ class Format(DataFormat, rpl.RPLStruct):
 	    Alignment: Only relevant to strings, can be "left", "right", "center",
 	               or "rcenter"
 	    End: Rather than size, Size is actually the address to stop reading.
-	         Use the literal word "end"
+	         Therefore it's exclusive. Use the literal word "end"
 	<endian>
 	endian:  Default endian, may be "little" or "big". Defaults to "little"</endian>
 	<padding>
@@ -1354,13 +1409,6 @@ class Format(DataFormat, rpl.RPLStruct):
 	def __init__(self, top, name, parent=None):
 		DataFormat.__init__(self, top, name, parent)
 		self.base = None
-	#enddef
-
-	def basic(self, callers=[]):
-		"""
-		Returns the name with a prefix, used for referencing this as a type.
-		"""
-		return rpl.Literal("Format:" + self.name)
 	#enddef
 
 	def base(self, value=None, rom=None, offset=0):
@@ -1398,28 +1446,6 @@ class Data(DataFormat, rpl.Serializable):
 	def register(self):
 		DataFormat.register(self)
 		self.registerKey("pretty", "bool", "false")
-	#enddef
-
-	def __setitem__(self, key, data):
-		if key == "format":
-			if data.reference() and data.keyless(): struct = data.pointer()
-			else: struct = self.rpl.structsByName[self.get(data)]
-			try: struct.format
-			except AttributeError:
-				raise RPLError("Attempted to reference non-format type in data.format")
-			else:
-				# Set to managed.
-				struct.unmanaged = False
-				for x in struct.format:
-					self.format[x] = deepcopy(struct.format[x], {"parent": self})
-					# Update the references (this relies on the above being list form..
-					# that means the format should only be used in format: calls..
-					for d in self.format[x]:
-						if d.reference(): d.container = self
-					#endfor
-				#endfor
-			#endtry
-		else: DataFormat.__setitem__(self, key, data)
 	#enddef
 
 	def importData(self, rom, folder):
@@ -1983,9 +2009,7 @@ class Calc(rpl.Static):
 	typeName = "calc"
 
 	def __setitem__(self, key, value):
-		try:
-			value.string()
-			self.data[key] = self.rpl.wrap("math", value.escaped(), value.container, value.mykey, *value.pos)
+		try: self.data[key] = self.rpl.wrap("math", value.string(), value.container, value.mykey, *value.pos)
 		except RPLBadType:
 			# If .string() or wrapping fails, try it as a number.
 			try: value.number()

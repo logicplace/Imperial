@@ -28,7 +28,7 @@ from collections import OrderedDict as odict
 ################################################################################
 
 class RPLError(Exception):
-	def __init__(self, error, container=None, key=None, pos=None, verb="in", etype="Error"):
+	def __init__(self, error, container=None, key=None, pos=None, verb=True, etype="Error", pre=None):
 		# Container can be a string or a RPLStruct.
 		# So ensure that the name is used, rather than the repr.
 		try: container = container.name
@@ -37,22 +37,42 @@ class RPLError(Exception):
 		# information, as some errors during parsing may not add any,
 		# and the user should really have some.
 		self.positioned = False
-		pre = etype
-		posok = pos is not None and pos[0] is not None and pos[0] != -1
-		if container:
-			pre += " %s %s" % (verb, container)
-			if key is not None: pre += ".%s" % key
-			if posok:
-				pre += " (line %i char %i)" % pos
+		self.container, self.key, self.pos = container, key, pos
+		if pre is None:
+			pre = ""
+
+			# Form pos string...
+			if pos is not None:
+				pl = pos[0] is not None and pos[0] != -1
+				pc = pos[1] is not None and pos[1] != -1
+				if pl and pc: pos = "line %i char %i" % pos
+				elif pl: pos = "line %i" % pos[0]
+				elif pc: pos = "char %i" % pos[1]
+				else: pos = ""
 			#endif
-			pre += ": "
-			self.positioned = True
-		elif posok:
-			pre = " %s line %i char %i" % (verb, pos[0], pos[1])
-			self.positioned = True
-		else: pre += ": "
-		self.args = (pre + error,)
+
+			if container:
+				if verb: pre = "%s in %s" % (etype, container)
+				else: pre = "%s %s" % (etype, container)
+				if key is not None: pre += ".%s" % key
+				if pos: pre += " (%s)" % pos
+				self.positioned = True
+			elif key:
+				if verb: pre = "%s in key %s" % (etype, key)
+				else: pre = "%s key %s" % (etype, key)
+				if pos: pre += " (%s)" % pos
+				self.positioned = True
+			elif pos:
+				if verb: pre = "%s at %s" % (etype, pos)
+				else: pre = "%s %s" % (etype, pos)
+				self.positioned = True
+			else: pre = etype
+		#endif
+		self.args = (pre, error)
 	#enddef
+
+	def __unicode__(self): return ": ".join(self.args)
+	def __str__(self): return str(unicode(self))
 #endclass
 class RPLKeyError(RPLError): pass
 class RPLBadType(Exception): pass
@@ -286,7 +306,7 @@ class RPL(RPLObject):
 		 r'([{}\[\],])|'
 		 # Reference: @StructName.keyname[#][#][#] keyname and indexes are
 		 # optional. Indexing and keynames are infinitely contiguous.
-		 r'@([^%(lit)s.]+(?:(?:\.%(key)s)(?:\[[0-9]+\])*)*)|'
+		 r'@([^%(lit)s.@]+(?:(?:\.%(key)s)(?:\[[0-9]+\])*)*)|'
 		 # Literal: Unquoted string or struct name/type.
 		 r'([^%(lit)s]+)|'
 		 # Comment.
@@ -299,7 +319,7 @@ class RPL(RPLObject):
 			# Range part 2.
 			"r2": r']|(?<!\w)[a-z](?=:[a-z$0-9])|(?<=[a-z$0-9]:)[a-z](?!\w)|\$[0-9a-fA-F]+)',
 			# Invalid characters for a Literal.
-			"lit": r'{}\[\],\$@"#\r\n' r"'",
+			"lit": r'{}\[\],"#\r\n' r"'",
 			# Valid key name.
 			"key": r'[a-z]+[0-9]*'
 		}
@@ -477,7 +497,7 @@ class RPL(RPLObject):
 							structType = structHead[0]
 							# Keep a count per type for generated names.
 							counts[structType] = counts.get(structType, -1) + 1
-							if len(structHead) >= 2: structName, genned = structHead[1], False
+							if len(structHead) == 2: structName, genned = structHead[1], False
 							else:
 								# Form name from type + incrimenter.
 								# This commented part is effectively what that loop did,
@@ -485,6 +505,10 @@ class RPL(RPLObject):
 								#counts[structType] += len(self.structsByName)
 								structName = "%s%i" % (structType, counts[structType])
 								genned = True
+							#endif
+
+							if helper.oneOfIn(".@", structName):
+								raise RPLError("Struct name must not contain periods or at signs.")
 							#endif
 
 							if structName in self.structsByName and not kwargs.get("dupNames", False):
@@ -551,9 +575,7 @@ class RPL(RPLObject):
 				#endif
 			except RPLError as err:
 				if err.positioned: raise
-				raise RPLError("Error in line %i char %i: %s" % (
-					line, char, err.args[0]
-				))
+				raise RPLError(err.args[1], pos=(line, char))
 			#endtry
 		#endfor
 	#enddef
@@ -1179,9 +1201,7 @@ class RPLTypeCheck(object):
 				if flow != "]": lastWasListEnd = False
 				if not flow or flow not in "*+!~.": lastWasRep = False
 			except RPLError as err:
-				raise RPLError('Key "%s" Char %i: %s' % (
-					name, token.start(), err.args[0]
-				))
+				raise RPLError(err.args[1], key=name, pos=(None, token.start()))
 			#endtry
 		#endfor
 		if len(parents):
@@ -1196,9 +1216,10 @@ class RPLTypeCheck(object):
 	def verify(self, data):
 		try: return self.root.verify(data)
 		except RPLError as err:
-			raise RPLError(u'Verification failed ("%s" against "%s"): %s' % (
-				unicode(data), self.source, err.args[0],
-			))
+			raise RPLError(
+				err.args[1], err.container, err.key, err.pos,
+				etype='Verification failed ("%s" against "%s")' % (unicode(data), self.source)
+			)
 		#endtry
 	#enddef
 #endclass
@@ -1244,7 +1265,7 @@ class RPLTCData(object):
 			try: return self.rpl.wrap(self.type, data.get())
 			except RPLError as err:
 				raise RPLError(
-					u"Error when recasting subclass: %s" % err.args[0],
+					u"Error when recasting subclass: %s" % err.args[1],
 					data.container, data.mykey, data.pos
 				)
 			#endtry
@@ -1325,7 +1346,7 @@ class RPLTCList(object):
 
 		# Loop through list contents to check them all
 		nd = []
-		for i,x in enumerate(d):
+		for i, x in enumerate(d):
 			nd.append(self.list[mod(i)].verify(d[i], self))
 		#endfor
 
@@ -1461,11 +1482,7 @@ class RPLStruct(RPLObject):
 		You're allowed to replace this if you require special functionality.
 		Just please make sure it all functions logically.
 		"""
-		try: self.clones
-		except AttributeError: pass
-		else:
-			if self.clones: return List([x[key] for x in self.clones])
-		#endtry
+		if self.clones: return List([x[key] for x in self.clones])
 
 		# We only want to check virtuals if we have to.
 		if key not in self.data and key not in self.keys and key in self.virtuals: key = self.virtuals[key]
@@ -1707,14 +1724,14 @@ class RPLStruct(RPLObject):
 	def clone(self):
 		new = copy.deepcopy(self)
 		new.donor = self
+		# Needs its own clones.
+		new.clones = []
 		self.clones.append(new)
 		return new
 	#enddef
 
 	def __deepcopy__(self, memo={}):
 		ret = RPLObject.__deepcopy__(self, memo)
-		# clones is a pointer here, but we don't want the attribute at all.
-		delattr(ret, "clones")
 		return ret
 	#enddef
 #endclass
@@ -2684,6 +2701,18 @@ class Literal(String):
 	typeName = "literal"
 
 	badchr = re.compile(r'^[ \t]|[\x00-\x08\x0a-\x1f\x7f-\xff{}\[\],\$@"#\r\n' r"']|[ \t]$")
+
+	def set(self, data):
+		if type(data) is str: self.data = unicode(data)
+		elif type(data) is unicode: self.data = data
+		else:
+			raise RPLError(
+				'Type "%s" expects unicode or str. Got "%s"' % (
+					self.typeName, type(data).__name__
+				), self.container, self.mykey, self.pos
+			)
+		#endif
+	#enddef
 
 	def __unicode__(self):
 		return self.badchr.sub(String.replOut, self.data)
