@@ -540,6 +540,12 @@ class TestData(IOTest):
 
 	@timedTest
 	def testExportJSON(self): self._export("data", ".bin", ("data.json", "test.data.json"), defs={"ext": "json"})
+
+	@timedTest
+	def testImportBIN(self): self._import("data", ".bin", ("data.bin", "test.data.bin"), defs={"ext": "bin"})
+
+	@timedTest
+	def testExportBIN(self): self._export("data", ".bin", ("data.bin", "test.data.bin"), defs={"ext": "bin"})
 #endclass
 
 class TestMapString(IOTest):

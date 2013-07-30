@@ -140,7 +140,7 @@ class DataStatic(rpl.Static):
 				else: next = u"%s: " % k
 				if type(v) is list: l = [x.__unicode__(pretty, tabs + u"\t", True) for x in v]
 				else: l = [v.__unicode__(pretty, tabs + u"\t", True)]
-				if pretty: next += u"[" + os.linesep + (tabs + u"\t").join(l) + os.linesep + tabs + u"]"
+				if pretty: next += u"[" + (os.linesep + tabs + u"\t").join([""] + l) + os.linesep + tabs + u"]"
 				else: next += u"[" + u", ".join(l) + u"]"
 				if isList: children.append(next)
 				else: keys.append((next, False))
@@ -272,7 +272,7 @@ class JSONDict(odict):
 
 	def stringify(self, pretty, tabs=u""):
 		if pretty:
-			ret, end = u"{" + os.linesep, tabs + u"}"
+			ret, end = u"{" + os.linesep, os.linesep + tabs + u"}"
 			tabs += u"\t"
 			if self.comment: ret += u"%s// %s" % (tabs, self.comment)
 			entry, chop = tabs + u'"%s": %s,' + os.linesep, -(1 + len(os.linesep))
@@ -299,7 +299,7 @@ class JSONList(list):
 
 	def stringify(self, pretty, tabs=u""):
 		if pretty:
-			ret, end = u"[" + os.linesep, tabs + u"]"
+			ret, end = u"[" + os.linesep, os.linesep + tabs + u"]"
 			tabs += u"\t"
 			entry, chop = tabs + u'%s,' + os.linesep, -(1 + len(os.linesep))
 		else:
@@ -366,42 +366,6 @@ class JSONFile(DataFile):
 
 	def __getitem__(self, key): return self.base[key]
 	def __contains__(self, key): return key in self.base
-#endclass
-
-class BinFile(DataFile):
-	"""
-	.bin export for data structs.
-	"""
-	def __init__(self, pretty=None):
-		self.base = rpl.RPL()
-		# Load all libs...
-		self.base.load({
-			"lib": rpl.List([rpl.String for x in self.rpl.alreadyLoaded[len(self.base.alreadyLoaded):]])
-		}, True)
-	#enddef
-
-	def read(self):
-		"""
-		Read from binary data file.
-		"""
-		pass
-		#self.base.exportPrepare(
-	#enddef
-
-	def write(self):
-		"""
-		Write data to a given file.
-		"""
-		pass
-		#self.base.importData
-	#enddef
-
-	def addStruct(self, struct, to=None):
-		"""
-		Add a sub/struct.
-		"""
-		pass
-	#enddef
 #endclass
 
 class ImageFile(rpl.Share):
@@ -1056,18 +1020,19 @@ class DataFormat(object):
 	#enddef
 
 	def shareByType(self, filename, pretty):
-		extype = self.string("type") or filename.split(os.extsep)[-1]
-		if extype not in ["rpl", "json"]:#, "bin"]:
+		extype, types = self.string("type") or filename.split(os.extsep)[-1], {
+			"rpl": RPLDataFile,
+			"json": JSONFile,
+			"jslon": JSONFile,
+		}
+		if extype == "bin": return "bin"
+		if extype not in types:
 			raise RPLError(
 				'Unknown export type "%s", use "type" key to explicitely define the export type.',
 				self
 			)
 		#endif
-		return self.rpl.share(filename, {
-			"rpl": RPLDataFile,
-			"json": JSONFile,
-			#"bin": BinFile,
-		}[extype], pretty)
+		return self.rpl.share(filename, types[extype], pretty)
 	#enddef
 
 	def importPrepare(self, rom, folder, filename=None, data=None, callers=[]):
@@ -1091,7 +1056,7 @@ class DataFormat(object):
 			if one: use = data
 			elif k not in data:
 				raise RPLError(
-					'Key missing from data file: "%s"' % (filename),
+					'Key missing from data file "%s"' % (filename),
 					self.name, k
 				)
 			else: use = data[k]
@@ -1128,8 +1093,7 @@ class DataFormat(object):
 	#enddef
 
 	def exportPrepare(self, rom, folder, callers=[]):
-		keys = [x for x in self.format]
-		for k in keys:
+		for k in self.format:
 			# Set all referenced structs to managed.
 			typeName = self.parseFormat(k)["type"]
 			if DataFormat.isCounted(typeName, True):
@@ -1216,9 +1180,7 @@ class DataFormat(object):
 			if k in self.command: continue
 			typeName = self.format[k]["type"]
 			data = self.data[k]
-			if callers and callers[-1].name == "Data24b": print k, data
 			if DataFormat.isCounted(typeName, True):
-				if isinstance(data, rpl.RPLData): print data.get()
 				try: data.exportDataLoop
 				except AttributeError:
 					# Handle things that aren't.
@@ -1452,8 +1414,7 @@ class Format(DataFormat, rpl.RPLStruct):
 	#enddef
 #endclass
 
-# TODO: Support txt, bin, json, and csv? exports
-# TODO: Export RPLs with statics too instead of being so nameless
+# TODO: Support txt, and csv exports
 class Data(DataFormat, rpl.Serializable):
 	"""
 	Manages un/structured binary data.
@@ -1470,6 +1431,17 @@ class Data(DataFormat, rpl.Serializable):
 		self.registerKey("pretty", "bool", "false")
 	#enddef
 
+	def importPrepare(self, rom, folder):
+		filename = self.open(folder, "rpl", True)
+		if self.shareByType(filename, False) == "bin":
+			self.rpl.rom = newrom = helper.stream(filename)
+			self.exportPrepare(newrom, folder)
+			for k in self.format: self[k].get()
+			newrom.close()
+			self.rpl.rom = rom
+		else: DataFormat.importPrepare(self, rom, folder, filename)
+	#enddef
+
 	def importData(self, rom, folder):
 		self.calculateOffsets()
 		self.importDataLoop(rom, folder)
@@ -1477,8 +1449,22 @@ class Data(DataFormat, rpl.Serializable):
 
 	def exportData(self, rom, folder):
 		filename = self.open(folder, "rpl", True)
-		datafile = self.shareByType(filename, bool(self.number("pretty")))
-		self.exportDataLoop(rom, folder, datafile)
+		datafile = self.shareByType(filename, self.get("pretty"))
+		if datafile == "bin":
+			try: os.unlink(filename)
+			except OSError as err:
+				if err.errno == 2: pass
+				else:
+					raise RPLError(
+						'Error removing bin file "%s" before exporting: %s' % (filename, err.args[1]),
+						self
+					)
+				#endif
+			#endif
+			rom = helper.stream(filename)
+			self.importData(rom, folder)
+			rom.close()
+		else: self.exportDataLoop(rom, folder, datafile)
 	#enddef
 #endclass
 
