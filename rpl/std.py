@@ -246,11 +246,12 @@ class RPLDataFile(DataFile):
 	#enddef
 #endclass
 
-def JSONStringifyElement(v):
-	tv = type(v)
-	if   tv is dict: return JSONDict(v).stringify(pretty, tabs)
-	elif tv is list: return JSONList(v).stringify(pretty, tabs)
-	else:
+def JSONStringifyElement(v, pretty, tabs):
+#	tv = type(v)
+#	if   tv is dict: return JSONDict(v).stringify(pretty, tabs)
+#	elif tv is list: return JSONList(v).stringify(pretty, tabs)
+	try: return v.stringify(pretty, tabs)
+	except AttributeError:
 		# RPLData.__unicode__ may not always form valid JSON
 		# so this has to reinterpret that.
 		try: return JSONList(v.list()).stringify(pretty, tabs)
@@ -263,46 +264,49 @@ def JSONStringifyElement(v):
 	#endif
 #enddef
 
-class JSONDict(dict):
+class JSONDict(odict):
 	def __init__(self, x={}):
 		self.comment = None
-		dict.__init__(self)
+		odict.__init__(self, x)
 	#enddef
 
 	def stringify(self, pretty, tabs=u""):
-		ret = u""
 		if pretty:
-			ret += u"{\n"
-			end = tabs + u"}"
+			ret, end = u"{" + os.linesep, tabs + u"}"
 			tabs += u"\t"
 			if self.comment: ret += u"%s// %s" % (tabs, self.comment)
-			entry = tabs + u'"%s": %s,\n'
+			entry, chop = tabs + u'"%s": %s,' + os.linesep, -(1 + len(os.linesep))
 		else:
-			ret += u"{ "
+			ret = u"{ "
 			if self.comment: ret += u"/* %s */ " % (self.comment)
-			entry = '"%s": %s, '
-			end = u"}"
+			entry, end, chop = '"%s": %s, ', u" }", -2
 		#endif
-		for k, v in self.iteritems(): ret += entry % (k, JSONStringifyElement(v))
-		return ret + end
+		for k, v in self.iteritems(): ret += entry % (k, JSONStringifyElement(v, pretty, tabs))
+		return ret[:chop] + end
 	#enddef
 #endclass
 
 class JSONList(list):
+	def oneUp(self):
+		tmp = []
+		for x in self:
+			if not isinstance(x, JSONDict): return self
+			if len(x) != 1: return self
+			tmp.append(x.values()[0])
+		#endfor
+		return tmp
+	#enddef
+
 	def stringify(self, pretty, tabs=u""):
-		ret = u""
 		if pretty:
-			ret += u"[\n"
-			end = tabs + u"]"
+			ret, end = u"[" + os.linesep, tabs + u"]"
 			tabs += u"\t"
-			entry = tabs + u'%s,\n'
+			entry, chop = tabs + u'%s,' + os.linesep, -(1 + len(os.linesep))
 		else:
-			ret += u"[ "
-			entry = '%s, '
-			end = u"]"
+			ret, entry, end, chop = u"[ ", u'%s, ', u" ]", -2
 		#endif
-		for v in self: ret += entry % (JSONStringifyElement(v))
-		return ret + end
+		for v in self.oneUp(): ret += entry % (JSONStringifyElement(v, pretty, tabs))
+		return ret[:chop] + end
 	#enddef
 
 	def list(self): return self
@@ -323,27 +327,45 @@ class JSONFile(DataFile):
 		self.pretty = pretty
 	#enddef
 
+	@staticmethod
+	def invalid(x):
+		raise RPLError("JSON type %s is not valid as RPL Data." % type(x).__name__)
+	#enddef
+
 	def read(self):
 		"""
 		Read from JSON data file.
 		"""
-		self.base = JSLON.parse(helper.readFrom(self.path))
+		self.base = JSLON.parse(helper.readFrom(self.path), {
+			"dict": JSONDict, "list": JSONList,
+			"string": rpl.String, "int": rpl.Number,
+			"float": JSONFile.invalid, "regex": JSONFile.invalid,
+			"undefined": JSONFile.invalid,
+		})
 	#enddef
 
 	def write(self):
 		"""
 		Write data to a given file.
 		"""
+		# Needs to make the same assumption as RPLDataFile.
+		for x, v in self.base.iteritems(): self.base[x] = v[0]
 		helper.writeTo(self.path, self.base.stringify(self.pretty))
 	#enddef
 
-	def addStruct(self, struct, to=None):
+	def addStruct(self, name, to=None):
 		"""
 		Add a sub/struct.
 		"""
-		ret = (to or self.base)[struct.name] = JSONDict()
-		return ret
+		if to is None: to = self.base
+		child = JSONDict()
+		if name in to: to[name].append(child)
+		else: to[name] = JSONList([child])
+		return child
 	#enddef
+
+	def __getitem__(self, key): return self.base[key]
+	def __contains__(self, key): return key in self.base
 #endclass
 
 class BinFile(DataFile):

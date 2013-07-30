@@ -5,7 +5,7 @@ I'll basically always run the tests before pushing and make sure they all pass.
 ### Countdown to 1.0 ###
 * <del>Implement typesetting lib.</del>
 * <del>Finish CLI \[as far as I care anymore\].</del>
-* Add exports for: <del>structured rpl</del>, JSON, bin, txt, csv
+* Add exports for: <del>structured rpl</del>, <del>JSON</del>, bin, txt, csv
 * Add better error reporting.
 * Clean, make efficiency adjustments, add more comments.
 * Complete help contents.

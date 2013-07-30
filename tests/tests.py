@@ -467,13 +467,16 @@ class IOTest(RPLTestCase):
 	compares: Tuples of (expected data, result data) order is important because
 	          the result data is deleted before the tests.
 	"""
-	def _xxport(self, direction, name, ext, what, compares):
+	def _xxport(self, direction, name, ext, what, compares, defs={}):
 		if type(what) is not list:
 			compares = [what] + list(compares)
 			what = None
 		#endif
 
 		arpl = rpl.RPL()
+		if defs:
+			for k, v in defs.iteritems(): arpl.addDef(k, v)
+		#endif
 		arpl.parse(os.path.join("tests", "rpls", name + ".rpl"))
 		folder = os.path.join("tests", "rpls", name.split("_", 1)[0])
 
@@ -520,17 +523,23 @@ class IOTest(RPLTestCase):
 		#endfor
 	#enddef
 
-	def _import(self, name, ext, what=None, *compares): return self._xxport(0, name, ext, what, compares)
-	def _export(self, name, ext, what=None, *compares): return self._xxport(1, name, ext, what, compares)
+	def _import(self, name, ext, what=None, *compares, **kwargs): return self._xxport(0, name, ext, what, compares, defs=kwargs.get("defs", {}))
+	def _export(self, name, ext, what=None, *compares, **kwargs): return self._xxport(1, name, ext, what, compares, defs=kwargs.get("defs", {}))
 	def _run(self, name, what=None, *compares): return self._xxport(2, name, "", what, compares)
 #enddef
 
 class TestData(IOTest):
 	@timedTest
-	def testImport(self): self._import("data", ".bin", ("data.bin", "test.data.bin"))
+	def testImportRPL(self): self._import("data", ".bin", ("data.bin", "test.data.bin"), defs={"ext": "rpl"})
 
 	@timedTest
-	def testExport(self): self._export("data", ".bin", ("data.rpl", "test.data.rpl"))
+	def testExportRPL(self): self._export("data", ".bin", ("data.rpl", "test.data.rpl"), defs={"ext": "rpl"})
+
+	@timedTest
+	def testImportJSON(self): self._import("data", ".bin", ("data.bin", "test.data.bin"), defs={"ext": "json"})
+
+	@timedTest
+	def testExportJSON(self): self._export("data", ".bin", ("data.json", "test.data.json"), defs={"ext": "json"})
 #endclass
 
 class TestMapString(IOTest):
