@@ -26,7 +26,10 @@ import argparse
 from rpl import rpl, helper
 from time import time
 
+debug = False
+
 def main():
+	global debug
 	parser = argparse.ArgumentParser(
 		description  = "Imperial Exchange by Wa (logicplace.com)\n"
 		"Easily replace resources in ROMs (or other binary formats) by use of"
@@ -106,6 +109,10 @@ def main():
 		" current folder.",
 		default = "."
 	)
+	parser.add_argument("--debug",
+		help    = argparse.SUPPRESS,
+		action  = "store_true"
+	)
 	parser.add_argument("args", nargs="*", help=argparse.SUPPRESS)
 
 	if len(sys.argv) == 1:
@@ -114,6 +121,8 @@ def main():
 	#endif
 
 	args = parser.parse_args(sys.argv[1:])
+
+	debug = args.debug
 
 	# Windows help flag.
 	if args.args and args.args[0] == "/?":
@@ -235,10 +244,12 @@ def main():
 if __name__ == "__main__":
 	try: sys.exit(main())
 	except (EOFError, KeyboardInterrupt):
+		if debug: raise
 		print "\nOperations terminated by user."
 		sys.exit(0)
 	except rpl.RPLError as err:
-		helper.err(err.args[0])
+		if debug: raise
+		helper.err(err)
 		sys.exit(1)
 	#endtry
 #endif
