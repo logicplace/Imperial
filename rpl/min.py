@@ -18,12 +18,11 @@
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-import re
-import rpl, std, helper
+import re, rpl, helper, std.graphic, std.readdir
 
 def register(rpl):
 	# Like a forced lib entry. std must be loaded for color type.
-	std.register(rpl)
+	std.graphic.register(rpl)
 
 	rpl.registerStruct(Tile)
 	rpl.registerStruct(Tilemap)
@@ -76,11 +75,11 @@ def splitBits(byte):
 ################################################################################
 #################################### Structs ###################################
 ################################################################################
-class Tile(std.Graphic):
+class Tile(std.graphic.Graphic):
 	"""
 	Manage a single two-color tile.
 	Tiles are 8x8 images of form 0bw and reading DULR.
-	<all><if all><imp std.Graphic.all /></if>
+	<all><if all><imp std.graphic.Graphic.all /></if>
 	<tile><white>
 	white:  Optional. Set color for white pixel. (Default: white)
 	        See [std.color] for details.</white>
@@ -94,14 +93,14 @@ class Tile(std.Graphic):
 	typeName = "tile"
 
 	def __init__(self, top, name, parent=None):
-		std.Graphic.__init__(self, top, name, parent)
+		std.graphic.Graphic.__init__(self, top, name, parent)
 
 		self.owm = self.ohm = self.wm = self.hm = 8
 		self.baseOffset = None
 	#enddef
 
 	def register(self, tilemap=False):
-		std.Graphic.register(self)
+		std.graphic.Graphic.register(self)
 		self.registerKey("white", "color", "white")
 		self.registerKey("black", "color", "black")
 		self.registerKey("invert", "bool", "false")
@@ -117,7 +116,7 @@ class Tile(std.Graphic):
 			return rpl.Number(
 				self.parent["base"].number() + self.parent.mapSize() + self.baseOffset
 			)
-		else: return std.Graphic.__getitem__(self, key)
+		else: return std.graphic.Graphic.__getitem__(self, key)
 	#enddef
 
 	def getPalette(self):
@@ -131,7 +130,7 @@ class Tile(std.Graphic):
 
 	def importTile(self, rom, data):
 		pixel, shift, pixels = 0, 7, r""
-		for i, x, y in std.ReadDir("DULR").rect(8, 8):
+		for i, x, y in std.readdir.ReadDir("DULR").rect(8, 8):
 			pixel |= self.indexOf(data[x, y]) << shift
 			if shift: shift -= 1
 			else:
@@ -163,7 +162,7 @@ class Tile(std.Graphic):
 	#enddef
 
 	def prepareImage(self):
-		std.Graphic.prepareImage(self)
+		std.graphic.Graphic.prepareImage(self)
 		self.rpl.rom.seek(self["base"].number())
 		self.image.putdata(Tile.prepareTile(self.rpl.rom.read(8), self.getPalette()))
 	#enddef
@@ -227,7 +226,7 @@ class Tilemap(Tile):
 	#enddef
 
 	def prepareImage(self):
-		std.Graphic.prepareImage(self)
+		std.graphic.Graphic.prepareImage(self)
 		tilemap, blank = self["map"].list(), self["blank"].tuple()
 
 		# Loop through map and export each tile.
@@ -257,7 +256,7 @@ class Tile3(Tile):
 	Manage a single three-color tile.
 	Tiles are two 8x8 images of form 0bw and reading DULR that are combined by
 	t1 & t2 being black, t1 nor t2 being white, and t1 ^ t2 being gray.
-	<all><if all><imp std.Graphic.graphic><br/>
+	<all><if all><imp std.graphic.Graphic.graphic><br/>
 	<imp rpl.Serializable.all-base /></if>
 	<bases>
 	base1:  Base of first dither of image. See <me/>:base for details.
@@ -294,7 +293,7 @@ class Tile3(Tile):
 				self.parent[key] +
 				self.parent.mapSize() + self.baseOffset
 			)
-		else: return std.Graphic.__getitem__(self, key)
+		else: return std.graphic.Graphic.__getitem__(self, key)
 	#enddef
 
 	def getPalette(self):
@@ -308,7 +307,7 @@ class Tile3(Tile):
 
 	def importTile(self, rom, base1, base2, data):
 		pixel1, pixel2, shift, pixels1, pixels2 = 0, 0, 7, r"", r""
-		for i, x, y in std.ReadDir("DULR").rect(8, 8):
+		for i, x, y in std.readdir.ReadDir("DULR").rect(8, 8):
 			tmp = self.indexOf(data[x, y])
 			if tmp == 2:
 				if (x + y + 1) % 2: pixel1 |= 1 << shift
@@ -353,7 +352,7 @@ class Tile3(Tile):
 	#enddef
 
 	def prepareImage(self):
-		std.Graphic.prepareImage(self)
+		std.graphic.Graphic.prepareImage(self)
 		self.rpl.rom.seek(self["base1"].number())
 		data1 = self.rpl.rom.read(8)
 		self.rpl.rom.seek(self["base2"].number())
@@ -401,7 +400,7 @@ class Tilemap3(Tile3, Tilemap):
 	#enddef
 
 	def prepareImage(self):
-		std.Graphic.prepareImage(self)
+		std.graphic.Graphic.prepareImage(self)
 		tilemap, blank = self["map"].list(), self["blank"].tuple()
 
 		# Loop through map and export each tile.
@@ -427,14 +426,14 @@ class Tilemap3(Tile3, Tilemap):
 	#enddef
 #endclass
 
-class Sprite(std.Graphic):
+class Sprite(std.graphic.Graphic):
 	"""
 	Manage a single two-color sprite.
 	Sprites are 16x16 images of form UL mask, BL mask, UL draw, BL draw, UR mask,
 	BR mask, UR draw, BR draw.
 	Mask sections are of form 0ba and reading DULR.
 	Draw sections are of form 0bw and reading DULR.
-	<all><if all><imp std.Graphic.all rpl.Serializable.all /></if>
+	<all><if all><imp std.graphic.Graphic.all rpl.Serializable.all /></if>
 	<sprite><imp Tile.white Tile.black />
 	<alpha>
 	alpha:  Optional. Alpha color (draw bit is 0). (Default: cyan)</alpha>
@@ -447,13 +446,13 @@ class Sprite(std.Graphic):
 	typeName = "sprite"
 
 	def __init__(self, top, name, parent=None):
-		std.Graphic.__init__(self, top, name, parent)
+		std.graphic.Graphic.__init__(self, top, name, parent)
 		self.owm = self.ohm = self.wm = self.hm = 16
 		self.baseOffset = None
 	#enddef
 
 	def register(self, spritemap=False):
-		std.Graphic.register(self)
+		std.graphic.Graphic.register(self)
 		self.registerKey("white", "color", "white")
 		self.registerKey("black", "color", "black")
 		self.registerKey("alpha", "color", "cyan")
@@ -470,7 +469,7 @@ class Sprite(std.Graphic):
 			return rpl.Number(
 				self.parent["base"].number() + self.parent.mapSize() + self.baseOffset
 			)
-		else: return std.Graphic.__getitem__(self, key)
+		else: return std.graphic.Graphic.__getitem__(self, key)
 	#enddef
 
 	def getPalette(self):
@@ -488,12 +487,12 @@ class Sprite(std.Graphic):
 		pixeld, pixelm, shift = 0, 0, 7
 		pixels, draw, mask = r"", r"", r""
 		# UL, BL, UR, BR
-		for q, qx, qy in std.ReadDir("UDLR").rect(2, 2):
+		for q, qx, qy in std.readdir.ReadDir("UDLR").rect(2, 2):
 			# Each quadrant is the same as a tile, but there's also a mask
 			# quadrant to manage.
 			qx *= 8
 			qy *= 8
-			for i, x, y in std.ReadDir("DULR").rect(8, 8):
+			for i, x, y in std.readdir.ReadDir("DULR").rect(8, 8):
 				tmp = self.indexOf(data[qx + x, qy + y])
 				if tmp & 0x02: pixelm |= 1 << shift
 				pixeld |= (tmp & 0x01) << shift
@@ -540,7 +539,7 @@ class Sprite(std.Graphic):
 	#enddef
 
 	def prepareImage(self):
-		std.Graphic.prepareImage(self)
+		std.graphic.Graphic.prepareImage(self)
 		self.rpl.rom.seek(self["base"].number())
 		self.image.putdata(Sprite.prepareSprite(self.rpl.rom.read(64), self.getPalette()))
 	#enddef
@@ -600,7 +599,7 @@ class Spritemap(Sprite):
 	#enddef
 
 	def prepareImage(self):
-		std.Graphic.prepareImage(self)
+		std.graphic.Graphic.prepareImage(self)
 		tilemap, blank = self["map"].list(), self["blank"].tuple()
 		secx = [blank] * 256
 
@@ -633,7 +632,7 @@ class Sprite3(Sprite):
 	UR mask, BR mask, UR draw, BR draw.
 	Mask sections are of form 0ba and reading DULR.
 	Draw sections are of form 0bw and reading DULR.
-	<all><if all><imp std.Graphic.graphic><br/>
+	<all><if all><imp std.graphic.Graphic.graphic><br/>
 	<imp rpl.Serializable.all-base /></if>
 	<imp Tile3.bases Sprite.sprite Tile3.gray /></all>
 	</if>
@@ -661,7 +660,7 @@ class Sprite3(Sprite):
 				self.parent[key] +
 				self.parent.mapSize() + self.baseOffset
 			)
-		else: return std.Graphic.__getitem__(self, key)
+		else: return std.graphic.Graphic.__getitem__(self, key)
 	#enddef
 
 	def getPalette(self):
@@ -680,12 +679,12 @@ class Sprite3(Sprite):
 		pixelm, pixeld1, pixeld2, shift = 0, 0, 0, 7
 		pixels1, pixels2, mask, draw1, draw2 = r"", r"", r"", r"", r""
 		# UL, BL, UR, BR
-		for q, qx, qy in std.ReadDir("UDLR").rect(2, 2):
+		for q, qx, qy in std.readdir.ReadDir("UDLR").rect(2, 2):
 			# Each quadrant is the same as a tile, but there's also a mask
 			# quadrant to manage.
 			qx *= 8
 			qy *= 8
-			for i, x, y in std.ReadDir("DULR").rect(8, 8):
+			for i, x, y in std.readdir.ReadDir("DULR").rect(8, 8):
 				tmp = self.indexOf(data[qx + x, qy + y])
 				if tmp == 4:
 					if (i + x % 2) % 2: pixeld1 |= 1 << shift
@@ -748,7 +747,7 @@ class Sprite3(Sprite):
 	#enddef
 
 	def prepareImage(self):
-		std.Graphic.prepareImage(self)
+		std.graphic.Graphic.prepareImage(self)
 		self.rpl.rom.seek(self["base1"].number())
 		data1 = self.rpl.rom.read(64)
 		self.rpl.rom.seek(self["base2"].number())
@@ -797,7 +796,7 @@ class Spritemap3(Sprite3, Spritemap):
 	#enddef
 
 	def prepareImage(self):
-		std.Graphic.prepareImage(self)
+		std.graphic.Graphic.prepareImage(self)
 		tilemap, blank = self["map"].list(), self["blank"].tuple()
 		secx = [blank] * 256
 

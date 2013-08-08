@@ -18,12 +18,11 @@
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-import rpl, std, helper, os
-import Image, ImageFont
+import rpl, std.graphic, helper, os, Image, ImageFont
 
 def register(rpl):
 	# Like a forced lib entry. std must be loaded for color type.
-	std.register(rpl)
+	std.graphic.register(rpl)
 
 	rpl.registerStruct(Font)
 	rpl.registerStruct(TypeSet)
@@ -264,7 +263,7 @@ class Charset(rpl.RPLStruct):
 	#enddef
 #endclass
 
-class TypeSet(std.Graphic):
+class TypeSet(std.graphic.Graphic):
 	"""
 	Set and format text on an image.
 	"""
@@ -273,7 +272,7 @@ class TypeSet(std.Graphic):
 	def register(self, typeset=True):
 		# Text subclass won't want to register these.
 		if typeset:
-			std.Graphic.register(self)
+			std.graphic.Graphic.register(self)
 			self.registerStruct(Text)
 		#endif
 		self.registerKey("on", "string:(import, export)", "import")
@@ -333,7 +332,7 @@ class TypeSet(std.Graphic):
 				#endtry
 
 				font.render(
-					self.rpl.share(text.resolve("file").get(folder), std.ImageFile),
+					self.rpl.share(text.resolve("file").get(folder), std.graphic.ImageFile),
 					text.string(), {
 						"box": [x.number() for x in text["box"].list()],
 						"align": text["align"].string(),
