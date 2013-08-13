@@ -247,7 +247,7 @@ if __name__ == "__main__":
 		if debug: raise
 		print "\nOperations terminated by user."
 		sys.exit(0)
-	except rpl.RPLError as err:
+	except (rpl.RPLError, helper.RPLInternal) as err:
 		if debug: raise
 		helper.err(err)
 		sys.exit(1)
