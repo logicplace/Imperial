@@ -36,7 +36,7 @@ def log(level, msg):
 def makeParents(path):
 	path = os.path.dirname(path)
 	if not path: return
-	try: os.makedirs()
+	try: os.makedirs(path)
 	except OSError as err:
 		if err.errno == 17: pass
 		else: raise RPLInternal('Could not create folders "%s" reason: %s' % (path, err.strerror))
