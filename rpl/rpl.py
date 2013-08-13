@@ -1934,11 +1934,11 @@ class ROM(RPLStruct):
 		# Create all IDs and names. Grab max lengths
 		ids, names, max_id_len, max_name_len = [], [], 0, 0
 		for x in self["id"].list():
-			ids.append(x.serialize(self.id_format))
+			ids.append(x.serialize(**self.id_format))
 			max_id_len = max(len(ids[-1]), max_id_len)
 		#endfor
 		for x in self["name"].list():
-			names.append(x.serialize(self.name_format))
+			names.append(x.serialize(**self.name_format))
 			max_name_len = max(len(names[-1]), max_name_len)
 		#endfor
 
