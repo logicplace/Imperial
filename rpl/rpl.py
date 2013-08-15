@@ -158,29 +158,33 @@ class RPLObject(object):
 	"""
 	Base class for RPL (file/root) and RPLStruct.
 	"""
-	def __init__(self, top=None, name=None, parent=None):
+	def __init__(self, top=None, name=None, parent=None, reset=True):
+		# A reference to the top-level RPL class.
+		self.rpl = top = top or self
+		# Name of the struct as given by the user or system.
+		self.name = name
+		# A reference to the direct parent. None is equivalent to the top level.
+		self.parent = parent
+		if reset: self.reset()
+	#enddef
+
+	def reset(self):
 		"""
 		top(RPL): The root, RPL instance.
 		name(string): The name of this struct.
 		parent(RPLObject): The direct parent of this struct.
 			None is the same as the root.
 		"""
-		# A reference to the top-level RPL class.
-		self.rpl = top = top or self
 		# Ordered key-value pairs.
 		self.data = odict()
 		# Ordered children, indexed by struct name.
 		self.children = odict()
-		# Name of the struct as given by the user or system.
-		self.name = name
 		# If the name was generated automatically or not.
 		self.gennedName = False
-		# A reference to the direct parent. None is equivalent to the top level.
-		self.parent = parent
 
 		# The ? is here because most file systems don't allow them in names.
 		# This may not be the best way to do this but I'd rather not make another system.
-		tmp = top.share("?INTERNAL:%s" % (
+		tmp = self.rpl.share("?INTERNAL:%s" % (
 			self.typeName if hasattr(self, "typeName") else "CLASS:" + self.__class__.__name__
 		), SharedRegistry)
 		self.keys, self.structs, self.virtuals = tmp.ksv
@@ -353,6 +357,11 @@ class RPL(RPLObject):
 	isRange = re.compile(r'[:\-*+~]')
 
 	def __init__(self):
+		RPLObject.__init__(self, reset=False)
+		self.reset()
+	#enddef
+
+	def reset(self):
 		self.types = {}              # Registered data types.
 		self.structsByName = {}      # All structs in the file.
 		self.sharedDataHandlers = {} # Used by RPL.share.
@@ -362,7 +371,7 @@ class RPL(RPLObject):
 		self.alreadyIncluded = []    # <^ These are used by RPL.load.
 		# What to include in the default template.
 		self.defaultTemplateStructs = ["RPL", "ROM"]
-		RPLObject.__init__(self)
+		RPLObject.reset(self)
 		# There are no keys in the root. They are only included in RPLObject due
 		# to how the shared registry works.
 		del self.keys
@@ -1930,7 +1939,7 @@ class ROM(RPLStruct):
 		"""
 		Validate contents of ROM file.
 		"""
-		failed = []
+		successes, failed = 0, []
 		# Create all IDs and names. Grab max lengths
 		ids, names, max_id_len, max_name_len = [], [], 0, 0
 		for x in self["id"].list():
@@ -1953,7 +1962,8 @@ class ROM(RPLStruct):
 					break
 				#endif
 			#endfor
-			if not ok: failed.append("id")
+			if ok: successes += 1
+			else: failed.append("id")
 		#endif
 
 		# Verify name
@@ -1967,7 +1977,8 @@ class ROM(RPLStruct):
 					break
 				#endif
 			#endfor
-			if not ok: failed.append("name")
+			if ok: successes += 1
+			else: failed.append("name")
 		#endif
 
 		# Verify text
@@ -1977,7 +1988,7 @@ class ROM(RPLStruct):
 			text = x[0].string()
 			if rom.read(len(text)) != text:
 				failed.append(("text", idx))
-			#endif
+			else: successes += 1
 		#endfor
 
 		# Verify crc32s
@@ -1986,16 +1997,16 @@ class ROM(RPLStruct):
 			rom.seek(0)
 			if crc32(rom.read()) & 0xFFFFFFFF != crc32:
 				failed.append(("crc32", 0))
-			#endif
+			else: successes += 1
 		except RPLBadType:
 			for idx, x in enumerate(self["crc32"].list()):
 				x = x.list()
 				if getCRC(rom, x[1]) != x[0].number():
 					failed.append(("crc32", idx))
-				#endif
+				else: successes += 1
 			#endfor
 		#endtry
-		return failed
+		return successes, failed
 	#enddef
 
 	@classmethod
