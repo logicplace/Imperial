@@ -409,12 +409,12 @@ class DataFormat(object):
 	def __init__(self, top, name, parent):
 		self.parentClass = rpl.Serializable if isinstance(self, rpl.Serializable) else rpl.RPLStruct
 		self.parentClass.__init__(self, top, name, parent)
-		self.format = odict()
 		self.command = {}
 		self._len = None
 		self.count = None
 		self.importing = False
 		self.onekey = None
+		self.needprep = odict()
 	#enddef
 
 	def register(self):
@@ -425,74 +425,84 @@ class DataFormat(object):
 		self.registerKey("align", "string:(left, right, center, rcenter)", "right")
 		self.registerKey("sign", "string:(unsigned, signed)", "unsigned")
 		self.registerKey("type", "string:(rpl, bin, json)", "")
-		self.registerKey("x", "string|[string|reference, number|string:(expand), string|math]+1", "")
+		self.registerKey("x", "string|[string|reference, number|string:(expand), math|string]+1", "")
 		self.registerKey("comment", "string", "")
 		self.registerKey("format", "[reference, string].0", "")
 	#enddef
 
-	def parseFormat(self, key):
-		fmt = self.format[key]
-		if fmt is None: raise RPLError("No format for key %s." % key)
-		if type(fmt) is list:
-			# Let's parse and cache this
-			tmp = {
-				"type": fmt[0],
-				"size": fmt[1],
-				"offset": None,
-				"offsetRefs": [],
-				"end": False,
-			}
-			if fmt[1].reference():
-				refKey = self.refersToSelf(fmt[1])
-				if refKey:
-					if DataFormat.isCounted(tmp["type"]): self.command[refKey] = ["count", key]
-					else: self.command[refKey] = ["len", key]
-				#endif
-			#endif
-			for x in fmt[2:]:
-				refKey = None
-				if x.reference():
-					refKey = self.refersToSelf(x)
-					if refKey and self.importing:
-						try: self.get(x)
-						except RPLError:
-							self.command[refKey] = ["offset", key]
-							tmp["offsetRefs"].append(x)
-							continue
-						#endtry
-					#endif
-				#endif
-				val = x.get()
-				if type(val) in [int, long]:
-					if refKey: self.command[refKey] = ["offset", key]
-					if tmp["offset"] is None: tmp["offset"] = val
-					else: tmp["offset"] += val
-				# We can assume it's str, otherwise
-				elif val in ["little", "le"]: tmp["endian"] = "little"
-				elif val in ["big", "be"]: tmp["endian"] = "big"
-				elif val in ["signed", "unsigned"]: tmp["sign"] = val
-				elif val in ["left", "right", "center", "rcenter"]: tmp["align"] = val
-				elif val in ["end"]: tmp["end"] = True
-				elif len(val) == 1: tmp["padding"] = val
-			#endfor
-			if "endian"  not in tmp: tmp["endian"]  = self["endian"].string()
-			if "sign"    not in tmp: tmp["sign"]    = self["sign"].string()
-			if "align"   not in tmp: tmp["align"]   = self["align"].string()
-			if "padding" not in tmp: tmp["padding"] = self["padding"].string()
-			# If an offset wasn't specified, calculate it from the previous
-			# offset plus the previous size. (If it scales from the bottom
-			# it must be specified!)
-			if tmp["offset"] is None:
-				first = True
-				for k in self.format:
-					if k != key: first = False
-					break
-				#endfor
-				if first: tmp["offset"] = 0
-			#endif
-			fmt = self.format[key] = tmp
+	def prepareOther(self, ref, key, prop):
+		if not ref.reference(): return False
+		try: orig = ref.get()
+		# Key hasn't been created yet, wait for prep.
+		except RPLError:
+			if key in self.needprep: raise
+			else: self.needprep[key] = (ref, prop)
+		# Was created already, let's adjust it.
+		else:
+			tmp = orig.properties
+			new = RPLRef(self.name + "." + key, self.rpl, orig.container, orig.mykey, *orig.pos, prop=prop)
+			ref.overwrite(new)
+			new.properties = tmp
 		#endif
-		return fmt
+		return True
+	#enddef
+
+	def setprops(self, key, props, ref=False):
+		refkey = ref and key not in self.data
+		if refkey: dest, pos = {}, None
+		else: dest, pos = self.data[key].properties, self.data[key].pos
+		if type(fmt) is list:
+			# Known positions.
+			dest["type"], dest["size"] = props[0], props[1]
+
+			# Find other arguments.
+			for x in props[2:]:
+				if isinstance(x, rpl.Math):
+					if "offset" in dest and unicode(x) != unicode(dest["offset"]):
+						raise RPLError("Offset already set and isn't the same.", self, key, x.pos or pos)
+					#endif
+					dest["offset"] = x
+				else:
+					cmd = x.string()
+					if cmd in ["little", "big"]: dest["endian"] = x
+					elif cmd in == "le": dest["endian"] = rpl.String("little")
+					elif cmd in == "be": dest["endian"] = rpl.String("big")
+					elif cmd in ["signed", "unsigned"]: dest["sign"] = x
+					elif cmd in ["left", "right", "center", "rcenter"]: dest["align"] = x
+					elif cmd == "end": dest["end"] = True
+					elif len(cmd) == 1: dest["padding"] = x
+					else: raise RPLError('Unknown argument "%s"' % cmd, src=x)
+				#endif
+			#endfor
+		else:
+			for k, v in props.iteritems():
+				if k in dest and unicode(x) != unicode(dest[k]):
+					raise RPLError("%s already set and isn't the same." % k.capitalize(), self, key, x.pos or pos)
+				#endif
+				dest[k] = v
+			#endfor
+		#endif
+
+		# Default.
+		if "endian"  not in dest: dest["endian"]  = self["endian"]
+		if "sign"    not in dest: dest["sign"]    = self["sign"]
+		if "align"   not in dest: dest["align"]   = self["align"]
+		if "padding" not in dest: dest["padding"] = self["padding"]
+		# If an offset wasn't specified, it will calculate it from the previous
+		# offset plus the previous size. But if it's the first it is set to 0.
+		if "offset" in dest:
+			first = True
+			for k in self.data:
+				if k[0] != "x": continue
+				if k != key: first = False
+				break
+			#endfor
+			if first: dest["offset"] = rpl.Number(0)
+		#endif
+
+		# Prepare size and offset refs.
+		self.prepareOther(dest["size"], key, "size")
+		if "offset" in dest: self.prepareOther(dest["offset"], key, "offset")
 	#enddef
 
 	def refersToSelf(self, ref):
@@ -501,14 +511,6 @@ class DataFormat(object):
 		struct, keysets = ref.parts()
 		return keysets[0][0] if struct == "this" and keysets and keysets[0][0][0] == "x" else None
 	#enddef
-
-	def prepOpts(self, opts, size=True):
-		tmp = dict(opts)
-		#tmp["type"] = self.get(tmp["type"])
-		if size: tmp["size"] = self.get(tmp["size"])
-		else: del tmp["size"]
-		return tmp
-	#endif
 
 	@staticmethod
 	def setBase(cls, val):
@@ -650,6 +652,7 @@ class DataFormat(object):
 		if key == "format":
 			data = self.keys[key][0].verify(value)
 
+			# Retrieve prefix if in list form.
 			if not data.reference():
 				try:
 					data, prefix = tuple(data.list())
@@ -657,51 +660,72 @@ class DataFormat(object):
 				except RPLError: prefix = ""
 			else: prefix = ""
 
+			# If it was given as @Struct
 			if data.reference() and data.keyless(): struct = data.pointer()
+			# If it was given as "Struct"
 			else: struct = self.rpl.structsByName[self.get(data)]
-			try: struct.format
-			except AttributeError:
-				raise RPLError("Attempted to reference non-format type.", self, key, value.pos)
-			else:
-				# Set to managed.
-				struct.unmanaged = False
-				for x in struct.format:
-					dest = "x" + prefix + x[1:] if prefix else x
-					self.format[dest] = deepcopy(struct.format[x], {"parent": self})
-					# Update the references (this relies on the above being list form..
-					# that means the format should only be used in format: calls..
-					for d in self.format[dest]:
-						if d.reference():
-							d.container = self
-							d.mykey = dest
-							# TODO: Don't like doing direct edits like this.
-							if prefix and self.refersToSelf(d): d.keysets[0] = ("x" + prefix + d.keysets[0][0][1:], d.keysets[0][1])
-						#endif
-					#endfor
+
+			x = None
+			for x in struct.data if x[0] == "x":
+				dest = "x" + prefix + x[1:] if prefix else x
+				if dest in self.data:
+					raise RPLError(
+						"Attempted format include of %s, but already included." % dest,
+						self, "format", value.pos
+					)
+				#endif 
+				# Instantiate type.
+				self.data[dest] = self.rpl.wrap(struct.data[dest].typeName)
+				# Copy properties. Copying a reference's properties wouldn't do anything.
+				if not self.data[dest].reference():
+					self.data[dest].properties = deepcopy(struct.data[dest].properties, {"parent": self})
+				#endif
+
+				# Update the references (this relies on the above being list form..
+				# that means the format should only be used in format: calls..
+				for d in self.data[dest].properties:
+					if d.reference():
+						d.mykey = dest
+						# TODO: Don't like doing direct edits like this.
+						if prefix and self.refersToSelf(d): d.keysets[0] = ("x" + prefix + d.keysets[0][0][1:], d.keysets[0][1])
+					#endif
 				#endfor
-			#endtry
+			#endfor
+			# Set to managed.
+			struct.unmanaged = False
 		# Special handling for keys starting with x
 		# Note: What you set here is NOT the data, so it CANNOT be referenced
 		elif key[0] == "x":
-			if key not in self.format:
+			if key not in self.data:
 				self.parentClass.__setitem__(self, "x", value)
 				tmp = self.data["x"]
 				try: tmp = tmp.string()
-				except RPLBadType: self.format[key] = tmp.get()
-				else: self.format[key] = map(self.rpl.parseData, tmp.split())
-				if DataFormat.isCounted(self.format[key][0], True):
-					# If it's a reference, it needs to be set as managed.
-					try: self.format[key][0].pointer().unmanaged = False
-					# Does not exist yet... will need to be set in preparation.
-					except RPLError: pass
+				except RPLBadType: tmp = tmp.list()
+				else: tmp = map(self.rpl.parseData, tmp.split())
+
+				# We don't want data here.
 				del self.data["x"]
+
+				if DataFormat.isCounted(tmp[0], True):
+					# If it's a reference, it needs to be set as managed.
+					try: tmp[0].pointer().unmanaged = False
+					# Does not exist yet... will need to be set in preparation.
+					except RPLError:
+						self.data[key] = tmp
+						return
+					# Set a copy here.
+					else: dtmp = self.data[key] = tmp[0].clone()
+				# Instantiate type.
+				else: dtmp = self.data[key] = self.rpl.wrap(tmp[0].string(), None, self, key)
+				self.setprops(key, tmp)
 			else:
-				typeName = self.parseFormat(key)["type"]
+				typeName = self.data[key].properties["type"]
 				if not DataFormat.isCounted(typeName, True):
 					# Recast... TODO: Should this generate a validatation or
 					# is this enough?
-					self.data[key] = self.rpl.wrap(self.get(typeName), value.get(), self, key, *value.pos)
-				else: self.data[key] = value
+					self.data[key].set(value.get())
+					self.data[key].pos = value.pos
+				else: self.data[key] = value # TODO: rethink
 			#endif
 		else:
 			self.parentClass.__setitem__(self, key, value)
@@ -727,6 +751,8 @@ class DataFormat(object):
 
 	def importPrepare(self, rom, folder, filename=None, data=None, callers=[]):
 		self.importing = True
+		for k, v in self.needprep.iteritems(): self.prepareOther(v[0], k, v[1])
+
 		if filename is None:
 			# Should not initially prepare anything if Format type.
 			if self.parentClass != rpl.Serializable: return
@@ -738,11 +764,8 @@ class DataFormat(object):
 			one = False
 		else: one = self.oneExport()
 
-		keys = self.format.keys()
-		for k in keys: self.parseFormat(k)
-
-		for k in keys:
-			if k in self.command: continue
+		for k, v in self.data.iteritems():
+			if k[0] != "x" or v.reference(): continue
 			if one: use = data
 			elif k not in data:
 				raise RPLError(
@@ -750,7 +773,7 @@ class DataFormat(object):
 					self.name, k
 				)
 			else: use = data[k]
-			typeName = self.format[k]["type"]
+			typeName = v.properties["type"]
 			if DataFormat.isCounted(typeName, True):
 				# If this is the only exported key, it was exported as a list
 				# instead of a struct/dict.
@@ -783,13 +806,7 @@ class DataFormat(object):
 	#enddef
 
 	def exportPrepare(self, rom, folder, callers=[]):
-		for k in self.format:
-			# Set all referenced structs to managed.
-			typeName = self.parseFormat(k)["type"]
-			if DataFormat.isCounted(typeName, True):
-				typeName.pointer().unmanaged = False
-			#endif
-		#endfor
+		for k, v in self.needprep.iteritems(): self.prepareOther(v[0], k, v[1])
 	#enddef
 
 	def importDataLoop(self, rom, folder, base=None, callers=[]):

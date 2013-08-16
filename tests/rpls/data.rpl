@@ -2,6 +2,7 @@ RPL { lib: std }
 
 iostatic File {
 	name: [@`data.@Defs.ext`, @`test.data.@Defs.ext`]
+	text: [@`data.txt`, @`test.data.txt`]
 }
 
 # One test before data struct...
@@ -24,6 +25,7 @@ data TestFile {
 	xexpansebasebase: [number, 4]
 	xlenendaddr:      [number, 4]
 	xcountendaddr:    [number, 4]
+	#xstrlen:          [number, 4]
 
 	# Pascal strings:
 	xpstramt: [number, 2, @this.xpstrbase]
@@ -69,3 +71,9 @@ format Attribute {
 	format: [@PascalStr, internal]
 	xchange: [number, 4]
 }
+
+#data TextFile {
+#	# This also tests base: c:0
+#	file: @File.text
+#	xstr: [string, @TestFile.xstrlen]
+#}

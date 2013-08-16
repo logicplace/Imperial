@@ -28,7 +28,13 @@ from collections import OrderedDict as odict
 ################################################################################
 
 class RPLError(Exception):
-	def __init__(self, error, container=None, key=None, pos=None, verb=True, etype="Error", pre=None):
+	def __init__(self, error, container=None, key=None, pos=None, verb=True, etype="Error", pre=None, src=None):
+		if src is not None:
+			container, pos = src.container, src.pos
+			try: key = src.mykey
+			except AttributeError: key = src.key
+		#endif
+
 		# Container can be a string or a RPLStruct.
 		# So ensure that the name is used, rather than the repr.
 		try: container = container.name
@@ -1226,7 +1232,7 @@ class RPLTypeCheck(object):
 		try: return self.root.verify(data)
 		except RPLError as err:
 			raise RPLError(
-				err.args[1], err.container, err.key, err.pos,
+				err.args[1], src=err,
 				etype='Verification failed ("%s" against "%s")' % (unicode(data), self.source)
 			)
 		#endtry
@@ -1259,7 +1265,7 @@ class RPLTCData(object):
 		elif self.discrete and data.get() not in self.discrete:
 			raise RPLError(u'Value "%s" not allowed in discrete set: %s.' % (
 				data.get(), helper.list2english(self.discrete)
-			), data.container, data.mykey, data.pos)
+			), src=data)
 		# Check if the given data is always valid.
 		elif self.type == "all": return data
 		# Otherwise, check the type
@@ -1273,10 +1279,7 @@ class RPLTCData(object):
 			# Otherwise, attempt to convert to the desired type.
 			try: return self.rpl.wrap(self.type, data.get())
 			except RPLError as err:
-				raise RPLError(
-					u"Error when recasting subclass: %s" % err.args[1],
-					data.container, data.mykey, data.pos
-				)
+				raise RPLError(u"Error when recasting subclass: %s" % err.args[1], src=data)
 			#endtry
 		#endif
 	#enddef
@@ -1320,7 +1323,7 @@ class RPLTCList(object):
 					u"No permuation of single list data worked.",
 					data.container, data.mykey, data.pos
 				)
-			else: raise RPLError(u"Expected list.", data.container, data.mykey, data.pos)
+			else: raise RPLError(u"Expected list.", src=data)
 		#endif
 
 		# Check lengths
@@ -1330,27 +1333,18 @@ class RPLTCList(object):
 				# Number of non-repeating elements
 				diff = len(self.list) - self.num
 				if len(d) < diff or (len(d)-diff) % self.num:
-					raise RPLError(
-						u"Invalid list length.",
-						data.container, data.mykey, data.pos
-					)
+					raise RPLError(u"Invalid list length.", src=data)
 				#endif
 				mod = (lambda(i): i if i < diff else ((i-diff) % self.num) + diff)
 			elif (len(d) % len(self.list)) == 0:
 				mod = (lambda(i): i % len(self.list))
 			else:
-				raise RPLError(
-					u"Invalid list length.",
-					data.container, data.mykey, data.pos
-				)
+				raise RPLError(u"Invalid list length.", src=data)
 			#endif
 		elif len(d) == len(self.list):
 			mod = (lambda(i): i)
 		else:
-			raise RPLError(
-				u"Invalid list length.",
-				data.container, data.mykey, data.pos
-			)
+			raise RPLError(u"Invalid list length.", src=data)
 		#endif
 
 		# Loop through list contents to check them all
@@ -1375,10 +1369,7 @@ class RPLTCOr(object):
 			try: return x.verify(data, parentList)
 			except RPLError: pass
 		#endfor
-		raise RPLError(
-			u"Matched no options.",
-			data.container, data.mykey, data.pos
-		)
+		raise RPLError(u"Matched no options.", src=data)
 	#enddef
 #endclass
 
@@ -2375,10 +2366,11 @@ class RPLRef(object):
 
 	typeName = "reference"
 
-	def __init__(self, ref, rpl, container, mykey, line, char):
+	def __init__(self, ref, rpl, container, mykey, line, char, prop=None):
 		self.rpl = rpl
 		self.container = container
 		self.mykey = mykey
+		self.prop = prop
 		self.pos = (line, char)
 		self.nocopy = ["rpl", "container", "pos", "idxs"]
 
@@ -2451,11 +2443,7 @@ class RPLRef(object):
 			if ks[0]:
 				if ret.struct(): ret = ret[ks[0]]
 				else:
-					raise RPLError(
-						"Attempted to address key outside of a struct."
-						" Failed on %ith key." % idx,
-						self.container, self.key, self.pos
-					)
+					raise RPLError("Attempted to address key outside of a struct. Failed on %ith key." % idx, src=self)
 					#ret = ret.list()[ks[0]]
 				#endif
 			# Retrieve indexes.
@@ -2464,20 +2452,17 @@ class RPLRef(object):
 					if ret.reference(): ret = ret.get(callersAndSelf)[x]
 					else: ret = ret.list()[x]
 				except IndexError:
-					raise RPLError(
-						"List not deep enough. Failed on %ith index." % ti,
-						self.container, self.key, self.pos
-					)
+					raise RPLError("List not deep enough. Failed on %ith index." % ti, src=self)
 				except RPLBadType:
-					raise RPLError(
-						"Attempted to index nonlist. Failed on %ith index." % ti,
-						self.container, self.key, self.pos
-					)
+					raise RPLError("Attempted to index nonlist. Failed on %ith index." % ti, src=self)
 				#endtry
 				ti += 1
 			#endfor
 			if ret.reference(): ret = ret.get(callersAndSelf, True)
 		#endfor
+
+		# Retrieve property.
+		if self.prop is not None: ret = ret.properties[self.prop]
 
 		# Verify type
 		if (self.container is not None and self.mykey is not None
@@ -2490,7 +2475,7 @@ class RPLRef(object):
 		#endif
 	#endif
 
-	def set(self, data, callers=[], retCl=False):
+	def __set(self, data, callers=[], retCl=False):
 		"""
 		Set referenced value (these things are pointers, y'know).
 		"""
@@ -2528,7 +2513,26 @@ class RPLRef(object):
 			#endfor
 		#endfor
 
-		# Needs to wrap data
+		# Set property.
+		if self.prop is not None: ret, key = ret[key].properties, self.prop
+		return ret, key
+	#enddef
+
+	def set(self, data, callers=[], retCl=False):
+		ret, key = self.__set(data, callers, retCl)
+		# Verification is done by set.
+		ret[key].set(data)
+	#enddef
+
+	def overwrite(self, data, callers=[], retCl=False):
+		ret, key = self.__set(data, callers, retCl)
+		# Already given as RPLData.
+		if isinstance(data, RPLData):
+			ret[key] = data
+			return
+		#endif
+
+		# Otherwise, needs to wrap data.
 		datatype = {
 			str: "string", unicode:"string", int: "number", long:"number",
 			list: "list"
@@ -2539,7 +2543,11 @@ class RPLRef(object):
 			(datatype, data), None, None, *self.pos,
 			skipSubInst = (datatype == "list" and isinstance(data[0], RPLData))
 		)
-		return True
+	#enddef
+
+	def __getattr__(self, attr):
+		if attr == "properties": return self.get(retCl=True).properties
+		return object.__getattr__(self, attr)
 	#enddef
 
 	def resolve(self): return self.get(retCl=True)
@@ -2565,10 +2573,17 @@ class RPLRef(object):
 ################################################################################
 #################################### RPLData ###################################
 ################################################################################
+class RPLDataProps(dict):
+	def get(self, key, default=None):
+		if default is None or key in self: return self[key].get()
+		else: return default
+	#enddef
+#endclass
 
 class RPLData(object):
 	def __init__(self, data=None, top=None, container=None, mykey=None, line=None, char=None):
 		self.rpl, self.container, self.mykey, self.pos = top, container, mykey, (line, char)
+		self.properties = RPLDataProps()
 		self.nocopy = ["rpl", "container"]
 
 		if data is not None: self.set(data)
@@ -2591,14 +2606,14 @@ class RPLData(object):
 		raise RPLError("Must define defaultSize.", self.__class__.__name__, "defaultSize")
 	#enddef
 
-	def serialize(self, **kwargs):
+	def serialize(self):
 		"""
 		Return binary form of own data.
 		"""
 		raise RPLError("Must define serialize.", self.__class__.__name__, "serialize")
 	#enddef
 
-	def unserialize(self, data, **kwargs):
+	def unserialize(self, data):
 		"""
 		Parse binary data and set to self.
 		"""
@@ -2649,7 +2664,7 @@ class String(RPLData):
 			raise RPLError(
 				'Type "%s" expects unicode or str. Got "%s"' % (
 					self.typeName, type(data).__name__
-				), self.container, self.mykey, self.pos
+				), src=self
 			)
 		#endif
 		self.data = String.escape.sub(String.replIn, data)
@@ -2665,32 +2680,29 @@ class String(RPLData):
 		return '"' + String.binchr.sub(String.replOut, self.string()) + '"'
 	#enddef
 
-	def serialize(self, **kwargs):
-		if "string" in kwargs: rstr = kwargs["string"]
-		else:
-			rstr = self.string().encode("utf8")
-			if "size" not in kwargs or not kwargs["size"]: return rstr
-			rstr = rstr[0:kwargs["size"]]
-			while True:
-				try:
-					rstr.decode("utf8")
-					break
-				except UnicodeDecodeError: rstr = rstr[0:-1]
-			#endwhile
-		#endif
+	def serialize(self, string=None):
+		rstr = (string or self.string()).encode("utf8")
+		if not self.properties.get("size", 0): return rstr
+		rstr = rstr[0:self.properties.get("size")]
+		while True:
+			try:
+				rstr.decode("utf8")
+				break
+			except UnicodeDecodeError: rstr = rstr[0:-1]
+		#endwhile
 
-		if kwargs["size"] == 0: return rstr
-		rpad = kwargs["padding"] * (kwargs["size"] - len(rstr))
+		rpad = self.properties.get("padding", "\x00") * (self.properties.get("size") - len(rstr))
 		if not rpad: return rstr
-		align = kwargs["align"]
+		align = self.properties.get("align", "left")
 		if align[-6:] == "center":
+			# If l/r isn't specified, assume lcenter.
 			split = (ceil if padside[0] == "r" else int)(len(rpad) / 2)
 			return rpad[0:split] + rstr + rpad[split:0]
 		elif align == "right": return rpad + rstr
 		else: return rstr + rpad
 	#enddef
 
-	def unserialize(self, data, **kwargs): self.set(data.decode("utf8"))
+	def unserialize(self, data): self.set(data.decode("utf8"))
 
 	@staticmethod
 	def replIn(mo):
@@ -2720,7 +2732,7 @@ class Literal(String):
 			raise RPLError(
 				'Type "%s" expects unicode or str. Got "%s"' % (
 					self.typeName, type(data).__name__
-				), self.container, self.mykey, self.pos
+				), src=self
 			)
 		#endif
 	#enddef
@@ -2743,7 +2755,7 @@ class RefString(String):
 			raise RPLError(
 				'Type "%s" expects unicode or str. Got "%s"' % (
 					self.typeName, type(data).__name__
-				), self.container, self.mykey, self.pos
+				), src=self
 			)
 		#endif
 
@@ -2845,10 +2857,7 @@ class Number(RPLData):
 
 	def set(self, data):
 		if type(data) not in [int, long]:
-			raise RPLError(
-				'Type "%s" expects int or long.'  % self.typeName,
-				self.container, self.mykey, self.pos
-			)
+			raise RPLError('Type "%s" expects int or long.'  % self.typeName, src=self)
 		#endif
 		self.data = data
 	#enddef
@@ -2859,20 +2868,23 @@ class Number(RPLData):
 
 	def defaultSize(self): return 4
 
-	def serialize(self, **kwargs):
-		big, ander, ret = (kwargs["endian"] == "big"), 0xff, r''
-		for i in helper.range(kwargs["size"]):
-			c = chr((self.data & ander) >> (i*8))
+	def serialize(self):
+		big, ander, ret = (self.properties.get("endian", "little") == "big"), 0xff, r''
+		i, size = 0, self.properties.get("size", 4)
+		bound = 0xff << size if size else self.data << 8
+		while ander < bound:
+			c = chr((self.data & ander) >> i)
 			if big: ret = c + ret
 			else: ret += c
 			ander <<= 8
+			i += 8
 		#endfor
 		return ret
 	#enddef
 
-	def unserialize(self, data, **kwargs):
-		big = (kwargs["endian"] == "big")
-		size = len(data)
+	def unserialize(self, data):
+		big = (self.properties("endian", "little") == "big")
+		size = self.properties.get("size", 4) or len(data)
 		self.data = 0
 		for i,x in enumerate(data):
 			if big: shift = size-i-1
@@ -2899,10 +2911,7 @@ class List(RPLData):
 
 	def set(self, data):
 		if type(data) is not list:
-			raise RPLError(
-				'Type "%s" expects list.' % self.typeName,
-				self.container, self.mykey, self.pos
-			)
+			raise RPLError('Type "%s" expects list.' % self.typeName, src=self)
 		#endif
 		self.data = data
 	#enddef
@@ -2939,10 +2948,7 @@ class Range(List):
 
 	def set(self, data):
 		if type(data) is not list:
-			raise RPLError(
-				'Type "%s" expects list.' % self.typeName,
-				self.container, self.mykey, self.pos
-			)
+			raise RPLError('Type "%s" expects list.' % self.typeName, src=self)
 		#endif
 		for x in data:
 			try: x.number()
@@ -2952,7 +2958,7 @@ class Range(List):
 				except RPLBadType:
 					raise RPLError(
 						'Types in a "%s" must be a number or one character literal' % self.typeName,
-						self.container, self.mykey, self.pos
+						src=self
 					)
 				#endtry
 			#endtry
@@ -3028,7 +3034,7 @@ class Enum(RPLData):
 		#endfor
 		raise RPLError(
 			'Value %s not in expected set for "%s".'  % (data, self.typeName),
-			self.container, self.mykey, self.pos
+			src=self
 		)
 	#enddef
 
@@ -3057,7 +3063,7 @@ class Enum(RPLData):
 		#endfor
 		raise RPLError(
 			'IMPOSSIBLE ERROR AHHHH "%s"' % self.typeName,
-			self.container, self.mykey, self.pos
+			src=self
 		)
 	#endif
 #endclass
@@ -3086,16 +3092,17 @@ class Bool(Enum, Number):
 
 	def defaultSize(self): return 1
 
-	def serialize(self, **kwargs):
+	def serialize(self):
 		self.data = 1 if self.data else 0
-		ret = Number.serialize(self, **kwargs)
+		if "size" not in self.properties: self.properties["size"] = 1
+		ret = Number.serialize(self)
 		self.data = bool(self.data)
 		return ret
 	#enddef
 
-	def unserialize(self, data, **kwargs):
+	def unserialize(self, data):
 		# TODO: Should this only accept 0 and 1?
-		Number.unserialize(self, data, **kwargs)
+		Number.unserialize(self, data)
 		self.data = bool(self.data)
 	#enddef
 #endclass
@@ -3105,15 +3112,12 @@ class Named(RPLData):
 		if type(data) in [str, unicode]:
 			data = data.lower()
 			if data in self.names: self.data = self.names[data]
-			else: raise RPLError(
-				'No %s name "%s"' % (self.typeName, data),
-				self.container, self.mykey, self.pos
-			)
+			else: raise RPLError('No %s name "%s"' % (self.typeName, data), src=self)
 		else:
 			raise RPLError(
 				'Type "%s" expects %s.' % (
 					self.typeName, helper.list2english(["str", "unicode"] + types, "or")
-				), self.container, self.mykey, self.pos
+				), src=self
 			)
 		#endif
 	#enddef
@@ -3145,23 +3149,15 @@ class Size(Named, Number):
 
 	def set(self, data):
 		if type(data) in [int, long]:
-			if data <= 0: raise RPLError(
-				'Type "%s" expects value > 0.' % self.typeName,
-				self.container, self.mykey, self.pos
-			)
+			if data <= 0: raise RPLError('Type "%s" expects value > 0.' % self.typeName, src=self)
 			self.data = data
 		else: Named.set(self, data, ["int", "long"])
 	#enddef
 
 	def number(self): return self.data
 
-	def serialize(self, **kwargs):
-		return Number.serialize(self, **kwargs)
-	#enddef
-
-	def unserialize(self, data, **kwargs):
-		Number.unserialize(self, data, **kwargs)
-	#enddef
+	def serialize(self): return Number.serialize(self)
+	def unserialize(self, data): Number.unserialize(self, data)
 #endclass
 
 class Math(Literal, Number):
@@ -3319,10 +3315,7 @@ class Math(Literal, Number):
 				try: return int(op)
 				except ValueError:
 					if op in var: return var[op]
-					raise RPLError(
-						'Erroneous value in expression "%s"' % op,
-						self.container, self.mykey, self.pos
-					)
+					raise RPLError('Erroneous value in expression "%s"' % op, src=self)
 				#endtry
 			#endtry
 		#endif
@@ -3353,16 +3346,13 @@ class Math(Literal, Number):
 			if cmd == 30: return float(lval) / rval
 		#endif
 
-		raise RPLError("Impossibility in equasion.", self.container, self.mykey, self.pos)
+		raise RPLError("Impossibility in equasion.", src=self)
 	#enddef
 
 	def warnfloat(self, x, var={}):
 		x = self.eval(x, var)
 		if type(x) is float and int(x) != x:
-			helper.err(RPLError(
-				"Resultant value was a float.",
-				self.container, self.mykey, self.pos, etype="Warning"
-			))
+			helper.err(RPLError("Resultant value was a float.", src=self, etype="Warning"))
 		#endif
 		return int(x)
 	#enddef
@@ -3399,14 +3389,14 @@ class Math(Literal, Number):
 				raise RPLError(
 					"Needed to solve %s but impossible to invert." % {
 						5: "%", 10: "&", 12: "|"
-					}[cur[0]], self.container, self.mykey, self.pos
+					}[cur[0]], src=self
 				)
 			# x somewhere in lvalue.
 			elif idx == 1:
 				if op in [8, 9]:
 					helper.err(RPLError("Inverting %s may be lossy." % (
 						"<<" if op == 8 else ">>"
-					), self.container, self.mykey, self.pos, etype="Warning"))
+					), src=self, etype="Warning"))
 				#endif
 
 				if   op == 2: eq = (2, eq, (30, 1, cur[2]))
@@ -3420,13 +3410,13 @@ class Math(Literal, Number):
 				if   op == 2:
 					raise RPLError(
 						"Needed to solve y^x but inversion is not supported.",
-						self.container, self.mykey, self.pos
+						src=self
 					)
 				elif op in [8, 9]:
 					raise RPLError(
 						"Needed to solve y %s x but impossible to invert." % (
 							"<<" if op == 8 else ">>"
-						), self.container, self.mykey, self.pos
+						), src=self
 					)
 				elif op != 0:
 					eq = ({
@@ -3448,20 +3438,31 @@ class Math(Literal, Number):
 	def number(self, var={}): return self.warnfloat(self.data, var)
 	def string(self): RPLData.string(self)
 
-	def __unicode__(self, x=None):
+	OoO = {
+		0: 0, 1: 0,              # + - (unary)
+		2: 1,                    # **
+		3: 2, 4: 2, 5: 2, 30: 2, # * / % /
+		6: 3, 7: 3,              # + -
+		8: 4, 9: 4,              # << >>
+		10: 5,                   # &
+		11: 6,                   # ^
+		12: 7,                   # |
+	}
+
+	def __unicode__(self, x=None, prev=None):
 		if x is None: wasnone, x = True, self.data
 		else: wasnone = False
 		if type(x) is tuple:
-			if x[0] in [0,1]: ret = [u"", u"-"][x[0]] + self.__unicode__(x[1])
+			if x[0] in [0,1]: ret = [u"", u"-"][x[0]] + self.__unicode__(x[1], 1)
 			else:
-				# TODO: Putting parens here like this is pretty lazy.
-				ret = u"(" + self.__unicode__(x[1]) + u" " + [
+				parens = prev and Math.OoO[x[0]] > Math.OoO[prev]
+				ret = (u"(" if parens else u"") + self.__unicode__(x[1], x[0]) + u" " + [
 					u"**", u"*", u"/", u"%", u"+", u"-",
 					u"<<", u">>", u"&", u"^", u"|"
-				][x[0] - 2] + u" " + self.__unicode__(x[2]) + u")"
+				][x[0] - 2] + u" " + self.__unicode__(x[2], x[0]) + (u")" if parens else u"")
 			#endif
 		else: ret = x
-		if wasnone: return '"' + ret + '"'
+		if wasnone: return '+' + ret
 		else: return ret
 	#enddef
 #endclass

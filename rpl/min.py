@@ -871,7 +871,7 @@ class Pokestr(rpl.Literal):
 
 	convUnserialize = re.compile(r'(.)([゛゜])', re.UNICODE)
 
-	def serialize(self, **kwargs):
+	def serialize(self):
 		new = r""
 		for x in data:
 			try: new += Pokestr.upperSets[x]
@@ -880,13 +880,12 @@ class Pokestr(rpl.Literal):
 				else: raise RPLError('Unicode char "%s" not in %s encoding.' % (x, self.typeName))
 			#endtry
 		#endfor
-		kwargs["string"] = new
-		return rpl.String.serialize(kwargs)
+		return self.serialize(new)
 	#enddef
 
-	def unserialize(self, data, **kwargs):
+	def unserialize(self, data):
 		new = u"".join([Pokestr.raw[ord(x)] for x in data])
-		self.data = convUnserialize.sub(Pokestr.joinKatakana, new)
+		self.data = Pokestr.convUnserialize.sub(Pokestr.joinKatakana, new)
 	#enddef
 
 	@staticmethod
