@@ -390,7 +390,7 @@ class GUI(object):
 		#endif
 
 		# RPL file is parsed when loaded.
-		if not self.rpl.children: self.rpl.parse(rplfile)
+		if rplfile and not self.rpl.children: self.rpl.parse(rplfile)
 
 		####### Create GUI. #######
 		root = Tk.Tk()
