@@ -27,7 +27,7 @@ from time import time
 # Imports specific to the GUI.
 import difflib, glob, webbrowser
 from subprocess import Popen
-try: import Tkinter as Tk, tkFileDialog, ttk
+try: import Tkinter as Tk, ttk, tkFileDialog, tkFont
 except ImportError: Tk = None
 
 # Configuration file stuff...
@@ -627,15 +627,22 @@ class GUI(object):
 	def Help(self): webbrowser.open("http://logicplace.com/imperial")
 
 	def About(self):
-		dlg = Tk.Toplevel()
+		dlg = Tk.Toplevel(padx=8, pady=8)
 		dlg.title("About")
 
-		lbl = Tk.Message(dlg, text=(
-			TITLE + " is developed by Wa\n"
-			"Version: " + VERSION + "\n"
-			"Website: http://logicplace.com/imperial"
-		), width=500)
-		lbl.pack()
+		Tk.Label(dlg, text=TITLE + " is developed by Wa").pack()
+		Tk.Label(dlg).pack()
+		Tk.Label(dlg, text="Version: " + VERSION).pack(anchor=Tk.W)
+		frm = Tk.Frame(dlg)
+		Tk.Label(frm, text="Website: ").pack(side=Tk.LEFT)
+		url = Tk.Label(frm, text="http://logicplace.com/imperial", fg="#0000ff")
+		f = tkFont.Font(url, url.cget("font"))
+		f.config(underline=True)
+		url.config(font=f)
+		def OpenURL(event): webbrowser.open(url.cget("text"))
+		url.bind("<ButtonRelease-1>", OpenURL)
+		url.pack(side=Tk.LEFT)
+		frm.pack(anchor=Tk.W)
 	#enddef
 
 	# Execution:
