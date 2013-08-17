@@ -26,8 +26,18 @@ from time import time
 
 # Imports specific to the GUI.
 import difflib, glob, webbrowser
-try: import Tkinter as Tk, tkFileDialog
+from subprocess import Popen
+try: import Tkinter as Tk, tkFileDialog, ttk
 except ImportError: Tk = None
+
+# Configuration file stuff...
+from ConfigParser import ConfigParser, NoSectionError, NoOptionError
+try: from xdg.BaseDirectory import xdg_config_home
+except ImportError: xdg_config_home = None
+try:
+	from win32com.shell.shell import SHGetFolderPath
+	from win32com.shell.shellcon import CSIDL_APPDATA
+except ImportError: SHGetFolderPath = None
 
 debug = False
 TITLE = "Imperial Exchange"
@@ -111,7 +121,8 @@ def main():
 		" strings vs. literals.",
 		action  = "append",
 		nargs   = 2,
-		metavar = ("name", "value")
+		metavar = ("name", "value"),
+		default = []
 	)
 	parser.add_argument("--folder", "-f", #"/f",
 		help    = "Folder to export to, or import from. By default this is the"
@@ -179,9 +190,7 @@ def main():
 		thing.parse(args.run[0])
 
 		# Do defines.
-		if args.define:
-			for x in args.define: thing.addDef(*x)
-		#endif
+		for x in args.define: thing.addDef(*x)
 
 		# Run RPL.
 		start = time()
@@ -217,9 +226,7 @@ def main():
 		#endif
 
 		# Do defines.
-		if args.define:
-			for x in args.define: thing.addDef(*x)
-		#endif
+		for x in args.define: thing.addDef(*x)
 
 		# Run imports.
 		start = time()
@@ -256,7 +263,7 @@ class GUI(object):
 			print "Please install python-tk!"
 			return 1
 		#endif
-		self.args, self.what = args, []
+		self.args, self.what, self.defs = args, [], dict(args.define)
 		romfile, rplfile, folder, self.rpl = "", "", "" if args.folder == "." else args.folder, rpl.RPL()
 		romnote, rplnote = u"", u""
 		if args.args:
@@ -292,7 +299,10 @@ class GUI(object):
 		#endif
 
 		if rplfile and not romfile:
-			if not self.rpl.children: self.rpl.parse(rplfile)
+			if not self.rpl.children:
+				try: self.rpl.parse(rplfile)
+				except (rpl.RPLError, helper.RPLInternal) as err: rplnote = unicode(err)
+			#endif
 
 			# Collect search area.
 			top = os.path.dirname(rplfile)
@@ -348,36 +358,41 @@ class GUI(object):
 
 		if rplfile and not folder:
 			# It's probably nearby... Parse and look for directory structure.
-			if not self.rpl.children: self.rpl.parse(rplfile)
-			files = []
-			for x in self.rpl.recurse():
-				try: x.open
-				except AttributeError: pass
-				else:
-					if x.manage([]): files.append(x)
-				#endtry
-			#endfor
+			if not self.rpl.children:
+				try: self.rpl.parse(rplfile)
+				except (rpl.RPLError, helper.RPLInternal) as err: rplnote = unicode(err)
+			#endif
+			if self.rpl.children:
+				files = []
+				for x in self.rpl.recurse():
+					try: x.open
+					except AttributeError: pass
+					else:
+						if x.manage([]): files.append(x)
+					#endtry
+				#endfor
 
-			# Compare directory structure of RPL with subdirs.
-			toplevel, best = os.path.abspath(os.path.dirname(rplfile)), 0
-			for top, dirs, _ in os.walk(toplevel, followlinks=True):
-				if top.replace(toplevel, "", 1).count(os.sep) >= 2: dirs = []
-				ltop = list(os.path.split(top))
-				success, fail = 0, 0
-				for x in files:
-					fn = x.open(ltop, ext="", retName=True)
-					if os.path.exists(fn) or glob.glob(os.extsep.join((fn, "*"))):
-						success += 1
-					else: fail += 1
-				#endif
-				if success > best:
-					folder, best = top, success
-					if fail == 0: break
-				#endif
-			#endfor
+				# Compare directory structure of RPL with subdirs.
+				toplevel, best = os.path.abspath(os.path.dirname(rplfile)), 0
+				for top, dirs, _ in os.walk(toplevel, followlinks=True):
+					if top.replace(toplevel, "", 1).count(os.sep) >= 2: dirs = []
+					ltop = list(os.path.split(top))
+					success, fail = 0, 0
+					for x in files:
+						fn = x.open(ltop, ext="", retName=True)
+						if os.path.exists(fn) or glob.glob(os.extsep.join((fn, "*"))):
+							success += 1
+						else: fail += 1
+					#endif
+					if success > best:
+						folder, best = top, success
+						if fail == 0: break
+					#endif
+				#endfor
 
-			# If nothing else, this can start in the same directory as the RPL file.
-			if not folder: folder = toplevel
+				# If nothing else, this can start in the same directory as the RPL file.
+				if not folder: folder = toplevel
+			#endif
 		#endif
 
 		if not folder:
@@ -388,9 +403,6 @@ class GUI(object):
 				folder = cwd
 			#endif
 		#endif
-
-		# RPL file is parsed when loaded.
-		if rplfile and not self.rpl.children: self.rpl.parse(rplfile)
 
 		####### Create GUI. #######
 		root = Tk.Tk()
@@ -407,14 +419,15 @@ class GUI(object):
 		filemenu.add_separator()
 		filemenu.add_command(label="Exit", command=root.quit)
 		menubar.add_cascade(label="File", menu=filemenu)
-		#editmenu = Tk.Menu(menubar, tearoff=0)
+		editmenu = Tk.Menu(menubar, tearoff=0)
+		editmenu.add_command(label="Defs struct", command=self.Defines)
 		#editmenu.add_command(label="Edit mode", command=self.)
-		#editmenu.add_separator()
-		#editmenu.add_command(label="Edit ROM externally", command=self.EditROM)
-		#editmenu.add_command(label="Edit RPL externally", command=self.EditRPL)
-		#editmenu.add_separator()
-		#editmenu.add_command(label="Preferences", command=self.Preferences)
-		#menubar.add_cascade(label="Edit", menu=editmenu)
+		editmenu.add_separator()
+		editmenu.add_command(label="Edit ROM externally", command=self.EditROM)
+		editmenu.add_command(label="Edit RPL externally", command=self.EditRPL)
+		editmenu.add_separator()
+		editmenu.add_command(label="Preferences", command=self.Preferences)
+		menubar.add_cascade(label="Edit", menu=editmenu)
 		helpmenu = Tk.Menu(menubar, tearoff=0)
 		helpmenu.add_command(label="Help", command=self.Help)
 		helpmenu.add_command(label="About", command=self.About)
@@ -426,7 +439,6 @@ class GUI(object):
 		self.rplsec = Section(
 			self.rpl, root, text="RPL", entry=rplfile, note=rplnote,
 			filetypes=[("RPL Files", "*.rpl")],
-			validate="focusout", vcmd=self.UpdateRPL
 		)
 		self.dirsec = Section(self.rpl, root, text="Resource Directory", entry=folder, isdir=True)
 
@@ -483,8 +495,123 @@ class GUI(object):
 		return True
 	#enddef
 
-	# GUI functions...
+	def config(self, key=None):
+		"""
+		Return the configuration file location or values of keys.
+		"""
+		# First try a direct environment variable.
+		try: fn = os.environ["IMPERIAL_CONFIG"]
+		except KeyError:
+			# Next, are we on Windows?
+			if SHGetFolderPath: fn = SHGetFolderPath(0, CSIDL_APPDATA, None, 0) + "\\imperial.ini"
+			# Or Linux? (God I hope this works on Mac, too!)
+			elif xdg_config_home: fn = os.path.join(xdg_config_home, ".imperial")
+			# Something else..? (Bonus points: it even fits 8.3)
+			else: fn = os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), "imperial" + os.extsep + "ini")
+		#endtry
+		if key is None: return fn
+		else:
+			config = ConfigParser()
+			config.optionxform = str
+			config.read(fn)
+			if type(key) in [str, unicode]:
+				try: ret = config.get("Imperial", key)
+				except (NoSectionError, NoOptionError): ret = u""
+			else:
+				ret = {}
+				try:
+					for x in key: ret[x] = (config.get("Imperial", x))
+				except (NoSectionError, NoOptionError):
+					for x in key: ret[x] = u""
+				#endtry
+			return ret
+		#endif
+	#enddef
+
+	def saveconfig(self, settings):
+		config, fn = ConfigParser(), self.config()
+		config.optionxform = str
+		config.read(fn)
+		try: new = dict(config.items("Imperial"))
+		except (NoSectionError, NoOptionError): new = settings
+		else: new.update(settings)
+		buff = u"[Imperial]\n"
+		for x in new.iteritems(): buff += u"=".join(map(unicode, x)) + u"\n"
+		try: helper.writeTo(fn, buff)
+		except helper.RPLInternal as err: return unicode(err)
+		else: return u""
+	#enddef
+
+	###### GUI functions... ######
+	# Edit menu:
+	def Defines(self):
+		dlg = Tk.Toplevel()
+		dlg.title("Defines")
+#		mlb = treectrl.MultiListbox(dlg)
+#		mlb.config(columns=("Key", "Value"))
+#		for k, v in self.defs.iteritems(): mlb.insert(Tk.END, k, unicode(v))
+#		mlb.pack(side=Tk.TOP, fill=Tk.BOTH, expand=1)
+		# TODO: Editing/saving
+		Tk.Button(dlg, text="OK", state=Tk.DISABLED).pack(side=Tk.RIGHT)
+		Tk.Button(dlg, text="Cancel", command=dlg.destroy).pack(side=Tk.RIGHT)
+	#enddef
+
+	def EditROM(self): Popen(self.config("EditROM").replace("%f", self.romsec.get()), shell=True)
+	def EditRPL(self): Popen(self.config("EditRPL").replace("%f", self.rplsec.get()), shell=True)
+
+	def Preferences(self):
+		dlg = Tk.Toplevel()
+		dlg.title("Preferences")
+
+		config = self.config({
+			"EditROM": '',
+			"EditRPL": 'notepad "%f"'
+		})
+		for x, v in config.iteritems():
+			config[x] = StringVar()
+			config[x].set(v)
+		#endfor
+
+		nb = ttk.Notebook(dlg)
+		main = Tk.Frame(nb)
+		main.grid_rowconfigure(0, pad=5)
+		main.grid_rowconfigure(2, pad=5)
+		main.grid_columnconfigure(1, weight=1)
+		Tk.Label(main, text="Config file:").grid(row=0, column=0)
+		Tk.Label(main, text=self.config()).grid(row=0, column=1)
+		Tk.Label(main, text="Edit ROM:").grid(row=1, column=0)
+		editrom = Tk.Entry(main, textvariable=config["EditROM"])
+		editrom.grid(row=1, column=1, sticky=Tk.W+Tk.E)
+		Tk.Label(main, text="Edit RPL:").grid(row=2, column=0)
+		editrpl = Tk.Entry(main, textvariable=config["EditRPL"])
+		editrpl.grid(row=2, column=1, sticky=Tk.W+Tk.E)
+		nb.add(main, text="Main")
+
+		nb.pack(side=Tk.TOP, fill=Tk.BOTH, expand=1)
+
+		errlbl = Note(dlg)
+		errlbl.pack(side=Tk.BOTTOM, fill=Tk.X)
+
+		def Apply():
+			err = self.saveconfig(config)
+			errlbl.config(text=err)
+			return not bool(err)
+		#enddef
+
+		def OK():
+			if Apply(): dlg.destroy()
+		#enddef
+
+		buttons = Tk.Frame(dlg)
+		Tk.Button(buttons, text="Cancel", command=dlg.destroy).pack(side=Tk.RIGHT)
+		Tk.Button(buttons, text="Apply", command=Apply).pack(side=Tk.RIGHT)
+		Tk.Button(buttons, text="OK", command=OK).pack(side=Tk.RIGHT)
+		buttons.pack(side=Tk.BOTTOM, fill=Tk.X)
+	#enddef
+
+	# Help menu:
 	def Help(self): webbrowser.open("http://logicplace.com/imperial")
+
 	def About(self):
 		dlg = Tk.Toplevel()
 		dlg.title("About")
@@ -497,7 +624,9 @@ class GUI(object):
 		lbl.pack()
 	#enddef
 
-	def Import(self):
+	# Execution:
+	def Import(self, update=True):
+		if update: self.UpdateRPL()
 		romfile = self.romsec.get()
 		if not self.validate(romfile, self.Import): return
 		start = time()
@@ -512,7 +641,8 @@ class GUI(object):
 		#endtry
 	#enddef
 
-	def Export(self):
+	def Export(self, update=True):
+		if update: self.UpdateRPL()
 		romfile = self.romsec.get()
 		if not self.validate(romfile, self.Export): return
 		start = time()
@@ -528,6 +658,7 @@ class GUI(object):
 	#enddef
 
 	def Make(self):
+		self.UpdateRPL()
 		romfile = self.romsec.get()
 		try: os.unlink(romfile)
 		except OSError as err:
@@ -550,6 +681,7 @@ class GUI(object):
 	#enddef
 
 	def Run(self):
+		self.UpdateRPL()
 		start = time()
 		try: self.rpl.run(self.dirsec.get(), self.what)
 		except (rpl.RPLError, helper.RPLInternal) as err:
@@ -563,7 +695,7 @@ class GUI(object):
 		self.ccframe.pack_forget()
 		self.ieframe.pack(fill=Tk.X)
 		self.args.romless = True
-		self.cont()
+		self.cont(False)
 		self.args.romless = False
 		self.romsec.note("")
 	#enddef
@@ -574,22 +706,31 @@ class GUI(object):
 		self.romsec.note("")
 	#enddef
 
-	def UpdateRPL(self, *blah):
-		# TODO: Should this backup/restore Defs?
-		#defs = self.rpl.child("Defs")
+	def UpdateRPL(self):
 		self.rpl.reset()
 		try: self.rpl.parse(self.rplsec.get())
 		except (rpl.RPLError, helper.RPLInternal) as err:
 			self.rplsec.note(unicode(err))
-		else: self.rplsec.note("")
-		return True
+		else:
+			self.rplsec.note("")
+			for x in self.defs.itervalues(): self.rpl.addDef(*x)
+		#endtry
 	#enddef
 #enddef
+
+class StringVar(Tk.StringVar):
+	def __unicode__(self): return unicode(self.get())
+#endclass
 
 class Note(Tk.Label):
 	def grid(self, **options):
 		Tk.Label.grid(self, **options)
 		if self.cget("text") == "": self.grid_remove()
+	#enddef
+
+	def pack(self, **options):
+		Tk.Label.pack(self, **options)
+		if self.cget("text") == "": self.pack_forget()
 	#enddef
 
 	def config(self, **options):
