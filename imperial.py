@@ -445,9 +445,9 @@ class GUI(object):
 		# Import/Export buttons.
 		self.ieframe = ieframe = Tk.Frame(root)
 		impbut = Tk.Button(ieframe, text="Import", command=self.Import)
-		impbut.grid(row=0, column=0, sticky=Tk.N+Tk.W+Tk.S+Tk.E)
+		impbut.grid(row=0, column=0, sticky="news")
 		expbut = Tk.Button(ieframe, text="Export", command=self.Export)
-		expbut.grid(row=0, column=1, sticky=Tk.N+Tk.W+Tk.S+Tk.E)
+		expbut.grid(row=0, column=1, sticky="news")
 		self.ielbl = Note(ieframe)
 		self.ielbl.grid(row=1, columnspan=2, sticky=Tk.N)
 		ieframe.grid_columnconfigure(0, weight=1)
@@ -458,9 +458,9 @@ class GUI(object):
 		# Contine/Cancel buttons.
 		self.ccframe = ccframe = Tk.Frame(root)
 		contbut = Tk.Button(ccframe, text="Continue", command=self.Continue)
-		contbut.grid(row=0, column=0, sticky=Tk.N+Tk.W+Tk.S+Tk.E)
+		contbut.grid(row=0, column=0, sticky="news")
 		cnclbut = Tk.Button(ccframe, text="Cancel", command=self.Cancel)
-		cnclbut.grid(row=0, column=0, sticky=Tk.N+Tk.W+Tk.S+Tk.E)
+		cnclbut.grid(row=0, column=0, sticky="news")
 		ccframe.grid_columnconfigure(0, weight=1)
 		ccframe.grid_columnconfigure(1, weight=1)
 		ccframe.grid_rowconfigure(0, weight=1)
@@ -547,13 +547,25 @@ class GUI(object):
 	def Defines(self):
 		dlg = Tk.Toplevel()
 		dlg.title("Defines")
-#		mlb = treectrl.MultiListbox(dlg)
-#		mlb.config(columns=("Key", "Value"))
-#		for k, v in self.defs.iteritems(): mlb.insert(Tk.END, k, unicode(v))
-#		mlb.pack(side=Tk.TOP, fill=Tk.BOTH, expand=1)
-		# TODO: Editing/saving
-		Tk.Button(dlg, text="OK", state=Tk.DISABLED).pack(side=Tk.RIGHT)
-		Tk.Button(dlg, text="Cancel", command=dlg.destroy).pack(side=Tk.RIGHT)
+		dlg.grid_columnconfigure(0, weight=1)
+		kvl = KVList(dlg, columns=("Key", "Value"))
+		for k, v in self.defs.iteritems(): kvl.insert(Tk.END, k, unicode(v))
+		kvl.grid(row=0, sticky="news")
+		dlg.grid_rowconfigure(0, weight=1)
+
+		def Apply(): self.defs = kvl.get()
+
+		def OK():
+			Apply()
+			dlg.destroy()
+		#enddef
+
+		buttons = Tk.Frame(dlg)
+		Tk.Button(buttons, text="Cancel", command=dlg.destroy).pack(side=Tk.RIGHT)
+		Tk.Button(buttons, text="Apply", command=Apply).pack(side=Tk.RIGHT)
+		Tk.Button(buttons, text="OK", command=OK).pack(side=Tk.RIGHT)
+		Tk.Button(buttons, text="Add", command=kvl.insert).pack(side=Tk.RIGHT)
+		buttons.grid(row=1, sticky="ews")
 	#enddef
 
 	def EditROM(self): Popen(self.config("EditROM").replace("%f", self.romsec.get()), shell=True)
@@ -562,6 +574,7 @@ class GUI(object):
 	def Preferences(self):
 		dlg = Tk.Toplevel()
 		dlg.title("Preferences")
+		dlg.grid_columnconfigure(0, weight=1)
 
 		config = self.config({
 			"EditROM": '',
@@ -581,16 +594,14 @@ class GUI(object):
 		Tk.Label(main, text=self.config()).grid(row=0, column=1)
 		Tk.Label(main, text="Edit ROM:").grid(row=1, column=0)
 		editrom = Tk.Entry(main, textvariable=config["EditROM"])
-		editrom.grid(row=1, column=1, sticky=Tk.W+Tk.E)
+		editrom.grid(row=1, column=1, sticky="ew")
 		Tk.Label(main, text="Edit RPL:").grid(row=2, column=0)
 		editrpl = Tk.Entry(main, textvariable=config["EditRPL"])
-		editrpl.grid(row=2, column=1, sticky=Tk.W+Tk.E)
+		editrpl.grid(row=2, column=1, sticky="ew")
 		nb.add(main, text="Main")
 
-		nb.pack(side=Tk.TOP, fill=Tk.BOTH, expand=1)
-
-		errlbl = Note(dlg)
-		errlbl.pack(side=Tk.BOTTOM, fill=Tk.X)
+		nb.grid(row=0, sticky="news")
+		dlg.grid_rowconfigure(0, weight=1)
 
 		def Apply():
 			err = self.saveconfig(config)
@@ -606,7 +617,10 @@ class GUI(object):
 		Tk.Button(buttons, text="Cancel", command=dlg.destroy).pack(side=Tk.RIGHT)
 		Tk.Button(buttons, text="Apply", command=Apply).pack(side=Tk.RIGHT)
 		Tk.Button(buttons, text="OK", command=OK).pack(side=Tk.RIGHT)
-		buttons.pack(side=Tk.BOTTOM, fill=Tk.X)
+		buttons.grid(row=1, sticky="ews")
+
+		errlbl = Note(dlg)
+		errlbl.grid(row=2, sticky="ews")
 	#enddef
 
 	# Help menu:
@@ -713,7 +727,7 @@ class GUI(object):
 			self.rplsec.note(unicode(err))
 		else:
 			self.rplsec.note("")
-			for x in self.defs.itervalues(): self.rpl.addDef(*x)
+			for x in self.defs.iteritems(): self.rpl.addDef(*x)
 		#endtry
 	#enddef
 #enddef
@@ -746,11 +760,11 @@ class Section(Tk.LabelFrame):
 		self.entry = Tk.Entry(self, width=60, validate=validate, vcmd=vcmd)
 		self.entry.insert(0, entry)
 		if vcmd: self.entry.bind("<Return>", vcmd)
-		self.entry.grid(row=0, column=0, sticky=Tk.W+Tk.E)
+		self.entry.grid(row=0, column=0, sticky="ew")
 		self.button = Tk.Button(self, text="Open", command=self.open)
 		self.button.grid(row=0, column=1)
 		self.wnote = Note(self, text=note)
-		self.wnote.grid(row=1, columnspan=2, sticky=Tk.N)
+		self.wnote.grid(row=1, columnspan=2, sticky="n")
 		self.grid_columnconfigure(0, weight=1)
 		self.grid_rowconfigure(1, weight=1)
 		self.pack(fill=Tk.X)
@@ -782,6 +796,106 @@ class Section(Tk.LabelFrame):
 	def note(self, note):
 		self.wnote.config(text=note)
 		#self.wnote.pack()
+	#enddef
+#endclass
+
+class KVList(Tk.Frame):
+	def __init__(self, master=None, columns=None, **options):
+		Tk.Frame.__init__(self, master, **options)
+		self.canvas = Tk.Canvas(self, background="#ffffff")
+		self.table = Tk.Frame(self.canvas)
+		self.table.grid_columnconfigure(0, weight=2)
+		self.table.grid_columnconfigure(1, weight=8)
+		self.col1lbl = Note(self.table, text=columns[0] if columns else None)
+		self.col1lbl.grid(row=0, column=0, sticky="news")
+		self.col2lbl = Note(self.table, text=columns[1] if columns else None)
+		self.col2lbl.grid(row=0, column=1, sticky="news")
+		self.canvas.pack(side=Tk.LEFT, fill=Tk.BOTH, expand=1)
+		yscroll = Tk.Scrollbar(self, command=self.canvas.yview, orient=Tk.VERTICAL)
+		yscroll.pack(side=Tk.RIGHT, fill=Tk.Y, expand=0)
+		self.canvas.configure(yscrollcommand=yscroll.set)
+		self.interior = self.canvas.create_window(0, 0, window=self.table, anchor=Tk.NW)
+		self.canvas.bind('<Configure>', self._configcanvas)
+		self.table.bind('<Configure>', self._configinterior)
+		self.rows = []
+	#enddef
+
+	def _configcanvas(self, event):
+		tmp = self.canvas.winfo_width()
+		if self.table.winfo_reqwidth() != tmp:
+			self.canvas.itemconfigure(self.interior, width=tmp)
+		#endif
+	#enddef
+
+	def _configinterior(self, event):
+		size = (self.table.winfo_reqwidth(), self.table.winfo_reqheight())
+		self.canvas.config(scrollregion="0 0 %s %s" % size)
+		if size[0] != self.canvas.winfo_width():
+			self.canvas.config(width=size[0])
+		#endif
+	#enddef
+
+	def config(self, columns=None, **options):
+		if columns:
+			self.col1lbl.config(text=columns[0])
+			self.col2lbl.config(text=columns[1])
+		#endif
+		Tk.Frame.config(**options)
+	#enddef
+
+	def disable(self, index=Tk.ALL):
+		if index == Tk.ALL:
+			for i in self.rows: self.disable(i)
+			return
+		elif index == Tk.END: index = -1
+		for x in self.rows[index]: x.config(state=DISABLED)
+	#enddef
+
+	def insert(self, index=Tk.END, key="", value=""):
+		opts = {"relief": Tk.FLAT, "background": "#ffffff"}
+		row = (Tk.Entry(self.table, width=8, **opts), Tk.Entry(self.table, width=30, **opts))
+		row[0].insert(0, key)
+		row[1].insert(0, value)
+		if index == Tk.END: self.rows.append(row)
+		else: self.rows.insert(row, index)
+		self.updateGrid()
+	#enddef
+
+	def remove(self, index=Tk.END):
+		if index == Tk.END: index = -1
+		for x in self.rows[index]: x.destroy()
+		self.rows.pop(index)
+	#enddef
+
+	def updateGrid(self):
+		for index, row in enumerate(self.rows):
+			row[0].grid(row=index + 1, column=0, sticky="ew", padx=1)
+			row[1].grid(row=index + 1, column=1, sticky="ew")
+		#endfor
+	#enddef
+
+	def get(self, key=None):
+		if key is None:
+			ret = {}
+			for row in self.rows: ret[row[0].get()] = row[1].get()
+			return ret
+		else:
+			for row in self.rows:
+				if row[0].get() == key: return row[1].get()
+			#endfor
+		#endif
+		return None
+	#enddef
+
+	def set(self, key, value=""):
+		for row in self.rows:
+			if row[0].get() == key:
+				row[1].delete(0, Tk.END)
+				row[1].insert(0, value)
+				return True
+			#endif
+		#endfor
+		return False
 	#enddef
 #endclass
 
