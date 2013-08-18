@@ -844,10 +844,11 @@ class Definition(Tk.Frame):
 	def __init__(self, master=None, term="", definition="", *options):
 		Tk.Frame.__init__(self, master, *options)
 		self.grid_columnconfigure(1, weight=1)
-		Tk.Label(self, text=term + ": ").grid(row=0, column=0)
+		lbl = Tk.Label(self, text=term + ": ")
+		lbl.grid(row=0, column=0)
 		msg = Tk.Message(self, text=definition, width=1000)
-		msg.grid(row=0, column=1, sticky="we")
-		msg.bind("<Configure>", lambda e: msg.configure(width=e.width-10))
+		msg.grid(row=0, column=1, sticky="w")
+		self.bind("<Configure>", lambda e: msg.configure(width=self.winfo_width() - lbl.winfo_width() - 10))
 	#enddef
 #endclass
 
