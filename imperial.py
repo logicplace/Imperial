@@ -578,7 +578,7 @@ class GUI(object):
 						# Passed defaults by dict.
 						try: ret[x] = key[x]
 						# No explicit defaulting.
-						except TypeError: ret[x] = key[x] or u""
+						except TypeError: ret[x] = u""
 					#endtry
 				#endfor
 			return ret
