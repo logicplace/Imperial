@@ -486,9 +486,9 @@ class GUI(object):
 		# Setup session saving.
 		def updateSession(name, index, mode):
 			self.saveconfig({
-				"SessionROM":    self.romsec,
-				"SessionRPL":    self.rplsec,
-				"SessionFolder": self.dirsec
+				"SessionROM":    romfile,
+				"SessionRPL":    rplfile,
+				"SessionFolder": folder
 			})
 		#enddef
 		romfile.trace("w", updateSession)
