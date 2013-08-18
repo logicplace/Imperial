@@ -27,8 +27,13 @@ from time import time
 # Imports specific to the GUI.
 import difflib, glob, webbrowser
 from subprocess import Popen
-try: import Tkinter as Tk, ttk, tkFileDialog, tkFont
-except ImportError: Tk = None
+try:
+	import ttk, tkFileDialog, tkFont
+	import Tkinter as Tk
+except ImportError:
+	try: import tkinter as Tk
+	except ImportError: Tk = None
+#endtry
 
 # Configuration file stuff...
 from ConfigParser import ConfigParser, NoSectionError, NoOptionError
@@ -258,16 +263,10 @@ def main():
 #enddef
 
 class GUI(object):
-	def run(self, args):
-		if Tk is None:
-			print "Please install python-tk!"
-			return 1
-		#endif
-		self.args, self.what, self.defs = args, [], dict(args.define)
-		romfile, rplfile, folder, self.rpl = "", "", "" if args.folder == "." else args.folder, rpl.RPL()
-		romnote, rplnote = u"", u""
-		if args.args:
-			for x in args.args:
+	def cliFiles(self, romfile, rplfile, folder):
+		if self.args.folder != ".": folder = self.args.folder
+		if self.args.args:
+			for x in self.args.args:
 				if os.path.isdir(x): folder = x
 				else:
 					ext = os.path.basename(x).split(os.extsep)[-1]
@@ -276,8 +275,12 @@ class GUI(object):
 				#endif
 			#endfor
 		#endif
+		return romfile, rplfile, folder, u"", u""
+	#enddef
 
+	def guessFiles(self, romfile, rplfile, folder):
 		# Fancy guesswork~
+		romnote, rplnote = u"", u""
 		if not rplfile and romfile:
 			# Look for a similarly named RPL file nearby.
 			name = os.path.splitext(romfile)[0]
@@ -404,6 +407,38 @@ class GUI(object):
 			#endif
 		#endif
 
+		return romfile, rplfile, folder, romnote, rplnote
+	#enddef
+
+	def sessionFiles(self, romfile, rplfile, folder):
+		if romfile or rplfile or (folder and os.path.realpath(folder) != os.path.realpath(os.getcwd())):
+			# Should only load the session if it's the whole session.
+			return romfile, rplfile, folder, u"", u""
+		#endif
+		files = self.config(["SessionROM", "SessionRPL", "SessionFolder"])
+		return files["SessionROM"], files["SessionRPL"], files["SessionFolder"], u"", u""
+	#enddef
+
+	def run(self, args):
+		if Tk is None:
+			print "Please install python-tk!"
+			return 1
+		#endif
+		self.args, self.what, self.defs, self.rpl = args, [], dict(args.define), rpl.RPL()
+		romfile, rplfile, folder = "", "", ""
+		romnote, rplnote = u"", u""
+
+		startup = self.config("StartupMode", "cli,smart,session").replace(" ", "").split(",")
+		for x in startup:
+			try:
+				romfile, rplfile, folder, romnote, rplnote = {
+					"cli": self.cliFiles,
+					"smart": self.guessFiles,
+					"session": self.sessionFiles
+				}[x](romfile, rplfile, folder)
+			except KeyError: helper.err("Unknown startup mode %s." % x)
+		#endfor
+
 		####### Create GUI. #######
 		root = Tk.Tk()
 		root.title(TITLE)
@@ -435,12 +470,30 @@ class GUI(object):
 		root.config(menu=menubar)
 
 		# Add sections.
-		self.romsec = Section(self.rpl, root, text="ROM", entry=romfile, note=romnote)
+		romfile = StringVar(text=romfile)
+		self.romsec = Section(self.rpl, root, text="ROM", entryvar=romfile, note=romnote)
+		self.romsec.pack(fill=Tk.X)
+		rplfile = StringVar(text=rplfile)
 		self.rplsec = Section(
-			self.rpl, root, text="RPL", entry=rplfile, note=rplnote,
+			self.rpl, root, text="RPL", entryvar=rplfile, note=rplnote,
 			filetypes=[("RPL Files", "*.rpl")],
 		)
-		self.dirsec = Section(self.rpl, root, text="Resource Directory", entry=folder, isdir=True)
+		self.rplsec.pack(fill=Tk.X)
+		folder = StringVar(text=folder)
+		self.dirsec = Section(self.rpl, root, text="Resource Directory", entryvar=folder, isdir=True)
+		self.dirsec.pack(fill=Tk.X)
+
+		# Setup session saving.
+		def updateSession(name, index, mode):
+			self.saveconfig({
+				"SessionROM":    self.romsec,
+				"SessionRPL":    self.rplsec,
+				"SessionFolder": self.dirsec
+			})
+		#enddef
+		romfile.trace("w", updateSession)
+		rplfile.trace("w", updateSession)
+		folder.trace("w", updateSession)
 
 		# Import/Export buttons.
 		self.ieframe = ieframe = Tk.Frame(root)
@@ -495,7 +548,7 @@ class GUI(object):
 		return True
 	#enddef
 
-	def config(self, key=None):
+	def config(self, key=None, default=u""):
 		"""
 		Return the configuration file location or values of keys.
 		"""
@@ -516,14 +569,18 @@ class GUI(object):
 			config.read(fn)
 			if type(key) in [str, unicode]:
 				try: ret = config.get("Imperial", key)
-				except (NoSectionError, NoOptionError): ret = u""
+				except (NoSectionError, NoOptionError): ret = default
 			else:
 				ret = {}
-				try:
-					for x in key: ret[x] = (config.get("Imperial", x))
-				except (NoSectionError, NoOptionError):
-					for x in key: ret[x] = u""
-				#endtry
+				for x in key: 
+					try: ret[x] = (config.get("Imperial", x))
+					except (NoSectionError, NoOptionError):
+						# Passed defaults by dict.
+						try: ret[x] = key[x]
+						# No explicit defaulting.
+						except TypeError: ret[x] = key[x] or u""
+					#endtry
+				#endfor
 			return ret
 		#endif
 	#enddef
@@ -536,7 +593,7 @@ class GUI(object):
 		except (NoSectionError, NoOptionError): new = settings
 		else: new.update(settings)
 		buff = u"[Imperial]\n"
-		for x in new.iteritems(): buff += u"=".join(map(unicode, x)) + u"\n"
+		for x in sorted(list(new.iteritems())): buff += u"=".join(map(unicode, x)) + u"\n"
 		try: helper.writeTo(fn, buff)
 		except helper.RPLInternal as err: return unicode(err)
 		else: return u""
@@ -574,18 +631,18 @@ class GUI(object):
 	def Preferences(self):
 		dlg = Tk.Toplevel()
 		dlg.title("Preferences")
+		dlg.grid_rowconfigure(0, weight=1)
 		dlg.grid_columnconfigure(0, weight=1)
 
 		config = self.config({
-			"EditROM": '',
-			"EditRPL": 'notepad "%f"'
+			"EditROM": "",
+			"EditRPL": 'notepad "%f"',
+			"StartupMode": "cli,smart,session",
 		})
-		for x, v in config.iteritems():
-			config[x] = StringVar()
-			config[x].set(v)
-		#endfor
+		for x, v in config.iteritems(): config[x] = StringVar(text=v)
 
-		nb = ttk.Notebook(dlg)
+		nb = ttk.Notebook(dlg, width=500)
+		# Main tab
 		main = Tk.Frame(nb)
 		main.grid_rowconfigure(0, pad=5)
 		main.grid_rowconfigure(2, pad=5)
@@ -593,15 +650,33 @@ class GUI(object):
 		Tk.Label(main, text="Config file:").grid(row=0, column=0)
 		Tk.Label(main, text=self.config()).grid(row=0, column=1)
 		Tk.Label(main, text="Edit ROM:").grid(row=1, column=0)
-		editrom = Tk.Entry(main, textvariable=config["EditROM"])
-		editrom.grid(row=1, column=1, sticky="ew")
+		Tk.Entry(main, textvariable=config["EditROM"]).grid(row=1, column=1, sticky="ew")
 		Tk.Label(main, text="Edit RPL:").grid(row=2, column=0)
-		editrpl = Tk.Entry(main, textvariable=config["EditRPL"])
-		editrpl.grid(row=2, column=1, sticky="ew")
+		Tk.Entry(main, textvariable=config["EditRPL"]).grid(row=2, column=1, sticky="ew")
 		nb.add(main, text="Main")
 
+		# Starup tab
+		startup = Tk.Frame(nb)
+		m = Tk.Message(startup, text=(
+			"Indicate how the system should default the files and folder paths. "
+			"This is separated by commas with the order indicating precedence.\n"
+		), width=1000)
+		m.pack(anchor=Tk.NW, fill=Tk.X)
+		m.bind("<Configure>", lambda e: m.configure(width=e.width-10))
+		Definition(startup, "cli",
+			"Load from command line, with no specific argument order."
+		).pack(anchor=Tk.NW, fill=Tk.X)
+		Definition(startup, "smart",
+			"Guess what it can from the information obtained from a previous method, "
+			"or from the current directory, if it's not the Imperial directory."
+		).pack(anchor=Tk.NW, fill=Tk.X)
+		Definition(startup, "session",
+			"Load the files that were used last time, if available."
+		).pack(anchor=Tk.NW, fill=Tk.X)
+		Tk.Entry(startup, textvariable=config["StartupMode"]).pack(anchor="w", fill=Tk.X)
+		nb.add(startup, text="Startup")
+
 		nb.grid(row=0, sticky="news")
-		dlg.grid_rowconfigure(0, weight=1)
 
 		def Apply():
 			err = self.saveconfig(config)
@@ -740,6 +815,11 @@ class GUI(object):
 #enddef
 
 class StringVar(Tk.StringVar):
+	def __init__(self, master=None, text=None, *options):
+		Tk.StringVar.__init__(self, master, *options)
+		self.set(text)
+	#enddef
+
 	def __unicode__(self): return unicode(self.get())
 #endclass
 
@@ -760,21 +840,29 @@ class Note(Tk.Label):
 	#enddef
 #enddef
 
+class Definition(Tk.Frame):
+	def __init__(self, master=None, term="", definition="", *options):
+		Tk.Frame.__init__(self, master, *options)
+		self.grid_columnconfigure(1, weight=1)
+		Tk.Label(self, text=term + ": ").grid(row=0, column=0)
+		msg = Tk.Message(self, text=definition, width=1000)
+		msg.grid(row=0, column=1, sticky="we")
+		msg.bind("<Configure>", lambda e: msg.configure(width=e.width-10))
+	#enddef
+#endclass
+
 class Section(Tk.LabelFrame):
-	def __init__(self, top, master=None, entry=u"", note=u"", filetypes=[], isdir=False, validate=None, vcmd=None, **options):
+	def __init__(self, top, master=None, entryvar=None, note=u"", filetypes=[], isdir=False, **options):
 		Tk.LabelFrame.__init__(self, master, **options)
 		self.rpl = top
-		self.entry = Tk.Entry(self, width=60, validate=validate, vcmd=vcmd)
-		self.entry.insert(0, entry)
-		if vcmd: self.entry.bind("<Return>", vcmd)
-		self.entry.grid(row=0, column=0, sticky="ew")
+		self.entry = entryvar
+		Tk.Entry(self, width=60, textvariable=entryvar).grid(row=0, column=0, sticky="ew")
 		self.button = Tk.Button(self, text="Open", command=self.open)
 		self.button.grid(row=0, column=1)
 		self.wnote = Note(self, text=note)
 		self.wnote.grid(row=1, columnspan=2, sticky="n")
 		self.grid_columnconfigure(0, weight=1)
 		self.grid_rowconfigure(1, weight=1)
-		self.pack(fill=Tk.X)
 
 		self.isdir = isdir
 		self.title = "Open %s %s" % (options["text"], "directory" if isdir else "file")
@@ -794,8 +882,7 @@ class Section(Tk.LabelFrame):
 				title = self.title
 			)
 		#endif
-		self.entry.delete(0, Tk.END)
-		self.entry.insert(0, filename)
+		self.entry.set(filename)
 	#enddef
 
 	def get(self): return self.entry.get()
