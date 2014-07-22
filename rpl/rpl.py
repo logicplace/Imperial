@@ -680,15 +680,15 @@ class RPL(RPLObject):
 					elif len(times) == 2:
 						lt, l = RPL.numOrHex(times[0])
 						rt, r = RPL.numOrHex(times[1])
-						numList += map(lambda(x): (lt, x), [l] * r)
+						numList += [(lt, x) for x in [l] * r]
 					elif len(inc) == 2:
 						lt, l = RPL.numOrHex(inc[0])
 						rt, r = RPL.numOrHex(inc[1])
-						numList += map(lambda(x): (lt, x), list(range(l, l + r)))
+						numList += [(lt, x) for x in list(range(l, l + r))]
 					elif len(dec) == 2:
 						lt, l = RPL.numOrHex(dec[0])
 						rt, r = RPL.numOrHex(dec[1])
-						numList += map(lambda(x): (lt, x), list(range(l, l - r, -1)))
+						numList += [(lt, x) for x in list(range(l, l - r, -1))]
 					# Single character literal. Sometimes called a token.
 					elif r in "abcdefghijklmnopqrstuvwxyz":
 						numList.append(("literal", r))
@@ -1335,9 +1335,9 @@ class RPLTCList(object):
 						data.container, data.mykey, data.pos
 					)
 				#endif
-				mod = (lambda(i): i if i < diff else ((i-diff) % self.num) + diff)
+				mod = (lambda i: i if i < diff else ((i-diff) % self.num) + diff)
 			elif (len(d) % len(self.list)) == 0:
-				mod = (lambda(i): i % len(self.list))
+				mod = (lambda i: i % len(self.list))
 			else:
 				raise RPLError(
 					u"Invalid list length.",
@@ -1345,7 +1345,7 @@ class RPLTCList(object):
 				)
 			#endif
 		elif len(d) == len(self.list):
-			mod = (lambda(i): i)
+			mod = (lambda i: i)
 		else:
 			raise RPLError(
 				u"Invalid list length.",

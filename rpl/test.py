@@ -69,7 +69,7 @@ class Echo(rpl.RPLStruct):
 		if lines is None:
 			# Collect and sort lines...
 			lines = sorted([x for x in self.iterkeys() if x.find("line") == 0],
-				key = lambda(x): int("0" + x[4:])
+				key = lambda x: int("0" + x[4:])
 			)
 		#endif
 
@@ -79,7 +79,7 @@ class Echo(rpl.RPLStruct):
 			if isinstance(data, rpl.List):
 				# Lists are considered to be tabbed in, with wrapping.
 				for x in data.get(): self.echo(tabs + self["tabs"].get())
-			else: print self.wrap(tabs, unicode(data.get()), self["width"].get())
+			else: print(self.wrap(tabs, unicode(data.get()), self["width"].get()))
 		#endfor
 	#enddef
 

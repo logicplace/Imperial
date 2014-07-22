@@ -30,7 +30,7 @@ def err(msg): stderr.write(unicode(msg) + "\n")
 # TODO: Define some levels
 logLevel = 0
 def log(level, msg):
-	if level <= logLevel: print "LOG(%i): %s" % (debugLevel, unicode(msg))
+	if level <= logLevel: print("LOG(%i): %s" % (debugLevel, unicode(msg)))
 #enddef
 
 def makeParents(path):
@@ -234,8 +234,8 @@ def genericHelp(context, moreInfo, desc, lib, defs):
 		print ("%s\n"
 			"It offers the structs:\n  %s\n"
 		) % (desc, "  ".join(structs))
-		if types: print "And the types:\n  %s\n" % "  ".join(types)
-		print "Use --help %s [structs...] for more info" % lib
+		if types: print("And the types:\n  %s\n" % "  ".join(types))
+		print("Use --help %s [structs...] for more info" % lib)
 	else:
 		kdefs = {}
 		for x in defs: kdefs[x.typeName] = x
@@ -244,9 +244,9 @@ def genericHelp(context, moreInfo, desc, lib, defs):
 			x = tmp[0]
 			conds = tmp[1:]
 			if "help" in conds:
-				try: print fetchDox(kdefs[x], context, conds, "help").strip()
-				except RPLInternal: print fetchConds(kdefs[x])
-			else: print fetchDox(kdefs[x], context, conds).strip()
+				try: print(fetchDox(kdefs[x], context, conds, "help").strip())
+				except RPLInternal: print(fetchConds(kdefs[x]))
+			else: print(fetchDox(kdefs[x], context, conds).strip())
 		#endfor
 	#endif
 #enddef
@@ -335,3 +335,4 @@ except AttributeError:
 else: range = range
 
 def prnt(*args): stdout.write(u" ".join([str(x) for x in args]) + u"\n")
+def prntc(*args): stdout.write(u" ".join([str(x) for x in args]) + u" ")

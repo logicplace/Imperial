@@ -177,7 +177,7 @@ def main():
 			#endif
 		else: parser.print_help()
 	elif args.version:
-		print TITLE + " - v" + VERSION
+		print(TITLE + " - v" + VERSION)
 	elif args.template:
 		thing = rpl.RPL()
 		# Load requested libs.
@@ -188,7 +188,7 @@ def main():
 		#endif
 		structs = args.structs
 		if structs and not args.romless: structs = ["ROM"] + structs
-		print thing.template(structs)
+		print(thing.template(structs))
 	elif args.run:
 		thing = rpl.RPL()
 
@@ -200,7 +200,7 @@ def main():
 		# Run RPL.
 		start = time()
 		thing.run(args.folder, args.args)
-		print "Finished executing. Time taken: %.3fs" % (time() - start)
+		print("Finished executing. Time taken: %.3fs" % (time() - start))
 	elif args.importing or args.export or args.makefile:
 		# Regular form.
 		thing = rpl.RPL()
@@ -218,11 +218,11 @@ def main():
 			for x in roms:
 				successes, fails = x.validate(romstream)
 				if fails:
-					print "Failed the following checks: %s" % helper.list2english([
+					print("Failed the following checks: %s" % helper.list2english([
 						("%s[%i]" % fail
 						if type(fail) is tuple else
 						fail) for fail in fails
-					])
+					]))
 					answer = "."
 					while answer not in "yYnN": answer = raw_input("Continue anyway (y/n)? ")
 					if answer in "nN": return 1
@@ -237,11 +237,11 @@ def main():
 		start = time()
 		if args.importing:
 			thing.importData(romstream, args.folder, args.args, args.blank)
-			print "Finished %s." % ("blank import" if args.blank else "importing"),
+			helper.prntc("Finished %s." % ("blank import" if args.blank else "importing"))
 			romstream.close()
 		elif args.export:
 			thing.exportData(romstream, args.folder, args.args, args.blank)
-			print "Finished %s." % ("blank export" if args.blank else "exporting"),
+			helper.prntc("Finished %s." % ("blank export" if args.blank else "exporting"))
 			romstream.close()
 		elif args.makefile:
 			try: os.unlink(romfile)
@@ -253,9 +253,9 @@ def main():
 				#endif
 			#endtry
 			thing.importData(romfile, args.folder, args.args, args.blank)
-			print "Finished %s." % ("build test" if args.blank else "building"),
+			helper.prntc("Finished %s." % ("build test" if args.blank else "building"))
 		#endif
-		print "Time taken: %.3fs" % (time() - start)
+		print("Time taken: %.3fs" % (time() - start))
 	else:
 		return GUI().run(args)
 	#endif
@@ -421,7 +421,7 @@ class GUI(object):
 
 	def run(self, args):
 		if Tk is None:
-			print "Please install python-tk!"
+			print("Please install python-tk!")
 			return 1
 		#endif
 		self.args, self.what, self.defs, self.rpl = args, [], dict(args.define), rpl.RPL()
@@ -998,7 +998,7 @@ if __name__ == "__main__":
 	try: sys.exit(main())
 	except (EOFError, KeyboardInterrupt):
 		if debug: raise
-		print "\nOperations terminated by user."
+		print("\nOperations terminated by user.")
 		sys.exit(0)
 	except (rpl.RPLError, helper.RPLInternal) as err:
 		if debug: raise
