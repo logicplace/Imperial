@@ -34,6 +34,7 @@ Regarding the current state of the project, I'm mainly questioning some things,
 * Add better error reporting.
 * Clean, make efficiency adjustments, add more comments.
 * Complete help contents.
+* Python 3...think I might drop Python 2 support.
 
 ### After 0.1.0 ###
 * Finish RPL tutorial.
