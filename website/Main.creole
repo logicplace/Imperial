@@ -1,0 +1,18 @@
+<<import head.html>>
+= Imperial Exchange
+is a utility for streamlining the editing and creation process for ROMs. Making or adjusting to different tools for different systems can be tedious, and sometimes a headache to even find tools for obscure systems. Perhaps you want to edit a game's levels, but want a simple framework to do it with rather than writing a tool from scratch. Maybe you make original games, and you need something to convert your resources as well as your code.
+
+These things are what this project aspires to streamline. Frankly, hacking is a huge pain in the ass. It's more of a mastery of adaption to your interfacing rather than the systems themselves. I want to do anything I can to make that easier, for myself mainly. Therefore, eventually, Imperial will become a suite of tools to this effect. Namely, I will remake an old [unreleased] project of mine to aid in scanning binaries for graphics data. Other tools like that, as well. I want to make a good hex editor too because they don't seem to exist.
+
+The system strives for being the be all and end all of binary conversion and modification. It can easily support things besides ROMs, even if that's its focus.
+
+= Choose a Portal
+<<table 3x2 udlr width=(33%,34%,33%)
+|= <center>[[Basic Usage]]</center>
+| How to use the command-line interface to apply other peoples' projects. How to use the given tools and what for.
+|= <center>[[RPL]]</center>
+| Learn how to write your own RPL files to modify or create content.
+|= <center>[[Library Development]]</center>
+| Learn how to create your own library to add custom structs or data types.
+>>
+<<import foot.html>>
