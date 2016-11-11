@@ -190,14 +190,16 @@ my $out = '';
 my $all = 0;
 my $help = 0;
 my $verbose = 0;
+my $nopretty = 0;
 
 GetOptions(
-	'all|a'      => \$all,
-	'help|h|?'   => \$help,
-	'out|o=s'    => \$out,
-	'text|t=s'   => \$text,
-	'file|f=s'   => \$file,
-	'verbose|v+' => \$verbose,
+	'all|a'       => \$all,
+	'help|h|?'    => \$help,
+	'out|o=s'     => \$out,
+	'text|t=s'    => \$text,
+	'file|f=s'    => \$file,
+	'no-pretty|P' => \$nopretty,
+	'verbose|v+'  => \$verbose,
 );
 
 if ($help) {
@@ -205,26 +207,30 @@ if ($help) {
 	Converts input WikiCreole to HTML.
 	Usage: ./build.pl [OPTIONS]
 
-	  --help    -h  Print this help text.
-	  --all     -a  Build all files in the given directory (default: CWD)
-	  --out     -o  Directory or file to write to (default: 'build' or stdout)
-	  --text    -t  Input creole text directly
-	  --file    -f  Specify a creole file (assumed if no flag specified)
-	  --verbose -v  Print verbose information
+	  --help       -h  Print this help text.
+	  --all        -a  Build all files in the given directory (default: CWD)
+	  --out        -o  Directory or file to write to (default: 'release' or stdout)
+	  --text       -t  Input creole text directly
+	  --file       -f  Specify a creole file (assumed if no flag specified)
+	  --no-pretty  -P  Don't use pretty URLs (better for use locally)
+	  --verbose    -v  Print verbose information
 	HELP_TEXT
 	print $helptext
 } elsif ($all) {
 	# Build directory accordingly
-	$out = 'build' if !$out;
+	$out = 'release' if !$out;
 
 	# First create the folder and clear it
 	remove_tree($out);
 	make_path($out);
 
 	# Now build according to the structure:
+	# Pretty:
 	#  Main.creole -> index.html
 	#  *.creole -> */index.html
 	#  */*.creole -> */*/index.html
+	# Nonpretty:
+	#  *.creole -> *.html
 	find({
 		wanted => \&wanted,
 		no_chdir => 1
@@ -234,8 +240,12 @@ if ($help) {
 		if ($outfile =~ /\.creole$/) {
 			$outfile =~ s%^(?:\./)?((?:[^/]+/)*)(.*)\.creole$%$out/$1/$2%;
 			$outfile =~ s%/+%/%g;
-			$outfile =~ s%/Main$%%;
-			conv_file($_, $outfile . "/index.html");
+			if ($nopretty) {
+				conv_file($_, "$outfile.html");
+			} else {
+				$outfile =~ s%/Main$%%;
+				conv_file($_, "$outfile/index.html");
+			}
 		}
 	}
 } elsif ($text) {
