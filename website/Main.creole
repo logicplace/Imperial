@@ -1,4 +1,4 @@
-<<import head.html>>
+<<import head.html Documentation>>
 = Imperial Exchange
 is a utility for streamlining the editing and creation process for ROMs. Making or adjusting to different tools for different systems can be tedious, and sometimes a headache to even find tools for obscure systems. Perhaps you want to edit a game's levels, but want a simple framework to do it with rather than writing a tool from scratch. Maybe you make original games, and you need something to convert your resources as well as your code.
 
