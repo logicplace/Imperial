@@ -61,7 +61,8 @@ sub valid_anchor {
 }
 
 sub import_html {
-	my $fn = $_[0];
+	my @tmp = split(/ +/, $_[0]);
+	my $fn = shift @tmp;
 	my $ft = read_file($fn, binmode => ':utf8');
 
 	if ($fn =~ /\.creole$/) {
@@ -69,7 +70,15 @@ sub import_html {
 		my $html = parse_text($ft);
 		$current_doc = $bup;
 		return $html;
-	} else {
+	} elsif ($fn =~ /\.x?html?$/) {
+		# Template in some stuff.
+		my $x;
+		for (my $i = 1; $x = shift @tmp; ++$i) {
+			$ft =~ s/\{\{$i\}\}/$x/g;
+		}
+		$fn =~ /(\.\.\/)*/;
+		my $dots = $1 ? substr($1, 0, -1) : ".";
+		$ft =~ s/\{\{\.\.\}\}/$dots/g;
 		return $ft;
 	}
 }
@@ -99,7 +108,6 @@ sub make_table {
 	for (my $i = 0; $i < scalar @cells; $i++) {
 		$cells[$i] =~ s%^=\s*(.+?)\s*$%'<th>' . trim(creole_parse($1)) . '</th>'%se or
 		$cells[$i] =~ s%^\s*(.+?)\s*$%'<td>' . trim(creole_parse($1)) . '</td>'%se;
-		print "$i: " . $cells[$i] . "\n";
 	}
 
 	# Now reorganize them.
@@ -122,12 +130,11 @@ sub make_table {
 		$result .= '<tr>';
 		for (my $x = 0; $x < $width; $x++) {
 			my $idx = $indexer->($x, $y);
-			print "$x,$y = $idx\n";
 			$result .= $cells[$idx];
 		}
 		$result .= '</tr>';
 	}
-	return $result . '</table>';
+	return $result . "</table>\n";
 }
 
 sub trim {
