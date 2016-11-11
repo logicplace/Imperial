@@ -76,7 +76,7 @@ sub import_html {
 		for (my $i = 1; $x = shift @tmp; ++$i) {
 			$ft =~ s/\{\{$i\}\}/$x/g;
 		}
-		$fn =~ /(\.\.\/)*/;
+		$fn =~ /^(\.\.\/)*/;
 		my $dots = $1 ? substr($1, 0, -1) : ".";
 		$ft =~ s/\{\{\.\.\}\}/$dots/g;
 		return $ft;
