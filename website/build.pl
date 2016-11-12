@@ -32,7 +32,7 @@ sub mylink {
 	$path =~ s/\p{Z}/_/g;
 	return uri_join($scheme, $auth,
 		uri_escape_utf8($path, "^A-Za-z0-9\-\._~/"),
-	$query, $frag);
+	$query, valid_anchor($frag));
 }
 creole_link \&mylink;
 
