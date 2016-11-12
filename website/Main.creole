@@ -15,4 +15,6 @@ The system strives for being the be all and end all of binary conversion and mod
 |= <center>[[Library Development]]</center>
 | Learn how to create your own library to add custom structs or data types.
 >>
+
+Or you may browse the [[Specification|technical specification]]</a>.
 <<import foot.html>>
