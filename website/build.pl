@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# You must run (once): cpan Switch Text::WikiCreole File::Slurp
+# You must run (once): cpan Text::WikiCreole File::Slurp HTML::Escape
 # Then see ./build.pl --help for details
 # or to build everything, run: ./build.pl --all
 
@@ -8,16 +8,27 @@ use Getopt::Long;
 use File::Find qw(find);
 use File::Path qw(make_path remove_tree);
 use File::Slurp qw(read_file write_file);
+use File::Basename qw(fileparse dirname basename);
+use HTML::Escape qw(escape_html);
 
 use Text::WikiCreole;
 creole_extend;
+
+sub dots {
+	my $dots = dirname($current_fn) . "/";
+	$dots =~ s%[^/.]+%..%g;
+	my $rm = length ($out =~ /\//g) + 1;
+	$dots =~ s%^(../){$rm}%%;
+	$dots =~ s%^([^.])|^$%./$1%;
+	return $dots;
+}
 
 # Handle links.
 use URI::Split qw(uri_split uri_join);
 use URI::Escape qw(uri_escape_utf8);
 sub mylink {
 	my ($scheme, $auth, $path, $query, $frag) = uri_split($_[0]);
-	$path = "/$path" if !$scheme && $path;
+	$path = dots() . "$path" if !$scheme && $path;
 	$path =~ s/\p{Z}/_/g;
 	return uri_join($scheme, $auth,
 		uri_escape_utf8($path, "^A-Za-z0-9\-\._~/"),
@@ -27,27 +38,63 @@ creole_link \&mylink;
 
 # Handle custom stuff.
 sub myplugin {
-	$_[0] =~ s/^(\**)TOC(?: (.*))?/make_toc($1,$2)/e or
+	$_[0] =~ s/^TOC(?:\s+(.*))?/make_toc($1)/es or
 	$_[0] =~ s/^import (.*)/import_html($1)/e or
-	$_[0] =~ s/^table (.*)$([\s\S]+)/make_table($1,$2)/me or
+	$_[0] =~ s/^table(?: +(.+))?$([\s\S]+)/make_table($1,$2)/me or
+	$_[0] =~ s%^code(?: +(\S+))? *$\r?\n([\s\S]+)%<pre><code class="$1">$2</code></pre>\n%m or
+	$_[0] =~ s/^crumbs (.*)/make_crumbs($1)/e or
 	$_[0] = "<!-- Parse error: this plugin was not found -->\n";
 	return $_[0];
 }
 creole_plugin \&myplugin;
 
+$current_fn = '';
 $current_doc = '';
 sub make_toc {
 	# Create a table of contents for the given document or for the current one.
-	my $doc = $current_doc;
-	my $stars = $_[0];
-	$doc = read_file($_[1], binmode => ':utf8') if $_[1];
-	$doc =~ s/^(=+) *(.*)$|^.*(\r?\n|\r|\z)/make_toc_bit($stars . $1, $2)/mge;
+	my $doc;
+	my ($files, $indent) = @_;
+	if ($files) {
+		$files =~ s/^\s+|\s+$//g;
+		my @docs = split(/\s+/, $files);
+		$doc = "";
+		foreach $x (@docs) {
+			print "Reading in file for TOC: $x\n" if $verbose;
+			print "  For use in file: $current_fn\n" if $verbose >= 2;
+			my $d = read_file($x, binmode => ':utf8');
+			$x =~ s/\.[^.]+$//;
+			$d =~ s/^(=+) *(.*)$|^(?:.*<<TOC\s+([^\s>][^>]*?)\s*>>.*|.*)(?:\r?\n|\r|\z)/$3 ? make_toc("$3", "$indent#") : make_toc_bit($indent . $1, $2, "$x#")/mge;
+			$d =~ s/\n*\z/\n/;
+			$doc .= "$d";
+		}
+	} else {
+		$doc = $current_doc;
+		$doc =~ s/^(=+) *(.*)$|^.*(\r?\n|\r|\z)/make_toc_bit($indent . $1, $2, '#')/mge;
+		$doc =~ s/\n*\z/\n/;
+	}
+	return $doc if $indent;
+
+	# Make every level incriment by one at most.
+	$doc =~ /^(#+)/;
+	my $expected = 1; my $got = length $1;
+	my @lines = split(/\n/, $doc);
+	$doc = '';
+	foreach $line (@lines) {
+		$line =~ /^(#+)/;
+		my $amt = length $1;
+		++$expected if $amt > $got; # New level.
+		--$expected if $amt < $got; # Back down a level.
+		$got = $amt;
+		my $diff = $got - $expected;
+		$line =~ s/^#{$diff}// if $diff;
+		$doc .= "$line\n";
+	}
 	return creole_parse($doc);
 }
 
 sub make_toc_bit {
 	my $n = $_[1];
-	return $_[0] ? ('*' x length($_[0])) . ' [[#' . valid_anchor($n) . "|$n]]" : '';
+	return $n ? ('#' x length($_[0])) . ' [[' . $_[2] . valid_anchor($n) . "|$n]]" : '';
 }
 
 sub valid_anchor {
@@ -65,7 +112,7 @@ sub import_html {
 	my $fn = shift @tmp;
 	my $ft = read_file($fn, binmode => ':utf8');
 
-	if ($fn =~ /\.creole$/) {
+	if ($fn =~ /\.(hidden-)?cr(eole)?$/) {
 		my $bup = $current_doc;
 		my $html = parse_text($ft);
 		$current_doc = $bup;
@@ -76,10 +123,20 @@ sub import_html {
 		for (my $i = 1; $x = shift @tmp; ++$i) {
 			$ft =~ s/\{\{$i\}\}/$x/g;
 		}
-		$fn =~ /^(\.\.\/)*/;
-		my $dots = $1 ? substr($1, 0, -1) : ".";
+		my $dots = dots();
+		$dots =~ s%/$%%;
 		$ft =~ s/\{\{\.\.\}\}/$dots/g;
 		return $ft;
+	} elsif ($fn =~ /\.txt$/) {
+		$fn = basename($fn);
+		$fn =~ s%\W%-%g;
+		$fn =~ s%-+%-%g;
+		$p = '<p class="' . $fn . '">';
+
+		# wrap every paragraph
+		$ft = escape_html($ft);
+		$ft =~ s%\r?\n\r?\n%</p>$p%;
+		return "$p$ft</p>\n";
 	}
 }
 
@@ -96,10 +153,10 @@ sub make_table {
 	my $dir = $args =~ /\b([lrud]+)\b/ ? $1 : "lrud";
 
 	# Width definitions. 1 per col.
-	my @widths = ($args =~ /\bwidth=\(([^)]*)\)\b/) ? split(/ *, */, $1) : [];
+	my @widths = ($args =~ /\bwidth *= *\( *([^)]*) *\)/) ? split(/ *, */, $1) : ();
 
 	# Height definitions. 1 per row.
-	my @heights = ($args =~ /\height=\(([^)]*)\)\b/) ? split(/ *, */, $1) : [];
+	my @heights = ($args =~ /\bheight=\(([^)]*)\)/) ? split(/ *, */, $1) : ();
 
 	# TODO: other attrs, style
 
@@ -127,14 +184,31 @@ sub make_table {
 
 	my $result = '<table>';
 	for (my $y = 0; $y < $height; $y++) {
-		$result .= '<tr>';
+		my $h = $heights[$y];
+		$result .= $h ? "<tr height=\"$h\">" : '<tr>';
 		for (my $x = 0; $x < $width; $x++) {
 			my $idx = $indexer->($x, $y);
-			$result .= $cells[$idx];
+			my $cell = $cells[$idx];
+			my $w = $widths[$x];
+			$cell =~ s/<td>/<td width="$w">/ if $w;
+			$result .= $cell;
 		}
 		$result .= '</tr>';
 	}
 	return $result . "</table>\n";
+}
+
+sub make_crumbs {
+	my @crumbs = split(/ *-> */, $_[0]);
+	my $name = pop @crumbs;
+	my $ret = '<div class="breadcrumbs">';
+	my $link = '';
+	foreach $c (@crumbs) {
+		$c =~ s/^ +| +$//g;
+		$link .= $link ? "/$c" : $c;
+		$ret .= '<span class="breadcrumb"><a href="' . mylink($link) . '">' . $c . '</a></span>';
+	}
+	return "$ret<span class=\"breadcrumb\">$name</span></div>\n";
 }
 
 sub trim {
@@ -145,11 +219,14 @@ sub trim {
 # Subroutines for build code.
 sub conv_file {
 	my $infile = shift @_;
-	my $outfile = shift @_;
+	my $outfile = $current_fn = shift @_;
+
+	print "Converting $infile -> $outfile...\n" if $verbose;
 
 	my $creoletext = read_file($infile, binmode => ':utf8');
 	my $htmltext = parse_text($creoletext);
 
+	make_path(dirname($outfile));
 	write_file($outfile, $htmltext) if $outfile;
 	return $htmltext;
 }
@@ -184,13 +261,13 @@ use Encode qw(decode);
 @ARGV = map { decode $codeset, $_ } @ARGV;
 
 # Parse command line.
-my $text = '';
-my $file = '';
-my $out = '';
-my $all = 0;
-my $help = 0;
-my $verbose = 0;
-my $nopretty = 0;
+$text = '';
+$file = '';
+$out = '';
+$all = 0;
+$help = 0;
+$verbose = 0;
+$nopretty = 0;
 
 GetOptions(
 	'all|a'       => \$all,
