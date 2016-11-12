@@ -11,7 +11,7 @@ Most value types are also serializable types but when declared syntactically or 
 
 == Serializable Types
 All serializable types must define the following keys:
-* base: See Binary Order, Text Order, and Bin and Text sections for more information.
+* base: See [[Specification/Principles/#Binary order|Binary Order]], [[Specification/Principles/#Text order|Text Order]], and [[Specification/Principles/#Text and Bin|Bin and Text]] sections for more information.
 * size: Packed size of the struct. Generally determined by the struct itself and will not be set manually. Only used in binary contexts.
 * end: The absolute address following the end of this struct. Only used in binary contexts. It has the following behavior with regard to reflection:
 ** If //end// is set explicitly then it must: generate an error if it comes before //base//; not reflect //size//
