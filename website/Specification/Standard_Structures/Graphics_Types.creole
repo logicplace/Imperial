@@ -1,0 +1,121 @@
+<<import head.html Specification - Standard Structures - Graphics Types>>
+
+<<crumbs Specification -> Standard Structures -> Graphics Types>>
+<<TOC>>
+
+== Graphics types
+Refers to types that manage 2D images.
+
+Graphics types must implement the following keys:
+* From [[Specification/Common Keys#Serializable Types|serializable]] type: base, file, ext (Default: png), transport
+* rotate: Rotate the image by a multiple of 90 degrees. Valid values are: 0 (default), 1, 90, 2, 180, 3, 270.
+* mirror: Boolean of whether or not to mirror (flip horizontally) the image. Default: false
+* flip: Boolean of whether or not to flip the image vertically. Default: false
+* blank: If the canvas includes portions that do not contain graphics data, draw this color in its place. Default: transparent
+* dimensions: List of form [Width of canvas, Height of canvas]
+* width: Just the width. Reflects //dimensions//
+* height: Just the height. Reflects //dimensions//
+* offset: List of form [X offset, Y offset] indicating where on the canvas to draw. Indicates upper-left corner of image. Default: [0, 0]
+* x: Just the X offset. Reflects //offset//.
+* y: Just the Y offset. Reflects //offset//.
+
+Transformations must work like this:
+* After unserializing, before storing the data for use, the image must be flipped then mirrored then rotated counterclockwise as requested.
+* Just before serializing, the image must be rotated clockwise then mirrored then flipped as requested for serializing but the stored image data must remain unchanged.
+
+When dealing with images one must pay special attention to color support of the target formats. Notably color depth, if alpha is allowed, and palette (both space and available colors). If an image is imported that contains more colors than the depth allows or that contains colors than the palette does not have, [[http://colormine.org/delta-e-calculator|Delta-E]] calculations should be used to find the nearest neighbors and a single warning per image file should be printed (note that multiple structs may point to one image file). If the import is allowed to fill a palette on its own, it may be limited to a certain length, in which case it should degrade the image as little as possible to achieve the desired palette size.
+
+=== //graphic//
+This is the generic struct for describing graphics data. It should be able to handle most graphical formats on its own but of course a library implementation for common formats is much faster (in terms of processing speed) and easier to read and write.
+
+//graphic// must implement the following additional keys:
+* read: See [[Specification/Standard_Structures/readdir#readdir|//readdir//]] type for details.
+* pixel: A pixel format or a list of pixel formats. See [[#pixel|//pixel//]] type for details.
+** Reading begins be reading the first pixel in the first pixel format and then the second in the second format, etc. When it reaches the end of the format list it will continue from the beginning of the list. For instance, if there are two formats, the third pixel will be read with the first format.
+* palette: A list of colors in the palette. See [[#color|//color//]] for more information. Using **i** in the pixel format will index against this palette. The first entry in this list is indexed by 0. If no palette is defined but **i** is used, an error should be generated.
+* data: A two-dimensional list of colors representing the pixels such that a color can be retrieved with //data//[x][y]
+* rows: Since //data//[x] returns a whole column, this is the way to return a whole row: //data//[y]. Reflects //data//.
+* Channel access: Access to a specific channel and therefore is a list of numbers representing intensities rather than colors. Accessed in the same way as //data//. Reflects //data//. Possible channels: red, blue, green, hue, saturation, lightness, alpha. To access rows, append "rows" to the name, for example: redrows, bluerows, etc.
+
+=== //color//
+This is a value type that represents a color. It should be able to at least support 24-bit color plus alpha.
+
+//color// must implement the following keys:
+* From [[Specification/Common Keys#Value Types|value]] type: data
+* depth: Color depth per channel. Default: 256. Reflects //size// of each number used to represent a color value.
+* One may access colors directly with the following keys: red, blue, green, hue, saturation, lightness, alpha.
+
+When defined/set, it must accept either a number of the form $aaRRBBGG (where aa is most solid at 0, see [[#pixel|//pixel//]]), a list of the form [red, blue, green, alpha] (alpha is optional (default: 100%), in this case it is most transparent at 0), or a case insensitive string referencing a predefined color.
+
+Colors that must be supported:
+* black: [0, 0, 0, 100%]
+* white: [100%, 100%, 100%, 100%]
+* red: [100%, 0, 0, 100%]
+* blue: [0, 100%, 0, 100%]
+* green: [0, 0, 100%, 100%]
+* yellow: [100%, 100%, 0, 100%]
+* magenta: [100%, 0, 100%, 100%]
+* pink: [100%, 0, 100%, 100%]
+* cyan: [0, 100%, 100%, 100%]
+* gray or grey: [65%, 65%, 65%, 100%]
+* transparent: [0, 0, 0, 0]
+
+Note that these are meant to be percentages of the //depth//.
+
+When retrieved as a list, it should return the [red, blue, green, alpha] form even if alpha was not originally set.
+
+It should not be retrievable as a number.
+
+When stringified, if there is a predefined color name for it, it should use it. If the //depth// is 256, it should write the number form. Otherwise, it should write the list form.
+
+This should ideally keep track of the highest resolution of the color that it knows. For instance, if an image is imported as 24-bit color but changed to 16-bit color, it should keep track of the 24-bit color values (until written to) and only scale down as the return value for retrievals. It could possibly do this by storing percentages.
+
+=== //pixel//
+Represents a pixel format, that is, how to unserialize a binary value into a //color// and back again.
+
+//pixel// must implement the following keys:
+* format: Accepts a string as defined below.
+* order: Order the bits are concatenated in, either **forward** (default) or **reversed**
+* chunk: Same as //order//, but applies to the order of chunks instead of bits (see below for what a chunk is). By default, this is the same as //order// and will reflect //order// until explicitly set.
+* rgb: Takes a list of form [red, green, blue] specifying the default values for colors that are not represented. Default: [0, 0, 0]
+* hsl: Takes a list of form [hue, saturation, lightness] specifying the default values for those that are not represented. Default: [50%, 50%, 50%] (?)
+* alpha: Takes a number specifying the default value for alpha when it is not represented. Default 100%.
+
+When defined/set, takes a string of the following format:
+* Basic format is the a string with the elements chunk size, numerical base, then the formatting elements.
+* The chunk size may be any number from 0 onward. However, 0 is equivalent to 1 (1 is also equivalent to 1). This determines how many bits a single formatting element represents.
+* The numerical base can either be **x** or **b** for hexadecimal and binary, respectively. In the hexadecimal form, each formatting element represents 4 bits times the chunk size (note that this is the new chunk size). In the binary form, each formatting element represents the chunk size directly.
+* The formatting elements may be any of the following: **r**, **b**, **g**, **R**, **B**, **G**, **h**, **s**, **l**, **H**, **S**, **L**, **w**, **W**, **a**, **A**, **i**, **0**
+** The characters represent: red, blue, green, hue, saturation, lightness, white, alpha, index, and 0 means ignored (when serializing it should write a 0).
+** For elements with both a lower-case and upper-case entry these are considered inverses of each other. The upper-case version is highest at 100% while the lowercase version is highest at 0. For example: **R** is reddest at 1 while **r** is reddest at 0.
+** Explicitly: **a** is most opaque at 0 while **A** is most opaque at 1. **W** is whitest at 1 and blackest at 0.
+* When unserializing a binary it must concatenate retrieved values accordingly and concatenate them according the the //order// and //chunk// keys, even if the bits are separated by another formatting element. For instance, 0bwawa unserializing from a bin with the bits 1101 with default order would interpret the white value as 10 and the alpha value as 11.
+* When specifying a format, only certain combinations of formatting elements may be considered valid. Additionally, any subset should be considered valid:
+** RBGA (uses //rgb// for missing RBG values, //alpha// for missing A)
+** HSLA (uses //hsl// for missing HSL values, //alpha// for missing A)
+** iA (assumes alpha is indicated by the palette if not specified)
+** WA (uses //alpha// for missing A)
+** A (no other channels besides A exist)
+
+Example to explain chunking and ordering:
+{{{
+Given the following format and data:
+format: 2bRRBBGG
+binary: 0110 1000 0111
+.
+forward/forward ordering:
+red: 0110, blue: 1000, green: 0111
+.
+reverse/reverse ordering:
+red: 0110, blue: 0001, green: 1110
+.
+reverse bits/forward chunks:
+red: 1001, blue: 0100, green: 1011
+.
+forward bits/reverse chunks:
+red: 1001, blue: 0010, green: 1101
+}}}
+
+Retrieval is undefined.
+
+<<import foot.html>>

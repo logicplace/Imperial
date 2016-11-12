@@ -1,0 +1,21 @@
+<<import head.html Specification - Basic Structures - Numbers>>
+
+<<crumbs Specification -> Basic Structures -> Numbers>>
+<<TOC>>
+
+== Numbers
+All number types must implement the following keys:
+* From [[Specification/Common Keys#Value Types|value]] type: data
+* From [[Specification/Common Keys#Serializable Types|serializable]] type: base, file, ext (Default: txt), transport
+* bits: List of the bit values of the number, index 0 being the least significant bit. Contents reflect //data// and length reflects //size//.
+* size: Size of the serialized number. Default: 4 bytes
+* sign: Can be either **signed** or **unsigned** (default).
+* endian: Can be either **big** or **little** (default).
+
+When serializing, an error should be generated if the number cannot fit in the given size.
+
+Syntactic types:
+* //number//: This is the basic number type. String form is a decimal number.
+* //hexnum//: An interpreted number type. String form is a hexadecimal number with a dollar sign prefix.
+
+<<import foot.html>>

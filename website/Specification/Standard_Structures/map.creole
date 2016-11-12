@@ -1,0 +1,32 @@
+<<import head.html Specification - Standard Structures - map>>
+
+<<crumbs Specification -> Standard Structures -> map>>
+<<TOC>>
+
+== //map//
+This is a struct that translates (maps) serialized (packed) encodings into useful values. A struct of this type may be referenced by, for instance, //string//.//encoding// or as the type in one of //data//'s keys.
+
+//map// must implement the following keys:
+* mapping: Takes a keystruct of type //mapping// which allows strkeys and numkeys. Reflects onto //packed// and //unpacked//.
+* packed: A list or string that represents packed side of the mapping, ordered such that the index here links to the same index in //unpacked//. Required.
+* unpacked: A list or string that represents the unpacked side of the mapping, just as //packed//. Required.
+* unmapped: What to do when it tries to map a value that is not present in the relevant list. May be any of the following:
+** "except": Generate an error about it. (default)
+** "add": Pass the value through as-is (ie. translate it to itself).
+** "drop": Ignore the value.
+* cast: A string containing the name of the type to cast unpacked values to, for instance in extending a custom encoding already implemented by a library. Default: don't cast.
+** When defined, if //string// and/or //number// is set and not the same value, this should generate an exception.
+** When set, set //string// and //number// to this value.
+** When retrieved, return the type name only if //string// and //number// have the same value or are unset. 
+* string: The type to cast unpacked strings to specifically. Default: don't cast.
+* number: The type to cast unpacked numbers to specifically. Default: don't cast.
+* data: Set one data value, list or string, to map. Generally going to be a reference if used at all.
+** When retrieved, it must return the "unpacked" value.
+** When set, it must accept the "unpacked" value.
+** When serialized, it must use the "packed" value.
+
+Valid substructs (?): string, list
+
+In most cases a //map// struct acts more like a type than a struct or value but it can be used as a value by utilizing the //data// key. However, using it like a type should generally be the encouraged practice.
+
+<<import foot.html>>

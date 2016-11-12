@@ -1,0 +1,61 @@
+<<import head.html Specification - Standard Structures - readdir>>
+
+<<crumbs Specification -> Standard Structures -> readdir>>
+<<TOC>>
+
+== //readdir//
+ReadDir is a string type that deals with reading direction. At least for now it only describes 1D ↔ 2D transformations.
+
+//readdir// must define the following keys:
+* From [[Specification/Common Keys#Value Types|value]] type: data
+
+When retrieved, it must return the same string that was written.
+
+When stringified, it must return the relevant long form in all caps.
+
+When defined/set, it must accept a string of either the long or the short forms, listed below (case insensitive):
+* Long forms: **LRUD**, **LRDU**, **RLUD**, **RLDU**, **UDLR**, **UDRL**, **DULR**, **DURL**
+* Short forms: **LU**, **LD**, **RU**, **RD**, **UL**, **UR**, **DL**, **DR**
+
+These forms are equivalent by list index, ie. LRUD is the same as LU and etc.
+
+These values mean, using LRUD as an example: Left → Right, Up → Down
+
+You can find an image of DULR in the [[Specification/Principles/#How does it work?|How does it work?]] section.
+
+These forms may be followed by a "/" (with optional surrounding whitespace) and a cycle length, indefinitely. A cycle is a progression through the given length at which point it will be moved that number of spaces past the origin in the direction opposite of the primary direction. It can be thought of as one dimensional tiling. An example using UDLR/8, the reading direction for the Adventure Vision's graphics:
+{{{
+Given a 2x16 image reading UDLR/8, the pixels are placed in this order (where the numbers represent their index in the linear binary data):
+   C0 C1
+    * <--- If this were taller, 16-23 would go here.
+R0  8 24
+R1  9 25
+R2 10 26
+R3 11 27
+R4 12 28
+R5 13 29
+R6 14 30
+R7 15 31
+R8  0 16
+R9  1 17
+Ra  2 18
+Rb  3 19
+Rc  4 20
+Rd  5 21
+Re  6 22
+Rf  7 23
+}}}
+
+If the square's relevant dimension is not a multiple of the cycle length an error should be generated.
+
+Having multiple cycles works similarly but each subsequent cycle counts the previous cycle's iterations against its length. For example:
+{{{
+An 8x2 square reading LRUD/2/2:
+   C0 C1 C2 C3 C4 C5 C6 C7
+R0  2  3  0  1  6  7  4  5 * <- If this were wider,
+R1 10 11  8  9 14 15 12 13      10-11:8-9 would go here.
+}}}
+
+This is because the writer starts at (2, 0) then reads in two entries which completes one step of the first cycle. Then it skips back in the opposite direction (that is, RL) and reads in the next two to complete the second step of the first cycle. This triggers the second cycle, which reverses the first cycle's direction (from RL back to LR) and jumps ahead to the next position at (6, 0) and reads the next two, etc. 
+
+<<import foot.html>>

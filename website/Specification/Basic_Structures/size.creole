@@ -1,0 +1,46 @@
+<<import head.html Specification - Basic Structures - size>>
+
+<<crumbs Specification -> Basic Structures -> size>>
+<<TOC>>
+
+== //size//
+Represents sizes in bytes and bits making use of familiar C number types and SI conventions.
+
+//size// must define the keys:
+* From [[Specification/Common Keys#Value Types|value]] type: data
+* bytes: The number of bytes. Reflects //data//.
+* bits: The size in bits. Reflects //data//.
+* remainder: The number of bits not counted in bytes. Reflects //data//.
+* mask: The bitmask version of remainder such that a remainder of 1 = 0x80. Reflects //remainder//.
+
+When defined/set, it must accept the following values (full words are case-insensitive):
+* "byte" = 1 byte
+* "short" = 2 bytes
+* "long" = 4 bytes
+* "double" = 8 bytes
+* # = # bytes
+* "# b" (always) "# bit" or "# bits" (English locale) = # bits
+* "# B" (always) "# byte" or "# bytes" (English locale) = # bytes
+* "#.%", "#.% B" (always) "#.% byte" or "#.% bytes" (English locale) = # bytes and % (0-7) bits
+* "# Xb" (always) = # XXbits (thousands scale)
+* "# Xib" (always) "# XXbits" (English locale) = # XXbits (1024 scale)
+* "# XB" (always) = # XXbytes (thousands scale)
+* "# XiB" (always) "# XXbytes" (English locale) = # XXbytes (1024 scale)
+
+Passing a string with only a number should generate an error regarding missing units.
+
+The X and XX above are standing in place of short and full SI prefixes. The //size// type can only use positive power prefixes. In the SI unit cases with prefixes, it may be possible to use float values as the #.
+
+SI scaling units that should be supported (X, XX: power, where the power is in # * scale ^ power):
+* k or K, kilo: 1
+* M, mega: 2
+* G, giga: 3
+* T, tera: 4
+
+When retrieved as a number, it must return the number of bytes, rounded up.
+
+When retrieved as a string, it should return the original string, if it was defined as a string. Otherwise it should return the "# bytes" (or whatever the locale's default is) form.
+
+When stringified, it should prefer named equalities, then appropriate (eg. consider plurality) long-form locale defaults of the highest SI it can.
+
+<<import foot.html>>

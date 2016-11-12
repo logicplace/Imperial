@@ -1,0 +1,26 @@
+<<import head.html Specification - Basic Structures - bool>>
+
+<<crumbs Specification -> Basic Structures -> bool>>
+<<TOC>>
+
+== //bool//
+Represents truthiness and a little more.
+
+//bool// must implement the following keys:
+* From [[Specification/Common Keys#Value Types|value]] type: data
+* true: True if this is true and false if this is false (ie. normal case). Must return undefined if undefined. Reflects //data//.
+* false: True if this is false and false if this is true (ie. "not"/inverse case). Must return undefined if undefined. Reflects //data//.
+* undefined: True if this is undefined and false if not. Reflects //data//.
+
+When defined/set, it must be able to accept the following values (case insensitive):
+* true: 1, "1", and "true" (always) and "on" and "yes" (English locale)
+* false: 0, "0", and "false" (always) and "off" and "no" (English locale)
+* undefined: "undefined" (always) and "undef", "null", "unknown", "none" (English locale)
+
+When retrieved internally, it should return the native true, false, and undefined (None, null, whatever) values.
+
+When retrieved as a string, it must return "true", "false", or "undefined".
+
+When retrieved as a number, it must return 1 (for true) or 0 (for false). If it is undefined, it should generate an error.
+
+<<import foot.html>>

@@ -1,0 +1,16 @@
+<<import head.html Specification>>
+//Note that this is not necessarily what is implemented but what the system seeks to implement. For the time being this is fairly informal and will not be given a version number until the foundation is complete.//
+
+Much of this document is written for the en-US version of the implementation. Other languages should be provided in translations of these pages.
+
+<<TOC
+Specification/Principles.creole
+Specification/RPL_Syntax.creole
+Specification/Common_Keys.creole
+Specification/Basic_Structures.creole
+Specification/Non-standard_Structures.creole
+Specification/Standard_Structures.creole
+Specification/Testing_Library.creole
+>>
+
+<<import foot.html>>

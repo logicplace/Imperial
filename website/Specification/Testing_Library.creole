@@ -1,0 +1,14 @@
+<<import head.html Specification - Testing Library>>
+
+<<crumbs Specification -> Testing Library>>
+
+= Testing library
+Implements types and whatnot that are really only useful for testing the implementation.
+
+TODO: //echo//
+
+<<TOC
+Specification/Testing_Library/iostatic.creole
+>>
+
+<<import foot.html>>

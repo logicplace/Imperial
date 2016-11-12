@@ -1,0 +1,33 @@
+<<import head.html Specification - Common Keys>>
+
+<<crumbs Specification -> Common Keys>>
+<<TOC>>
+
+= Common Keys
+== Value Types
+All value types must declare a //data// key which stores its data. This is essentially a circular reference but allows one to set the basic data for a value type when defining it in a struct form.
+
+Most value types are also serializable types but when declared syntactically or as a keystruct it is considered managed by its owner and will not be transported by itself. However //data// being statically set (even as a reference) while being unmanaged is currently undefined behavior.
+
+== Serializable Types
+All serializable types must define the following keys:
+* base: See Binary Order, Text Order, and Bin and Text sections for more information.
+* size: Packed size of the struct. Generally determined by the struct itself and will not be set manually. Only used in binary contexts.
+* end: The absolute address following the end of this struct. Only used in binary contexts. It has the following behavior with regard to reflection:
+** If //end// is set explicitly then it must: generate an error if it comes before //base//; not reflect //size//
+** Otherwise it must reflect //base// and //size// such that //end// = //base// + //size//
+*** This does imply that one may declare //end// and //size// instead of //base//.
+* file: Filename. See Hierarchy, //file// key section for more details. Default: struct name
+* ext: File extension to use if the filename does not provide one. Default: defined by struct's type
+* transport: Whether or not to import and/or export this struct. Note that it may be imported or unserialized to a suspended state as needed but must not export or serialize it if it's not supposed to. Value may be (case insensitive):
+** **import** or **import only**: Only import/serialize, do not unserialize/export.
+** **export** or **export only**: Only unserialize/export, do not import/serialize.
+** Boolean true or **both**: Import and export (default).
+** Boolean false or **neither**: Neither import nor export.
+
+== Container Types
+Container types are types that accept any structure as a substruct and make it so that their substructs refer to a binary or text that they provide rather than the root's. All containers are also serializable but if they have any substructs then they should not be exported or imported themselves, even if requested to, since it would be exporting duplicate data. However it should generate a warning in such a case.
+
+Some container types may also be value types, essentially returning a //string// or //bin// of their contents.
+
+<<import foot.html>>

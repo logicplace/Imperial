@@ -1,0 +1,24 @@
+<<import head.html Specification - Basic Structures - ROM>>
+
+<<crumbs Specification -> Basic Structures -> ROM>>
+<<TOC>>
+
+== //ROM//
+Performs verification and validation checks against the binary file you're reading from or writing to before doing so.
+
+//ROM// must implement the following keys:
+* id: Checks given string against a ROM's ID. The location of the ID can be set by console libraries.
+* name: Checks given string against a ROM's name. The location of the name can be set by console libraries.
+* crc32: Verifies the file or a segment of the file matches the given CRC32. Valid values:
+** A single hexnum: Hashes entire file and compares it with this.
+** A list of form [Checksum, Address]: Hashes file starting at the given Address until the end of the file and compares it with the Checksum.
+** A list of form [Checksum, Address range(s)]: Hashes the given range (or ranges, concatenated) and compares against the given Checksum. Note that if this is a decreasing range it must hash that section backwards as indicated by the range.
+** A list containing one of the above forms for each entry: Verify each checksum.
+* text: Verifies a segment of the file against the given string. It must check each character until the given string is expended. Takes either a list of form [Text, Address] or a list of multiple such forms.
+** It should serialize the given string before comparing.
+
+It is one of two types that uses all uppercase letters and no future types may use such a form.
+
+Because //id// and //name// rely on the use of imported libraries, the //ROM// struct should generally come after the //RPL// struct in a RPL file.
+
+<<import foot.html>>

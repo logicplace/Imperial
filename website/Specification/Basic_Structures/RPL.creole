@@ -1,0 +1,18 @@
+<<import head.html Specification - Basic Structures - RPL>>
+
+<<crumbs Specification -> Basic Structures -> RPL>>
+<<TOC>>
+
+== //RPL//
+The "header" struct of a RPL file. Defines imported libraries, transcluded RPL files, and help text.
+
+//RPL// must implement the keys:
+* lib: String of one library name, or a list of multiple library names, to be imported for use.
+* include: String of one RPL filename, or a list of multiple filenames, to be included //at this point//.
+** Inclusion should work by first checking the CWD or the executing file's directory (if the path contains a slash prefix (see //path//)) and then any other folders indicated by the user or the environment.
+* help: Provides the help string for the file that should say what the file is for and how it can be used. This may be a single string or the first string of a list. Every other entry is a two entry list of the form [Command line definition, Help information for this definition].
+** It may be possible to do this with a keystruct too.
+
+This struct is sort of meant as the header of a RPL file. It is one of two types that uses all uppercase letters and no future types may use such a form.
+
+<<import foot.html>>

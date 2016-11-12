@@ -1,0 +1,289 @@
+<<import head.html Specification - Principles>>
+
+<<crumbs Specification -> Principles>>
+<<TOC>>
+
+= Principles
+RPL or Resource Replacement Language is a descriptive language meant to describe complex, generally packed data structures. It is meant to ascribe computationally useful meaning to this data so that it can be, for instance, translated into a presentable format.
+
+If you have ever reverse engineered a ROM or other complex multimedia object, you may have taken notes to aid you in doing so. For instance, that the current font is stored at a certain position and contains an alphabet in a certain order, perhaps that the text using this font is located in this area or perhaps you've uncovered the whole table file. Imagine those notes working for you to export the text and image in a readable form: as JSON or some sort of script file and a PNG. Imagine being able to then edit that PNG to have the characters for your language or simply being able to change the text as it sits there and then reimporting your changes just like that. If you take your notes in RPL, that's exactly what it intends to be.
+
+RPL does more than this, though, as it allows you to programmatically work with the data if you wanted to. You can use it to read in data from your own or other people's binary formats and work with it in an object-oriented way. For instance, if one were to make something like PokeMMO which uses the resources of official Pokemon ROMs as its own, RPL might be a good fit for such a project. It would allow you to verify that the user is using the correct ROM (or, of course, select from RPLs based on the ROM) and load its resources in a unified way. Once the proper RPL is selected, the client never has to know where the resources came from.
+
+There are, of course, more uses than ROMs. For instance, one could use this system to manage custom archive formats for MMOs and other games. One could even use it in their own game for such a feat.
+
+Many of you are probably familiar with C structures, so what's the difference here? You can fread and fwrite packed structures in C after all. The main difference is one of complexity. For example, C doesn't allow you to read in dynamically sized structures with one command where RPL does. RPL could do this with either an explicit length or even by just ceasing to read at a null terminator. RPL can link data across sections, such as the size of an archive's payload section being the sum of its contents' sizes. More importantly it can do much of this in very simple and sometimes transparent ways. C structures would also only cover the un/serializing and not exporting the files in standard formats which RPL makes a cakewalk.
+
+So why not 010 Editor's Binary Templates? These are actually quite similar and I only have a surface-level familiarity with them. Functionally they are very similar though there seems to be a difference in goals: RPL is primarily focused on transport of data (ie. exporting to usable formats and importing back into the binary) while Binary Templates are focused on editing data. (TODO: Deeper investigation) 010 Editor seems to rely more heavily on programming to do certain things, like to handle text encodings, whereas RPL favors a purely descriptive style. One thing Binary Templates do better is conditional formatting, where you can add inline if statements to conditionalize structuring on, for example, format version. RPL cannot do this in as simple of a way and would require another depth to the object access for each conditionalized section (in terms of reading/using the data) and a more complex format selection system that is too detailed for this section (in terms of constructing the RPL).
+
+So why not use existing tools? There are many existing tools for simple binary modification, graphic browsing, format conversion, text searching & replacing, etc. My trouble with this is that they generally have poor configurability so I cannot use them for my specific project. Though even when I can this can be a complex multistep process. In able to actually import the new data, especially if it was a custom format for a certain game, I would end up writing a custom script to handle it which were generally brittle and were only for importing.
+
+Though there are existing all-in-one tools for ROM hacking. Most of the projects are dead but certainly the tools are still useful? At least, why did I design RPL instead of extending one of these applications? There have been two tools with a similar goal that I know of: [[https://web.archive.org/web/20110302014314/http://stealth.hapisan.com/ROMulan/|ROMulan]] and [[http://llref.emutalk.net/projects/ctool/|The Console Tool]]. ROMulan is dead but it provided a console or BASIC-like scripting language that allowed you to extract and reimport binary data and automatically allocate new space for resources larger than the originals. Low Lines's TCT is stale as of 2012 but received a lot of support. It features a GUI that allows browsing certain types of ROMs as archives and viewing and editing their contents including sprites, models, and so forth. It can also function as a hex editor for other cases and features plugin support (I think?) for enhancing its abilities. It's a very powerful and well-built tool but sadly is not open source, making it difficult to extend. There are plenty of other tools that do one thing really well like [[http://www.romhacking.net/utilities/224/|Atlas]] or [[https://github.com/pleonex/tinke|Tinke]] as well which are great but a lot of these types of tools don't support smaller consoles like the Pokemon mini, newer Tamagotchis, Adventure Vision, and so forth. I wanted something that would let me dive into a project with an unsupported console's game just as well as supported ones. Surely, consoles with their own libraries will be easier but I wanted it to still be relatively simple without having a library too. 
+
+So finally, why not just write your own tool? Rolling your own script generally produces programs that are not robust, unhelpful when they fail, possibly only manage one transport (import → bin or bin → export, rather than both), and so forth. If you want to write methods to serialize, unserialize, export, and import this can be up to 4x the code required for one thing. Even at its most minimal amount of effort, this is a C struct that can be directly serialized and unserialized, library calls to export and import, and then the code that converts to and from what the C struct contains and what the library expects. Generally speaking this is a lot of work and it grows exponentially. With RPL through Imperial Exchange, however, you may do all of this - un/serialize, export, and import - with only writing one struct.
+
+== How does it work?
+The basic transport system works like this:
+{{{
+Unserializing      Export
+        ╲         ╱
+     Bin → Susp- → Expo
+     ary ← ended ← rted
+        ╱   │ ↑   ╲
+Serializing │ │   Import
+            ↓ │
+        Application
+}}}
+
+The process of moving the binary data into usable, language-specific object structures is called //unserialization//. The reverse of this is, of course, //serialization//. These are essentially the fread and fwrite, respectively, to and from a C struct. Those language-specific object structures are what the diagram refers to as the data's //suspended state//. In this state an application using the RPL library can interact with the data. Finally, outputting the data to the file system as an individual, usably formatted file is called //exporting//. The reverse of this is //importing//. Any application may use the RPL library in any fashion, independent of the other transport options. It could import, do modifications, and export back out. It could unserialize, do modifications, and serialize the data back in directly. It could also generate data internally and simply serialize it to a binary or export it to a useful format.
+
+One structure can handle all that? Yes! For example, here's the tile format for the Pokemon mini using only the generic graphics structure:
+
+<<code rpl
+graphic SomeTile {
+    base: $003d44
+    # Format:
+    dimensions: [8, 8]
+    pixel: 0bw
+    read: DULR
+}>>
+
+This describes a single graphic in the ROM at address 0x003d44. It is 8 by 8 pixels where each pixel is one bit each such that 0 is white and 1 is black. It writes (on export) and reads (on import) the pixels in this reading direction (Down → Up, Left → Right) such that the first pixel read (the MSB of the byte located at 0x003d44) represents the lower-left pixel in the final image:
+{{{
+^\  ^\  ^
+| \ | \ | ...
+|  `|  `|
+}}}
+
+The file would be exported to and imported from the current working directory as **SomeTile.png**. Thus in this small form you have just described everything you need to un/serialize, export, and import the image in question. This is hopefully a clean, pretty, readable, and notational form! Though RPL strives to be easy to write rather than easy to read, this should be readable if you're familiar with the struct type in question, //graphic//. If you aren't it should be trivial to look up at the command line.
+
+In the vein of being easy to write, RPL doesn't want you copypasting things like formats! For multiple tiles you can do it like this, instead:
+
+<<code rpl
+static {
+    # Format
+    dimensions: [8, 8]
+    pixel: 0bw
+    read: DULR
+    graphic SomeTile    { base: $003d44 }
+    graphic AnotherTile { base: $003d4c }
+}>>
+
+Which will export two tiles to the CWD, **SomeTile.png** and **AnotherTile.png**, from different locations in the ROM using the same format.
+
+Linking data between sections of a RPL file is generally done with some sort of reference (see reference syntax for more details) which allows you to reference a named struct and a key within it. However, note that everything is structs, even values. The only hard distinction between the two is that values must have at least one data form (number, string, or list). Because of this, you can even reference properties of a value, like its serialized size (take a look at the value specifications for more information). The difference in referencing this is merely a difference of //@Struct.key// vs. //@Struct.key.size// as the former will actually generally assume the data (the only other option being a pointer but the difference is both meaningless and clear in context).
+
+== Terminology
+There are multiple concepts of data representation that are distinct within each type and within the system otherwise. This section explains all of those concepts and terms.
+
+;Define
+: This is what's written as the value of a key in the RPL file or in the basic constructor (parenthetical or list form, **not** the struct-like form) of a keystruct. This may be different from what the data returned is and may even be different from a set. Think of this like a class's constructor.
+
+;Get (or Retrieve)
+: This is the generic way to read the data from a value. It retrieves the data value in its default or specified format. For instance: get number refers to getting the number form of this value even if the default is a string. This is not coercion. Only references can be retrieved as references.
+
+;Set
+: This is the generic way to write the data to a value. It may be able to accept multiple forms of data but it should generally not be parsing or interpreting anything. The data set in this way should be the same data retrievable by get. This should be able to accept internal RPL objects as well as loose values.
+
+;Coerce
+: Coercion can only happen between strings and numbers, not lists. If you are coercing something to a string, it can change a number into a string; and if you are coercing something into a number, it can attempt to change a string into a number. This is different from a value having multiple basic data types as these representations are not considered to have the same value.
+
+Example: Within the //size// type, "short" and 2 have the same value. Retrieving the string form of a size value may return "short" and if so, retrieving the number form of the same size value would return 2. However, normally, 2 and "2" do not have the same value but are rather alternate representations of the data which can be coerced into each other.
+
+;Convert
+: Refers to type conversion in the sense of appropriating a certain type (usually a basic type) into a more definitive type as requested by a key's validation scheme. See Types section for more details.
+
+;Serialize
+: As a verb it refers to the process of converting an internal representation of the data into a binary representation.
+: As a noun, //serialized form//, refers to that binary representation of the data.
+: Unserialize is the reverse of this process.
+
+;Export
+: As a verb it refers to the process of converting an internal representation of the data into a standard (or otherwise usable) file format.
+: As a noun it refers to those exported files.
+: Import is the reverse of this process.
+
+;Stringify
+: Converts an internal structure to a valid RPL syntax for that value. This is more or less what would be exported into a textual representation of the data such as a static RPL, JSON, or etc. Not all types must have this.
+
+;Parse
+: Converts a stringified representation of this value back into an internal RPL object. This is distinct from Define in that it should only represent the value, much like Set. However this is distinct from Set in that it it must take in a string. Not all types must have this.
+
+;Reflect
+: As a verb it indicates that a value is tethered to another value but provides a different outlook on the value. Given B reflects A, this means that when A changes, B must reflect the changes and vise versa. For instance, it may provide access to tokens within a parsed language while the data itself is considered to be the original text.
+: As a noun, //reflection//, it refers to one such value that reflects its owner.
+
+;Managed
+: When something is managed by a struct it means that its access to un/serialization and exporting and importing are managed by the struct rather than the system. A struct or value becomes managed when: it was syntactically defined, it was a keystruct, or it was referenced for use as a type. Substructs may or may not be managed, this is completely up to the parent struct.
+: The opposite of this is //unmanaged//.
+
+== Types
+There are three basic types: string, numbers, and lists. All values should be able to become at least one of these types.
+
+Interpreted types are those formations which are syntactic sugar for basic types, such as hexnums to numbers or ranges to lists. Not all seemingly custom syntaxes are such, though, and are rather conventions for types such as a + prefix for a //math// value which is only a literal with concern to syntax.
+
+Structs are given more complex types (though one can also define structs of the basic types). These are given explicit types as opposed to having syntactical designations (see struct syntax for more details). These types define what keys are available, what their types are, what their valid values are (if restricted), what their default value is (or the fact that it's required), what substructs are valid, and if it is serializable: how to un/serialize this struct (bin ↔ internal), and how to export/import (internal ↔ exports) the structure to usable/standard file types.
+
+As stated keys define what their valid types are. They can accept more than one type. However, when they're offered a type they're not expecting, a conversion must be attempted. Type dominance order should be specified by what declares the key type. This is the order that should be attempted for conversion, such that if the most dominant type is invalid it will try the next and so on. //Dominantly expects// means that the following type has the highest priority of the non-failing types.
+
+=== Syntactic values
+Firstly: Define must expect syntactic (basic or interpreted) values as this is what the parser generally passes to them. If the key dominantly expects the basic type of the syntactic type that was passed, it should retain the type as-is without conversion. For instance, if the key expects a //number// but a //hexnum// was used, the key should contain a //hexnum//.
+
+However, if a key dominantly expects an interpreted type and its basic type was passed, it should be converted to the interpreted type. For instance, if the key expects a //hexnum// and a //number// was passed, the key should contain a //hexnum//. Similarly, if a different interpreted type is passed, it should be converted.
+
+If a key dominantly expects a non-syntactic type, it can convert the syntactic value passed if it is valid for this type. For instance, the //math// type accepts both //string//s and //number//s. If a //number// or //string// is passed, the key will be of the //math// type. The //math// type parses strings as mathematical equations such that requesting the number will return its solution and accepts numbers as raw values. However, if the syntactic value passed is a //list//, the //math// type would fail and the type check must attempt the next validation.
+
+=== References
+When retrieving a value from a reference, before returning the value, it must first validate the value it intends to return in the same manner as a syntactic value would be validated. If the value is to be converted to anything, the conversion should be returned as the value. This is to say that references are lazily evaluated.
+
+=== Keystructs
+These work similarly to references, however the system should be able to verify ahead of time what type this will be converted to at least if the key dominantly expects a syntactic type. Otherwise it can do verification lazily.
+
+Keystructs are also limited to available types that can be declared. This works differently than it does for substructs. Although it does attempt to use types registered to the containing struct first, it will also attempt to use types registered globally.
+
+Note that when using a keystruct for the //data// key of a value struct the type should not be converted except for when requested (in any fashion) but only for the value returned (and not the value that is stored). However attempts to set the value should probably use the value struct's type and not the value it contains (?). This is even true when the value struct is of a basic type, like //number//, and the declared value is of an interpreted type, like //hexnum//.
+
+== Hierarchy
+Structs in RPL are allowed to exist both in the root and inside of other structs. Within structs there are two types of structs that can be created: substructs and keystructs. Of course each struct also contains regular keys with which to define its contents.
+
+The hierarchy is intended to represent the unification of common values (such as the dimensions of several images) (depth, references), the directory structure of the exported files (depth, naming), and the order of the files in the binary (linear).
+
+Although hierarchy is important to references, that information will be covered in the References section instead.
+
+With regard to unification, key lookups must bubble up up to the top struct, using the nearest value as its own. However the value must be capable of being the requested type. If it is not, or if no ancestor has a key of the requested name, it must use the default value for this key if one is defined. If not, it may attempt to use the default values of parent structs, checking type as it did before. TODO: Flowchart
+
+The //static// struct (and its derivatives) has special handling in this regard. //static// structs may be declared anywhere, even inside other structs that do not explicitly allow them (and in fact, they should not explicitly allow them). Their valid substructs must be inherited from their parent (if they are at the root then all structs are valid substructs, just as in the root) and should be, in fact, added directly to the parent as a child instead of adding the //static// as a child. //static// structs are never added as children. In this way, //static//s are intended for hierarchical manipulation.
+
+Example:
+
+<<code rpl
+something Grandparent {
+    static Parent {
+        something Child {
+            # ...
+        }
+    }
+}
+>>
+
+//Grandparent// has the child //Child//, //Parent// has the child //Child//, //Child// has the parent //Parent//, and //Parent// has the parent //Grandparent//.
+
+In order to represent the exported directory structure we resort to struct names. The complication with this system is with the fact that struct names (even substruct names) must be unique so one may also explicitly define file names in a struct. This makes the //file// key somewhat more complex.
+
+=== //file// key
+For any struct that can have a file key, it must be defined in the following way.
+
+The //file// key should use the //path// type for its value.
+
+When defined, if the string begins with a slash, it is considered to be relative to the parent struct, otherwise it is considered to be relative to the CWD (or whatever was passed as this, if such an action is possible). If this struct is at the root and a slash is the first used character, it is considered to to be relative to the base RPL file's directory. Absolute file locations are not valid.
+
+When retrieved, it must give the absolute file or folder location. It should begin at the requested struct. If it has a //file// key defined, it will use that, otherwise it will use the struct name. If the //file// key was relative to the parent struct or if it used the struct name, it should continue up to the parent struct and perform the same operation. Each parent represents a containing folder(s) of the requested struct which may be a file or a folder. If it is requested as a file and no extension is defined, it will attempt to retrieve the extension from the //ext// key. If no //ext// key is defined, it will attempt to use the default for the struct type, which should always define one. If nothing provides an extension, it is undefined behavior. Note that during this resolution, not all //file// keys may be of the //path// type (for instance, if it's defined in a //static//).
+
+Example:
+
+<<code rpl
+static This {
+    static IsA {
+        file: /is/a
+        exportable File {
+            ext: png
+        }
+    }
+} # @File.file = ${CWD}/This/is/a/File.png
+
+static {
+    # This struct does not have a folder name in any form, so it is disregarded for that check.
+    # Graphics's file key must then be treated as the root struct in terms of the initial slash.
+    blah: "hi"
+    static Graphics {
+        graphic SomeSprite {
+            # ... maybe references @this.blah ...
+        }
+    }
+} # @SomeSprite.file = ${CWD}/Graphics/SomeSprite.png
+# Note that png is the default extension for graphics structs.>>
+
+It should be recommended to RPL authors that they represent exports in this organized manner, particularly by defaulting to the struct names where possible. However, particularly with the unique struct names issue, it may not be wholly feasible, and these are the cases where the file keys are helpful. Even in these cases, though, it should be recommended to use a name that relates enough to the file or folder name to be easily identifiable.
+
+=== Binary order
+Serializable structs must always define a key called //base// which gives the location of the data in the binary. It must use the //address// type. If there can be multiple base locations in the binary, it may represent this as keys named //base1//, //base2//, etc. //base// should not redirect to any of these in this case, it should not be defined.
+
+When defined, in a binary context, it can take a number or a number and an indicator of relativity. When only a number is given, the relativity indicator is assumed to be the beginning of the file. The other two indicators are the current location and the end of the file (in which case, the number given is treated as a negative). For more information on what the labels are, see the //address// type definition.
+
+When retrieved, it returns the absolute address in the context. If the key was not defined, it defaults to 0, relative to the current location. The current location is just after the end of the previous struct, reading top to bottom. Substructs contribute to the length of a struct. When the base of a struct needs to be determined, this younger sister asks its next older sister (the struct positioned directly above it, linearly, within the same depth) or its parent if it doesn't have an older sister what its end is, which is generally its base + its length. The younger sister then returns that end + its offset as its own address. If the very first struct is relative to the current location, it must also relative to the beginning of the file. If an older sister is not exportable, the next older sister must be asked instead, and so forth.
+
+When asking for the end of a split binary struct, that struct should return the furthest end point. It may be possible to request different end points but for relative addresses requested by the RPL file structure it must request the general end.
+
+=== Text order
+When dealing with a textual context (see more in Text and Bin section), the //base// key (though still using the //address// type) takes a string or a string and an indicator of relativity.
+
+The string used is generally a selector of some sort, however its format differs based on the type of container. The syntax will be specified in the section for the container itself. The indicator of relativity can differ based on context as well, and one may not always be available. 
+
+When retrieved, if this address is relative to the root, it should return the selector as-is. If it was relative to the parent, it should concatenate the relevant selectors as appropriate for the format and return that in order to provide an absolute selector. This sort of concept could be applied to forms of relativity besides descendants as well, such as sibling relativity (eg. in CSS, combining relevant selectors with " + ").
+
+== Internationalization
+RPL should support any reasonable script and language. Unreasonable scripts refers to only really archaic or constructed ones with unreasonable demands. For instance, Lojban's quotations may be unfeasible and it is not given much priority since it is not a natural language.
+
+Ideally, syntactic constructions should support natural ideologies surrounding the punctuation used. For instance, (though I'm not Japanese nor have I asked a native speaker about it) I've supported hyphens as traversal notation for references because the hyphen can also be pronounced as の "no", the possessive particle, in Japanese (eg. in phone numbers). However syntactic indicators should indeed always be some sort of symbol and not a letter class character.
+
+There may be locality definitions (in a header struct) for certain features, such as dates, which can be incredibly ambiguous. These should be definable per feature (eg. date, time, ...) as well as generally by simply specifying a locale. Per-feature definitions supersede the general locale.
+
+Since type names and key names have specific meanings tied to their implementations they should be translatable. The libraries themselves can be written in any language so there is no "default language", the i18n files will just key off of what the library implements. Imperial, then, should be able to take any RPL file and translate it into the reader's language and locale regardless of the author's.
+
+i18n should also be able to translate errors, standard terms (eg. Defs), help contents, and so forth.
+
+== Text and Bin
+Some struct types create new data contexts from which their substructs are based. A struct that uses such a type is called the **container**. They can create both **binary contexts** and **textual contexts** which differentiate how their substructs address the data within them. Binary contexts are always addressed by the address, in bytes, within the context. The beginning of the context (not the container itself) has the address of 0.
+
+The basic binary container type is //bin//. This is the type that the root implicitly uses. It provides access to raw binary data and is generally redundant. See the //bin// section in Basic Structures for more information.
+
+However, there is no basic textual container. Rather, there is a generic textual container called //markup//. See the //markup// section in Standard Structures for more information.
+
+There are other binary containers that will generally deal with encryption and compression schemes. Whereas textual containers will generally deal with parsing object markup languages.
+
+Containers have the ability to accept any struct as a substruct. All substructs within this container and all descendants therein regard the nearest parent container as if it were the root in terms of addressing (however, bubbling up key fetches and parental addressing must still be possible).
+
+Containers do not necessarily need to have substructs in them. Textual contexts will generally be able to be exported and referenced as if the were //string//s and binary contexts as if they were //bin//s. However, exporting and importing will be off by default if a substruct exists.
+
+All textual contexts should be able to define an encoding. The default, however, is not US-ASCII but rather "unencoded", which may make parsing difficult in cases where the encoding is not ASCII-compliant. Certain types may also be able to determine the encoding on their own and should do so if they can but only in the case of the encoding defaulting.
+
+== References & Resolution
+See the syntax section for the reference syntax. Here, we will be referring to the components of a reference: the struct, the keys, and indexes.
+
+Libraries should not have to know they're dealing with references. When a reference is used, the value will not be validated against or recasted to the key's type and valid values until the value is requested.
+
+One can reference only a struct, a key in a struct, or an index in a list. In few locations, referencing a struct may regard it as a reference to a struct. When referencing a key that contains a reference to a struct in this way, it is also considered to be a reference to a struct. You may only refer to keys when referring to a struct (keep in mind that all values are also structs).
+
+When a value is retrieved from a struct, it uses what are called basic values. They map to the basic types: string, number, and list. Not all types will return a value for each basic type. Some structs may not return a value for any of them. However, all structs regarded as values (that is, things that can be stored in keys that are not references) will. Simply put, if a struct represents a string, fetching its string value will return that string. Therefore, when placing a reference to this struct in a key that has a //string// type, this new key will have the value of that string.
+
+Example:
+
+<<code rpl
+static A { thing: size (byte) }
+
+string String { data: @A.thing } # @String.data = "byte"
+number Number { data: @A.thing } # @Number.data = 1
+static Static {
+    ref: @A.thing # @Static.ref is just a reference
+    str: @String  # @Static.str = "byte"
+}
+number Number2 { data: @Static.ref } # @Number2.data = 1
+number Number3 { data: @Static.str } # Throws a type exception error; number type can't be a string>>
+
+== Simple form
+This is a "strict" style of representation. Things in this form are meant to be simple to remember, with no ambiguity. It may only contain the following [[http://www.fileformat.info/info/unicode/category/index.htm|Unicode character classes]]: Letter, Lowercase; Letter, Other; Letter, Modifier (possibly); Number, Decimal (at the end only). However not everything in these classes are permitted, for instance only normal forms are permitted (ie. 0 is permitted but 𝟬 may not be unless it has the same meaning).
+
+Simple forms should only be one word. It is best if the word is common but specific. If it is representing a concept that could easily inspire several words (for instance "upgrade" and "update") it is best that appropriate aliases be used so as to not leave the sister forms available for distinct meanings and subsequent confusion.
+
+== Easy to write
+RPL is intended to be easy to write which basically means that it has to be easy to remember. Although there should be ample help available for how to write it, it should also only take a very basic level of familiarity to get started. Part of this is relieved by enforcing simple form ('Was it underscores or camel case...?') and the other portion of it should be by using common, single-word terminology for keys and types and by associating alternative words and word forms with the same key names. This may extend to types but likely only in word forms rather than synonyms.
+
+Much of what can be done to achieve this goal is locale-specific, so this section is only relevant to English-language locales.
+
+At least if a key is able to take a list (and they should, if it makes sense), a key name should always alias its plural (or singular, if plural is the default). For instance, in the //RPL// struct one can use //lib// or //libs// to refer to the //lib// key, regardless of whether or not it's taking multiple values. However, if possible, it would be best for the i18n to choose the appropriate key name based on the contents when stringifying. Despite that, it really should not be anal about it, for example, //datum// may be the singular of //data// but //datum// is not a remotely common word and should never be preferred.
+
+Syntax should be easy to remember, practical, familiar, etc. Literals are sort of the exception to this rule since they have such restrictions but if one doesn't abuse them for general strings it should generally be okay and syntax highlighters can deal with alerting users to issues. Custom syntaxes (parsed out of literals or strings) should generally be discouraged, especially if RPL is up to the task, at least not exclusively. Similarly, lists that are used like arguments for a declaration should never have more than two arguments whose meaning relies on position. Both of these things can beget faulty recollection.
+
+Additionally, RPL has the principle of assuming that an author means what they write (syntax errors aside). Any automation and value resolution should restrict itself to working within what the author has explicitly written, without changing those values. For instance, if a string does not have data but an author as explicitly given it a length, all entries must fit within that length.
+
+<<import foot.html>>

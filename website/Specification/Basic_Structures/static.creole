@@ -1,0 +1,11 @@
+<<import head.html Specification - Basic Structures - static>>
+
+<<crumbs Specification -> Basic Structures -> static>>
+<<TOC>>
+
+== //static//
+This struct stores arbitrary data, much like a JSON object. It allows for the use of quote strings as keynames. Unless specified otherwise (with keystructs) all its keys are syntactic types. //static// and all derivative types (collectively called //statics//) have the special ability to be declared as a substruct of any type and contain any substruct the parent allows. See [[Specification/Principles#Hierarchy|Hierarchy]] section for more details on how this works.
+
+Note that although it stores values in its keys as syntactic types, they must be recasted if inherited by substructs, so one does not need to do the casting explicitly.
+
+<<import foot.html>>

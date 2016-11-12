@@ -1,0 +1,27 @@
+<<import head.html Specification - Standard Structures>>
+
+<<crumbs Specification -> Standard Structures>>
+
+= Standard Structures
+These are structures that must be implemented by the standard library. They should be implemented such that one can import all of them by importing "std" or one may import specific ones by importing "std.TYPE"
+
+TODO: Generic data types: //asm//, //markup//, //model//, //sound//, //composite//
+
+TODO: Text contexts, object notation: //xml//, //json//, //yaml//, //rpl//
+
+TODO: Text contexts, tables: //csv//
+
+TODO: Text contexts, formatted text: //rtf//
+
+TODO: Text contexts, other: //html//
+
+<<TOC
+Specification/Standard_Structures/math.creole
+Specification/Standard_Structures/readdir.creole
+Specification/Standard_Structures/map.creole
+Specification/Standard_Structures/data.creole
+Specification/Standard_Structures/Graphics_Types.creole
+Specification/Standard_Structures/Binary_Constructs.creole
+>>
+
+<<import foot.html>>

@@ -1,0 +1,11 @@
+<<import head.html Specification - Non-standard Structures - archive>>
+
+<<crumbs Specification -> Non-standard Structures -> archive>>
+<<TOC>>
+
+== //archive//
+Provides a binary context for a collection of files. Basally, it takes a collection of filenames and offsets and allows substructs to select a file entry by name (via //base//) to work with.
+
+TODO
+
+<<import foot.html>>

@@ -1,0 +1,15 @@
+<<import head.html Specification - Testing Library - iostatic>>
+
+<<crumbs Specification -> Testing Library -> iostatic>>
+<<TOC>>
+
+== //iostatic//
+This is much like [[Specification/Basic_Structures/static#static|//static//]] except that it offers static data that differs based on whether the RPL is being used for importing or exporting. This should mainly only be used for testing purposes.
+
+When defined, keys take a two element lists of the form: [value when importing, value when exporting]
+
+Setting is undefined.
+
+When retrieved, the appropriate value must be returned. If it is not explicit whether the user is importing or exporting, the system should generate an error as the user should not be using this struct in such cases.
+
+<<import foot.html>>

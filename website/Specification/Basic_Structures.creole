@@ -1,0 +1,19 @@
+<<import head.html Specification - Basic Structures>>
+
+<<crumbs Specification -> Basic Structures>>
+
+= Basic Structures
+These structures are what's basally necessary for RPL to function.
+
+<<TOC
+Specification/Basic_Structures/RPL.creole
+Specification/Basic_Structures/ROM.creole
+Specification/Basic_Structures/Numbers.creole
+Specification/Basic_Structures/Strings.creole
+Specification/Basic_Structures/Lists.creole
+Specification/Basic_Structures/bool.creole
+Specification/Basic_Structures/size.creole
+Specification/Basic_Structures/static.creole
+>>
+
+<<import foot.html>>

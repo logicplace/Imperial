@@ -1,0 +1,41 @@
+<<import head.html Specification - Basic Structures - Strings>>
+
+<<crumbs Specification -> Basic Structures -> Strings>>
+<<TOC>>
+
+== Strings
+All string types must implement the following keys:
+* From [[Specification/Common Keys#Value Types|value]] type: data
+* From [[Specification/Common Keys#Serializable Types|serializable]] type: base, file, ext (Default: txt), transport
+* length: Length of the string in characters. Reflects //data//.
+** Setting this shorter will truncate the string and should produce a warning.
+* size: Size of the serialize string. Default: unlimited
+* encoding: The encoding of the serialized string. This may be a string with the name of a standard encoding or a reference to a //map// struct.
+* padding: What to pad the string with when it's too short. Default: $00
+* align: How to align the string with regard to padding. Can be **left** (default), **center**, **rcenter**, or **right**.
+* padside: Opposite ideology of //align//. Reflects //align//. Can be **left** (align = right), **both** (align center), **lboth** (align = rcenter), or **right** (align left) (default).
+
+When serializing, a warning should be generated if the string cannot fit in the target size. An error should be generated if the encoding is invalid, though //map// structs should handle their own error generation in the case of using one.
+
+Syntactic types:
+* //string//: This is the basic string type. String form should be the string with the most appropriate quote form chosen (ie. attempt primary for locale, then attempt secondary for locale, then start escaping things).
+* //literal//: Unquoted string. String form should attempt to write it as a literal but if any illegal characters exist in the data then it must quote it in the same way as //string//.
+* //refstr//: String with embedded references. String form is like //string// but with an at sign prefix.
+
+Note that multistring is not a type but rather only syntactic sugar.
+
+=== //path//
+All paths are considered relative. The basing should be something that the user of the value cares about rather than this value itself.
+
+When defined/set, must use either "/" or "\" as the path separator and "." as the extension separator but only the last occurrence within the final element, assuming it is not the first or last character of the final element. The struct should store whether or not there was an initial slash. TODO: Should this store the presence of a trailing slash as well?
+
+When retrieved, it will return the path as defined but using your system's path and extension separators.
+
+//path// must implement the following additional keys:
+* path: A list of the form [folders, ..., file]. Reflects //data//. Note that the last element is not necessarily a file.
+* ext: The file extension as a string. Reflects //data//. If there is no extension, this should be an empty string. Default is an empty string.
+* open: Boolean; whether or not there was an opening slash.
+
+Possible extensions: URIs with protocols (protocol://...), network shares (\\share\...)
+
+<<import foot.html>>

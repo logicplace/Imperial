@@ -1,0 +1,13 @@
+<<import head.html Specification - Non-standard Structures - table>>
+
+<<crumbs Specification -> Non-standard Structures -> table>>
+<<TOC>>
+
+== //table//
+Provides a queryable database-like context for structures with header specifications contained in the binary (ie. ones that are not static such that they cannot be represented in a [[Specification/Standard_Structures/data#data|//data//]] struct). Allows author to read cell entries as a //format// (see [[Specification/Standard_Structures/data#data|//data//]]) type linked to through this header. That is, the header read from the binary indicates a column's type by an index, then when attempting to read the cell in that column the //table// struct selects the linked type by using the given type index for that column. Table formats which define datatypes per cell instead of per column are not suited for this struct.
+
+Without substructs this can be exported in a table-compatible format (csv or any object format). Substructs may query (via //base//) with an SQL-like syntax.
+
+TODO
+
+<<import foot.html>>

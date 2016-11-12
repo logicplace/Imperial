@@ -1,0 +1,43 @@
+<<import head.html Specification - Basic Structures - Lists>>
+
+<<crumbs Specification -> Basic Structures -> Lists>>
+<<TOC>>
+
+== Lists
+All list types must implement the following keys:
+* From [[Specification/Common Keys#Value Types|value]] type: data
+* length: (RO) The length of the list. Reflects //data//
+
+Syntactic types:
+* //list//: This is the basic list type.
+* //range//: This is an interpreted list type, look at the [[Specification/RPL Syntax#Ranges|range syntax]] section for more information.
+
+=== //list//
+In all possible stringified forms, we are presenting a list of the string forms of its contents, separated by a separator, and surrounded by square brackets. Pretty printing options might include:
+* Same-line opening vs. own-line opening
+* Separator options: / *, *|\n/
+* Newline after certain line length or certain number of elements
+** With or without trailing comma
+** Whether or not to split a single element over multiple lines (?) (This may be better handled by each element)
+* Trailing comma for last element or not
+* Same-line ending vs. own-line ending
+
+=== //range//
+Represents a predictable list of //number//s or //hexnum//s. If one side of a range is a //hexnum// and the other is not, //number// should be preferred except for the one //hexnum// element.
+
+//range// must implement the following additional keys:
+* start: The start value of the range. This does not imply the smallest value of a range. Required. Reflects //data//.
+* end: The end (last) value of the range. This does not imply the largest value of a range. Required. Reflects //data//.
+* end1: The end (last) value of the range + 1 (if increasing range) or - 1 (if decreasing range). Reflects //end//
+* difference: (RO) The positive difference between the start and end values. Reflects //start// and //end//
+* difference1: (RO) The positive difference between the start and end1 values. Reflects //start// and //end1//
+
+Examples for the different types of ranges:
+{{{
+1~5 = { data: [1, 2, 3, 4, 5], length: 5, start: 1, end: 5, end1: 6, difference: 4, difference1: 5 }
+2*3 = { data: [2, 2, 2], length: 3, start: 2, end: 2, end1: 3, difference: 0, difference1: 1 }
+4+3 = { data: [4, 5, 6], length: 3, start: 4, end: 6, end1: 7, difference: 2, difference1: 3 }
+4+-3 = { data: [4, 3, 2], length: 3, start: 4, end: 2, end1: 1, difference: 2, difference1: 3 }
+}}}
+
+<<import foot.html>>

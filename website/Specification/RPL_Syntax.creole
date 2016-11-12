@@ -1,0 +1,263 @@
+<<import head.html Specification - RPL Syntax>>
+
+<<crumbs Specification -> RPL Syntax>>
+<<TOC>>
+
+= RPL Syntax
+Syntax is written in pseudo-BNF with the following key information:
+* // = RegEx
+* (|) = option group
+* [] = optional
+* \# = Copying the same structure as the given index of an option group, 1-based, unless noted to be a backreference
+* * = 0 or more repeats
+* "" = literal character
+* ! = not
+* WS = WhiteSpace (1 or more) (unless otherwise noted, this can include newlines)
+* EOL = End of Line, so at least one newline or a comment
+
+== Comments
+Comments may be located anywhere except within a string, despite what other sections' wordings may imply.
+
+The syntax is:
+{{{
+"#" /.*$/
+}}}
+
+There is currently no multiline version planned, though there may be in the future. Comments should have whitespace between the # and the comment text.
+
+== Root
+The root is not a syntactical element but rather represents the file.
+
+It can contain only structs, and as such is of the form:
+{{{
+WS* struct WS* [EOL WS* struct WS*]*
+}}}
+
+== Structs
+Structs represent sets of key-value pairs. Structs must have a type and body and may have a name.
+
+Structs are of the form:
+{{{
+type WS [name] WS* "{" WS* [body] WS* "}" WS* EOL
+}}}
+
+Please note that structs cannot be separated by a "," and //must// be separated by an EOL.
+
+//type// must be in simple form.
+
+//name// may contain any letters or numbers; symbols and whitespace are not allowed.
+
+The body can contain structs (called substructs), keys, and keystructs.
+
+== Keys
+Keys represent a single key-value pair.
+
+The basic form is:
+{{{
+key WS* ":" WS* value ("," | EOL)
+}}}
+
+//key// has three syntactically valid forms, depending on context. The most common form is simple form. Otherwise it may also be a quoted string or a number (or hexnum) if the struct type allows these. These forms may be referred to as strkeys and numkeys. Each of these forms are considered distinct even if they seem to contain the same value (of course strkeys that only use different quote forms are considered the same keyname).
+
+//value// has the form:
+{{{
+(keystruct | (list | string | literal | number | hexnum | range | reference) [concat \1]*)
+}}}
+However note that keystructs cannot be followed by a comma and rather must be followed by an EOL.
+
+== Keystructs
+Keystructs are struct-like definitions that come in the value slot of a key. They can be one of three forms.
+
+Struct-like, key-value body:
+{{{
+type WS* "{" body "}" WS* EOL
+}}}
+
+Value-like, define basic type:
+{{{
+type WS* "(" (list | string | literal | number | hexnum | range | reference) [concat \1]* ")" WS* EOL
+}}}
+
+Value-like, define list basic type, parenthesis are optional:
+{{{
+type WS* list WS* EOL
+}}}
+If one parenthesis is used, the matching one must also be used, as it will fall under the former syntax. Note that when not using parenthesis, concatenation is not allowed.
+
+== Lists
+Lists are ordered sequences of values.
+
+Lists are of the form:
+{{{
+"[" (list | string | literal | number | hexnum | range | reference) [concat \1] [("," | /$/) \1]* "]"
+}}}
+
+== Strings
+Strings are quoted text. They may contain escape sequences. Text content obviously inherits the file encoding, however, byte escape sequences will render as literal bytes rather than encoded text. There are two major types of strings, what we will call single line and multiline.
+
+Single line string format:
+{{{
+LQUOTE (ESCAPE | !(RQUOTE | EOL)) RQUOTE
+}}}
+
+or:
+{{{
+DASHQUOTE (ESCAPE) /$/
+}}}
+Note that this form will even eat commas and comments.
+
+//ESCAPE// format:
+{{{
+"$" (/[0-9a-fA-F]{2}/ | "(" /[0-9a-fA-F]+/ ")" | [^0-9a-fA-F])
+}}}
+These group options represent, respectively: byte, unicode codepoint, special character.
+
+Special characters can be any of the following:
+* $ = literal "$"
+* any quote character = literal quote character
+* z = NULL, zero, $(0)
+* n = newline, $(d)
+* r = line feed, $(a)
+* t = tab, $(9)
+
+//LQUOTE// and //RQUOTE// are a pair defined by essentially any [https://en.wikipedia.org/wiki/Quotation_mark#Summary_table_for_all_languages valid quotation form]. //DASHQUOTE// is a left-marker-only style of quoting that can be found in the same list.
+
+A summary of quote pairs are as follows:
+;Double quote forms (English, Dutch, Afrikaans, German, etc) Lower closing (Hebrew)
+: "" ““ “” ”” ”„ ‟‟ ‟”
+;Single quote forms
+: // ‘‘ ‘’ ’’ ’‘ ’‚ ‛‛ ‛’
+;CJK quotes
+: 『』 「」
+;Forms with lower opening (Albanian, Czech, etc)
+: ‚’ ‚‘ „“ „”
+;Guillemets (Russian, Finnish, Hungarian, etc)
+: «» »« »» ‹› ›‹
+;Dash quotes (Polish, Greek, etc)
+: – — ― --
+
+Multiline string format, uses the backtick:
+{{{
+(("`"+) (!\2)* \2) [WS* [EOL] WS* \1]*
+}}}
+These \2s are backreferences, requiring exact matches of the content.\\
+To explain, one may use any number of backticks to open a multiline string segment and the segment will not end until the same number of backticks are found in sequence. If another segment begins afterwards it is considered part of the same string (by concatenation) and its number of surrounding backticks is independent of other segments. The only things that may separate two segments such that the two segments will still be considered the same string are whitespace and comments.
+
+== Refstrings
+Any type of string, including multiline strings, may have an at sign (@) placed in front of the opening quote in order to make it a refstring. Note that for multiline strings, the first segment must have the at sign in order to be considered a refstring and for all subsequent segments the at sign is optional.
+
+When defined, this type must extract all references from the string and hold onto them as actual references.
+
+When retrieved, this type must return a string that contains the contents of the referenced values coerced into strings. Note that lists may not be coerced into strings, only numbers and strings can be.
+
+When set, this type must attempt to match the string portions against the text in order to extract the contents where the references would be. It then must attempt to update the references with those contents in a reverse string coercive fashion such that numbers will be parsed appropriately. If a type conversion fails, or if the match fails, the system should throw an error.
+
+== Literals
+Literals are essentially unquoted strings. Due to this, they have many restrictions.
+
+Literal format, where the actual content is in \1:
+{{{
+WS* (!QUOTE (ESCAPE | !("{" | "}" | "[" | "]" | "(" | ")" | "#" | "," | ":"))*) WS*
+}}}
+They may also not be able to be interpreted as numbers or ranges. You may not escape the forbidden characters in a literal.
+
+== Numbers
+Unsigned (?) integers:
+{{{
+/[0-9]+/
+}}}
+
+== Hexnum
+Unsigned (?) hexadecimal integers:
+{{{
+"$" /[0-9a-fA-F]+/
+}}}
+
+== Ranges
+Ranges are generated lists of numbers. There are multiple forms.
+
+Inclusive sequence:
+{{{
+(number | hexnum) ("~" | "-") (number | hexnum)
+}}}
+Example: {{{ 1-5 => [1, 2, 3, 4, 5] }}}
+
+Repeated number:
+{{{
+(number | hexnum) ("*") (number | hexnum)
+}}}
+Example: {{{ 2*4 => [2, 2, 2, 2] }}}
+
+Count up from start, length amount (exclusive list):
+{{{
+(number | hexnum) ("+") (number | hexnum)
+}}}
+Example: {{{ 4+2 => [4, 5] }}}
+
+Count down from start, length amount (exclusive list):
+{{{
+(number | hexnum) ("+-" | "±") (number | hexnum)
+}}}
+Example: {{{ 6+-3 => [6, 5, 4] }}}
+
+== References
+Refer to a struct or value somewhere. They all do the same thing, but there are multiple syntaxes. The first element in a reference is always a struct name and the remainder are key names.
+
+The following WS do not include newlines.
+
+For the following syntax, we define //INDEX// as:
+{{{
+"[" WS* (number | hexnum | reference) WS* "]"
+}}}
+When using a reference as an index here, it is assumed to be a number. When indexing at all, the struct or value is assumed to be a list.
+
+We define //STRUCT// as:
+{{{
+struct WS* [INDEX]
+}}}
+
+And similarly //KEY// as:
+{{{
+key WS* [INDEX] | [INDEX] WS* key
+}}}
+
+Finally, the reference syntax:
+{{{
+"@" [LQ] WS* STRUCT [WS* ("." | "-" | "─" | "->") WS* KEY]* [RQ]
+}}}
+
+If LQ is used RQ must be used and vise versa. These can be either ( and ) or [ and ] respectively. This is particularly useful in [[#Refstrings|refstrings]].
+
+Note that there is no way to reference a key that uses a quoted string or a number for its name, even if that name is a valid literal. However, the concept of using quotes after a traversal operator should be considered reserved.
+
+== Concat
+Concatenate two (or more) values into a list. Valid values are mentioned in above contexts where concat itself is valid. There are two concatenation operators: concat and cons.
+
+Concat syntax:
+{{{
+value ":" value
+}}}
+Concat makes a flat list of the values. Examples as follows:
+{{{
+1:2           => [1, 2]
+[1, 2]:3      => [1, 2, 3]
+1:[2, 3]      => [1, 2, 3]
+[1, 2]:[3, 4] => [1, 2, 3, 4]
+}}}
+
+Cons syntax:
+{{{
+value "::" value
+}}}
+Equivalent to [lvalue]:rvalue
+{{{
+1::2           => [1, 2]
+[1, 2]::3      => [[1, 2], 3]
+1::[2, 3]      => [1, 2, 3]
+[1, 2]::[3, 4] => [[1, 2], 3, 4]
+[1, 2]::3::4   => [[[1, 2], 3], 4]
+1:[2, 3]::4    => [[1, 2, 3], 4]
+1::[2, 3]:4    => [1, 2, 3, 4]
+}}}
+
+<<import foot.html>>

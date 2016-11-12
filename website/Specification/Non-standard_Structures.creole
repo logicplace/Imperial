@@ -1,0 +1,13 @@
+<<import head.html Specification - Non-standard Structures>>
+
+<<crumbs Specification -> Non-standard Structures>>
+
+= Non-standard Structures
+Other structures that are their own libraries rather than part of std but aren't console-specific.
+
+<<TOC
+Specification/Non-standard_Structures/table.creole
+Specification/Non-standard_Structures/archive.creole
+>>
+
+<<import foot.html>>
