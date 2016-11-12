@@ -94,7 +94,7 @@ sub make_toc {
 
 sub make_toc_bit {
 	my $n = $_[1];
-	return $n ? ('#' x length($_[0])) . ' [[' . $_[2] . valid_anchor($n) . "|$n]]" : '';
+	return $n ? ('#' x length($_[0])) . ' [[' . $_[2] . $n . "|$n]]" : '';
 }
 
 sub valid_anchor {
@@ -102,7 +102,7 @@ sub valid_anchor {
 	my $anc = shift @_;
 	$anc =~ s/^ +| +$//g;
 	$anc =~ s/<[^>]+>//g;
-	$anc =~ s/\p{Punctuation}|\p{Other}|\p{Symbol}//g;
+	$anc =~ s/(?!_)\p{Punctuation}|\p{Other}|\p{Symbol}//g;
 	$anc =~ s/\p{Separator}/_/g;
 	return $anc;
 }
