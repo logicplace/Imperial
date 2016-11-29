@@ -135,7 +135,7 @@
 				</dict>
 			</dict>
 			<key>match</key>
-			<string>\s*(?=\S)(?!(\d+|[$@\[#,"“”„‟'‘’‚‛『』「」«»‹›]|\w+\d*\s*[({\[]))([^:#(){}\[\]\r\n]+)\s*(?=[:#)}\]]|$)</string>
+			<string>\s*(?=\S)(?!(\d+|--|[$@\[#,"“”„‟'‘’‚‛『』「」«»‹›–—―]|\w+\d*\s*[({\[]))([^:#(){}\[\]\r\n]+)\s*(?=[:#)}\]]|$)</string>
 		</dict>
 		<key>multiline-string</key>
 		<dict>
@@ -248,7 +248,7 @@
 				</dict>
 			</dict>
 			<key>match</key>
-			<string>(\d+|\$[\da-fA-F])([~+\-*]|--)(\d+|\$[\da-fA-F])</string>
+			<string>(\d+|\$[\da-fA-F])([~+\-*±]|+-)(\d+|\$[\da-fA-F])</string>
 		</dict>
 		<key>reference</key>
 		<dict>
