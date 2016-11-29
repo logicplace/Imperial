@@ -471,6 +471,7 @@
 		<context id="keywords" style-ref="keyword">
 			<keyword>false</keyword>
 			<keyword>true</keyword>
+			<keyword>undefined</keyword>
 			<keyword>black</keyword>
 			<keyword>white</keyword>
 			<keyword>red</keyword>
@@ -481,6 +482,8 @@
 			<keyword>pink</keyword>
 			<keyword>cyan</keyword>
 			<keyword>gray</keyword>
+			<keyword>grey</keyword>
+			<keyword>transparent</keyword>
 			<keyword>byte</keyword>
 			<keyword>short</keyword>
 			<keyword>long</keyword>
