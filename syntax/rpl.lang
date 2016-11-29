@@ -43,38 +43,423 @@
 		</context>
 
 		<context id="string"><include>
-			<context id="string-dq" style-ref="string" end-at-line-end="true" class="string">
+			<context id="string-dq0" style-ref="string" end-at-line-end="true" class="string">
 				<start>"</start><end>"</end>
 				<include>
 					<context ref="escape"/>
 					<context ref="escape-error"/>
 				</include>
 			</context>
-			<context id="string-sq" style-ref="string" end-at-line-end="true" class="string">
+			<context id="refstr-dq0" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)"</start><end>"</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-dq1" style-ref="string" end-at-line-end="true" class="string">
+				<start>“</start><end>“</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-dq1" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)“</start><end>“</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-dq2" style-ref="string" end-at-line-end="true" class="string">
+				<start>“</start><end>”</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-dq2" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)“</start><end>”</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-dq3" style-ref="string" end-at-line-end="true" class="string">
+				<start>”</start><end>”</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-dq3" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)”</start><end>”</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-dq4" style-ref="string" end-at-line-end="true" class="string">
+				<start>”</start><end>„</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-dq4" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)”</start><end>„</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-dq5" style-ref="string" end-at-line-end="true" class="string">
+				<start>‟</start><end>‟</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-dq5" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)‟</start><end>‟</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-dq6" style-ref="string" end-at-line-end="true" class="string">
+				<start>‟</start><end>”</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-dq6" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)‟</start><end>”</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-sq0" style-ref="string" end-at-line-end="true" class="string">
 				<start>'</start><end>'</end>
 				<include>
 					<context ref="escape"/>
 					<context ref="escape-error"/>
 				</include>
 			</context>
-		</include></context>
-
-		<context id="mstring" style-ref="string" class="string">
-			<start>`</start><end>`</end>
-			<include>
-				<context ref="escape"/>
-				<context ref="escape-error"/>
-			</include>
-		</context>
-
-		<context id="refstr" style-ref="string" class="string">
-			<start>@`</start><end>`</end>
-			<include>
-				<context ref="escape"/>
-				<context ref="escape-error"/>
+			<context id="refstr-sq0" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)'</start><end>'</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-sq1" style-ref="string" end-at-line-end="true" class="string">
+				<start>‘</start><end>‘</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-sq1" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)‘</start><end>‘</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-sq2" style-ref="string" end-at-line-end="true" class="string">
+				<start>‘</start><end>’</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-sq2" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)‘</start><end>’</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-sq3" style-ref="string" end-at-line-end="true" class="string">
+				<start>’</start><end>’</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-sq3" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)’</start><end>’</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-sq4" style-ref="string" end-at-line-end="true" class="string">
+				<start>’</start><end>‘</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-sq4" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)’</start><end>‘</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-sq5" style-ref="string" end-at-line-end="true" class="string">
+				<start>’</start><end>‚</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-sq5" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)’</start><end>‚</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-sq6" style-ref="string" end-at-line-end="true" class="string">
+				<start>‛</start><end>‛</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-sq6" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)‛</start><end>‛</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-sq7" style-ref="string" end-at-line-end="true" class="string">
+				<start>‛</start><end>’</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-sq7" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)‛</start><end>’</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-cjkq0" style-ref="string" end-at-line-end="true" class="string">
+				<start>『</start><end>』</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-cjkq0" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)『</start><end>』</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-cjkq1" style-ref="string" end-at-line-end="true" class="string">
+				<start>「</start><end>」</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-cjkq1" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)「</start><end>」</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-gq0" style-ref="string" end-at-line-end="true" class="string">
+				<start>«</start><end>»</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-gq0" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)«</start><end>»</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-gq1" style-ref="string" end-at-line-end="true" class="string">
+				<start>»</start><end>«</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-gq1" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)»</start><end>«</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-gq2" style-ref="string" end-at-line-end="true" class="string">
+				<start>»</start><end>»</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-gq2" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)»</start><end>»</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-gq3" style-ref="string" end-at-line-end="true" class="string">
+				<start>‹</start><end>›</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-gq3" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)‹</start><end>›</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-gq4" style-ref="string" end-at-line-end="true" class="string">
+				<start>›</start><end>‹</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-gq4" style-ref="string" end-at-line-end="true" class="string">
+				<start>(@)›</start><end>‹</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+					<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-mq4" style-ref="string" class="string">
+				<start>````</start><end>````</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-mq4" style-ref="string" class="string">
+				<start>(@)````</start><end>````</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
 				<context ref="ref"/>
-			</include>
-		</context>
+				</include>
+			</context>
+			<context id="string-mq3" style-ref="string" class="string">
+				<start>```</start><end>```</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-mq3" style-ref="string" class="string">
+				<start>(@)```</start><end>```</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-mq2" style-ref="string" class="string">
+				<start>``</start><end>``</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-mq2" style-ref="string" class="string">
+				<start>(@)``</start><end>``</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				<context ref="ref"/>
+				</include>
+			</context>
+			<context id="string-mq1" style-ref="string" class="string">
+				<start>`</start><end>`</end>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
+			<context id="refstr-mq1" style-ref="string" class="string">
+				<start>(@)`</start><end>`</end>
+				<include>
+					<context style-ref="ref" where="start" sub-pattern="1"/>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				<context ref="ref"/>
+				</include>
+			</context>
+		</include></context>
 
 		<context id="keywords" style-ref="keyword">
 			<keyword>false</keyword>
@@ -155,7 +540,7 @@
 		</context>
 
 		<context id="literal" style-ref="string">
-			<match>[^#,\[\]{}():"'\s][^#,\[\]{}():]*</match>
+			<match>(?!--)[^#,\[\]{}():"“”„‟'‘’‚‛『』「」«»‹›–—―\s][^#,\[\]{}():]*</match>
 		</context>
 
 		<context id="key">
@@ -169,17 +554,19 @@
 			<start>\[</start><end>\]</end>
 			<include>
 				<context ref="def:shell-like-comment"/>
-				<context ref="list"/>
-				<context ref="string"/>
-				<context ref="refstr"/>
-				<context ref="mstring"/>
-				<context ref="hexnum"/>
-				<context ref="number"/>
-				<context ref="ref"/>
-				<context ref="math"/>
-				<context ref="literal"/>
+				<context ref="value"/>
 			</include>
 		</context>
+
+		<context id="value"><include>
+			<context ref="list"/>
+			<context ref="string"/>
+			<context ref="hexnum"/>
+			<context ref="number"/>
+			<context ref="ref"/>
+			<context ref="math"/>
+			<context ref="literal"/>
+		</include></context>
 
 		<context id="struct-contents" end-parent="true">
 			<start>\{</start><end>\}</end>
@@ -188,15 +575,7 @@
 				<context ref="struct"/>
 				<context ref="keystruct"/>
 				<context ref="key"/>
-				<context ref="list"/>
-				<context ref="string"/>
-				<context ref="refstr"/>
-				<context ref="mstring"/>
-				<context ref="hexnum"/>
-				<context ref="number"/>
-				<context ref="ref"/>
-				<context ref="math"/>
-				<context ref="literal"/>
+				<context ref="value"/>
 			</include>
 		</context>
 
@@ -204,15 +583,7 @@
 			<start>\(</start><end>\)</end>
 			<include>
 				<context ref="def:shell-like-comment"/>
-				<context ref="list"/>
-				<context ref="string"/>
-				<context ref="refstr"/>
-				<context ref="mstring"/>
-				<context ref="hexnum"/>
-				<context ref="number"/>
-				<context ref="ref"/>
-				<context ref="math"/>
-				<context ref="literal"/>
+				<context ref="value"/>
 			</include>
 		</context>
 
@@ -220,15 +591,7 @@
 			<start>\[</start><end>\]</end>
 			<include>
 				<context ref="def:shell-like-comment"/>
-				<context ref="list"/>
-				<context ref="string"/>
-				<context ref="refstr"/>
-				<context ref="mstring"/>
-				<context ref="hexnum"/>
-				<context ref="number"/>
-				<context ref="ref"/>
-				<context ref="math"/>
-				<context ref="literal"/>
+				<context ref="value"/>
 			</include>
 		</context>
 
