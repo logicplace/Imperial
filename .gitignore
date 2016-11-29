@@ -4,4 +4,4 @@ build
 docs
 tests/rpls/*/test.*
 notes.md
-website/build
+website/release
