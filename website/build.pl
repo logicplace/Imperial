@@ -41,7 +41,7 @@ sub myplugin {
 	$_[0] =~ s/^TOC(?:\s+(.*))?/make_toc($1)/es or
 	$_[0] =~ s/^import (.*)/import_html($1)/e or
 	$_[0] =~ s/^table(?: +(.+))?$([\s\S]+)/make_table($1,$2)/me or
-	$_[0] =~ s%^code(?: +(\S+))? *$\r?\n([\s\S]+)%<pre><code class="$1">$2</code></pre>\n%m or
+	$_[0] =~ s%^code(?: +(\S+))? *$\r?\n([\s\S]+)%make_code($1,$2)%me or
 	$_[0] =~ s/^crumbs (.*)/make_crumbs($1)/e or
 	$_[0] = "<!-- Parse error: this plugin was not found -->\n";
 	return $_[0];
@@ -196,6 +196,13 @@ sub make_table {
 		$result .= '</tr>';
 	}
 	return $result . "</table>\n";
+}
+
+sub make_code {
+	my ($class, $code) = @_;
+	$code =~ s/>~(~*)>/>$1>/g; # Escape sequence for >>
+	$code = escape_html($code);
+	return "<pre><code class=\"$class\">$code</code></pre>\n";
 }
 
 sub make_crumbs {
