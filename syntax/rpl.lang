@@ -32,6 +32,7 @@
 	<definitions>
 		<define-regex id="struct-name">[a-zA-Z_][a-zA-Z_\-0-9]*</define-regex>
 		<define-regex id="key-name">[a-z]+[0-9]*</define-regex>
+		<define-regex id="type-name">[a-zA-Z_][a-zA-Z_0-9]*</define-regex>
 
 		<context id="escape" style-ref="escape">
 			<match>\$(\$|[0-9a-fA-F]{2})</match>
@@ -154,11 +155,11 @@
 		</context>
 
 		<context id="literal" style-ref="string">
-			<match>[^,\["'}\] \t][^#,\]}]*</match>
+			<match>[^#,\[\]{}():"'\s][^#,\[\]{}():]*</match>
 		</context>
 
 		<context id="key">
-			<match>(\%{key-name}):</match>
+			<match>(\%{key-name})\s*:</match>
 			<include>
 				<context style-ref="key" sub-pattern="1"/>
 			</include>
@@ -174,35 +175,80 @@
 				<context ref="mstring"/>
 				<context ref="hexnum"/>
 				<context ref="number"/>
-				<context ref="hexnum"/>
 				<context ref="ref"/>
 				<context ref="math"/>
 				<context ref="literal"/>
 			</include>
 		</context>
 
+		<context id="struct-contents" end-parent="true">
+			<start>\{</start><end>\}</end>
+			<include>
+				<context ref="def:shell-like-comment"/>
+				<context ref="struct"/>
+				<context ref="keystruct"/>
+				<context ref="key"/>
+				<context ref="list"/>
+				<context ref="string"/>
+				<context ref="refstr"/>
+				<context ref="mstring"/>
+				<context ref="hexnum"/>
+				<context ref="number"/>
+				<context ref="ref"/>
+				<context ref="math"/>
+				<context ref="literal"/>
+			</include>
+		</context>
+
+		<context id="keystruct-parens" end-parent="true">
+			<start>\(</start><end>\)</end>
+			<include>
+				<context ref="def:shell-like-comment"/>
+				<context ref="list"/>
+				<context ref="string"/>
+				<context ref="refstr"/>
+				<context ref="mstring"/>
+				<context ref="hexnum"/>
+				<context ref="number"/>
+				<context ref="ref"/>
+				<context ref="math"/>
+				<context ref="literal"/>
+			</include>
+		</context>
+
+		<context id="keystruct-list" end-parent="true">
+			<start>\[</start><end>\]</end>
+			<include>
+				<context ref="def:shell-like-comment"/>
+				<context ref="list"/>
+				<context ref="string"/>
+				<context ref="refstr"/>
+				<context ref="mstring"/>
+				<context ref="hexnum"/>
+				<context ref="number"/>
+				<context ref="ref"/>
+				<context ref="math"/>
+				<context ref="literal"/>
+			</include>
+		</context>
+
+		<context id="keystruct">
+			<start>(\%{key-name}):[ \t]*(\%{type-name})[ \t]*(?=[({\[])</start>
+			<include>
+				<context style-ref="key" where="start" sub-pattern="1"/>
+				<context style-ref="struct" where="start" sub-pattern="2"/>
+				<context ref="struct-contents"/>
+				<context ref="keystruct-parens"/>
+				<context ref="keystruct-list"/>
+			</include>
+		</context>
+
 		<context id="struct">
-			<start>^[ \t]*([a-zA-Z_][a-zA-Z_0-9]*)( +\%{struct-name})?[ \t]*(?=$|\{)</start>
+			<start>^[ \t]*(\%{type-name})( +\%{struct-name})?[ \t]*(?=$|\{)</start>
 			<include>
 				<context style-ref="struct" where="start" sub-pattern="1"/>
 				<context style-ref="name" where="start" sub-pattern="2"/>
-				<context end-parent="true">
-					<start>\{</start><end>\}</end>
-					<include>
-						<context ref="def:shell-like-comment"/>
-						<context ref="struct"/>
-						<context ref="key"/>
-						<context ref="list"/>
-						<context ref="string"/>
-						<context ref="refstr"/>
-						<context ref="mstring"/>
-						<context ref="hexnum"/>
-						<context ref="number"/>
-						<context ref="ref"/>
-						<context ref="math"/>
-						<context ref="literal"/>
-					</include>
-				</context>
+				<context ref="struct-contents"/>
 			</include>
 		</context>
 
