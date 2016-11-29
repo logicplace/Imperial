@@ -12,7 +12,7 @@ Represents a mathematical expression. It can contain numbers, operators, and ref
 When defined, it must interpret the given string as the mathematical equation given the operators and syntax listed below. It must also allow for references without using refstr type. Note that using refstr type would ignore references as they're used in the set operation.
 
 It must support the following operators with this Order of Operations. Ones listed in the same bullet have the same precedence:
-* Parenthetical groupings: ()
+* Parenthetical groupings: () &lt;&gt;
 * Power: ~**
 * Multiplication, integer division, modulo: * / %
 * Addition and subtraction: + -
@@ -35,6 +35,6 @@ When set, it must set the given a number that represents the result of the equat
 
 When retrieved as a number, it must return the result of the equation.
 
-For syntax highlighters, you may consider a literal starting with a plus sign to be a math type.
+For syntax highlighters, you may consider a literal or a dash string starting with a plus sign to be a math type. Additionally, don't forget about the math keystruct form: ##math (value)##
 
 <<import foot.html>>
