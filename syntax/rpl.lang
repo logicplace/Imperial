@@ -395,6 +395,13 @@
 					<context ref="ref"/>
 				</include>
 			</context>
+			<context id="string--q" style-ref="string" end-at-line-end="true" class="string">
+				<start>(--|[–—―])</start>
+				<include>
+					<context ref="escape"/>
+					<context ref="escape-error"/>
+				</include>
+			</context>
 			<context id="string-mq4" style-ref="string" class="string">
 				<start>````</start><end>````</end>
 				<include>
@@ -514,10 +521,12 @@
 			<!-- Math does not require a + to start it, but this is an easy and okay looking way to identify it.
 			Also, if the string starts with a number or reference, you need to do this to make it a literal.
 			The other option would be to make it a string, but then the highlighter can't really identify it. -->
-			<start>\+(?=[^,\["'}\] \t])</start><end>(?=[#,\]}])</end>
+			<start>(--|[–—―])?\+(?=[^,\["'}\] \t])</start><end>(?=[#,\]}])</end>
 			<include>
 				<context ref="ref"/>
-				<context ref="hexnum"/>
+				<context id="hexnumd" style-ref="hex">
+					<match>\$\$[0-9a-fA-F]+</match>
+				</context>
 				<context id="hexnum2" style-ref="hex">
 					<match>0x[0-9a-fA-F]+</match>
 				</context>
@@ -560,11 +569,11 @@
 
 		<context id="value"><include>
 			<context ref="list"/>
+			<context ref="math"/>
 			<context ref="string"/>
 			<context ref="hexnum"/>
 			<context ref="number"/>
 			<context ref="ref"/>
-			<context ref="math"/>
 			<context ref="literal"/>
 		</include></context>
 
