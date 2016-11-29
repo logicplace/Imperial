@@ -156,7 +156,7 @@ class TestParse(RPLTestCase):
 		for y in static0:
 			self.assertEqual(y.name, "sub", 'Unexpected sub "%s"' % y.name)
 			self.checkLen(y, 1)
-			self.check(y, "lit", "literal", ":D")
+			self.check(y, "lit", "literal", ";D")
 		#endfor
 
 		regression = TestParse.basic.child("regression")
