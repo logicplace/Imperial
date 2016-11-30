@@ -131,11 +131,16 @@
 				<key>1</key>
 				<dict>
 					<key>name</key>
+					<string>constant.language</string>
+				</dict>
+				<key>2</key>
+				<dict>
+					<key>name</key>
 					<string>string.unquoted.rpl</string>
 				</dict>
 			</dict>
 			<key>match</key>
-			<string>\s*(?=\S)(?!\d+|--|[$@\[#,"“”„‟'‘’‚‛『』「」«»‹›`–—―]|\w+\d*\s*[({\[])([^:,#(){}\[\]\r\n]+)</string>
+			<string>\s*(?=\S)(?!\d+|--|[$@\[#,"“”„‟'‘’‚‛『』「」«»‹›`–—―]|\w+\d*\s*[({\[])(?:(false|true|undefined|black|white|red|blue|green|yellow|magenta|pink|cyan|gray|grey|transparent|byte|short|long|double|LRUD|LRDU|RLUD|RLDU|UDLR|UDRL|DULR|DURL|LU|LD|RU|RD|UL|UR|DL|DR|big|little)|([^:,#(){}\[\]\r\n]+))</string>
 		</dict>
 		<key>math-body</key>
 		<dict>
