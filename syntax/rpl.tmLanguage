@@ -69,7 +69,7 @@
 				<key>0</key>
 				<dict>
 					<key>name</key>
-					<string>meta.brace.square.js</string>
+					<string>meta.brace.square.rpl</string>
 				</dict>
 			</dict>
 			<key>end</key>
@@ -79,7 +79,7 @@
 				<key>0</key>
 				<dict>
 					<key>name</key>
-					<string>meta.brace.square.js</string>
+					<string>meta.brace.square.rpl</string>
 				</dict>
 			</dict>
 			<key>patterns</key>
@@ -103,7 +103,7 @@
 				<key>0</key>
 				<dict>
 					<key>name</key>
-					<string>meta.brace.square.js</string>
+					<string>meta.brace.square.rpl</string>
 				</dict>
 			</dict>
 			<key>end</key>
@@ -113,7 +113,7 @@
 				<key>0</key>
 				<dict>
 					<key>name</key>
-					<string>meta.brace.square.js</string>
+					<string>meta.brace.square.rpl</string>
 				</dict>
 			</dict>
 			<key>patterns</key>
@@ -135,12 +135,85 @@
 				</dict>
 			</dict>
 			<key>match</key>
-			<string>\s*(?=\S)(?!(\d+|--|[$@\[#,"“”„‟'‘’‚‛『』「」«»‹›`–—―]|\w+\d*\s*[({\[]))([^:#(){}\[\]\r\n]+)\s*(?=[:#)}\]]|$)</string>
+			<string>\s*(?=\S)(?!\d+|--|[$@\[#,"“”„‟'‘’‚‛『』「」«»‹›`–—―]|\w+\d*\s*[({\[])([^:,#(){}\[\]\r\n]+)</string>
 		</dict>
-		<key>multiline-string</key>
+		<key>math-body</key>
 		<dict>
 			<key>patterns</key>
 			<array>
+				<dict>
+					<key>name</key>
+					<string>keyword.operator.rpl</string>
+					<key>match</key>
+					<string>\*\*|&lt;&lt;|&gt;&gt;|[+\-*/&amp;|^]|%(?=\s*[+\-(&lt;\d])</string>
+				</dict>
+				<dict>
+					<key>name</key>
+					<string>constant.numeric.rpl</string>
+					<key>match</key>
+					<string>(\$\$|0x)[\da-fA-F]+|\d+|0o?[0-7]+|(0b|%)[01]+</string>
+				</dict>
+				<dict>
+					<key>name</key>
+					<string>meta.brace.round.rpl</string>
+					<key>match</key>
+					<string>\(|\)</string>
+				</dict>
+				<dict>
+					<key>name</key>
+					<string>meta.generic.rpl</string>
+					<key>match</key>
+					<string>(&lt;)|(&gt;)</string>
+					<key>captures</key>
+					<dict>
+						<key>1</key>
+						<dict>
+							<key>name</key>
+							<string>punctuation.definition.generic.begin.rpl</string>
+						</dict>
+						<key>2</key>
+						<dict>
+							<key>name</key>
+							<string>punctuation.definition.generic.end.rpl</string>
+						</dict>
+					</dict>
+				</dict>
+			</array>
+		</dict>
+		<key>math</key>
+		<dict>
+			<key>name</key>
+			<string>meta.math.block.rpl</string>
+			<key>begin</key>
+			<string>\s*(--|[–—―])?\+</string>
+			<key>end</key>
+			<string>$|(?=#)</string>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>include</key>
+					<string>#math-body</string>
+				</dict>
+			</array>
+		</dict>
+		<key>multiline-string</key>
+		<dict>
+			<key>name</key>
+			<string>meta.multiline.group.rpl</string>
+			<key>begin</key>
+			<string>(?=@?`)</string>
+			<key>end</key>
+			<string>(?=^\s*[^\s`]|[^\s`#])</string>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>include</key>
+					<string>#comment</string>
+				</dict>
+				<dict>
+					<key>match</key>
+					<string>\s+</string>
+				</dict>
 				<dict>
 					<key>begin</key>
 					<string>(@)(`)</string>
@@ -235,7 +308,7 @@
 				</dict>
 			</dict>
 			<key>match</key>
-			<string>(\d+|\$[\da-fA-F])([~+\-*±]|+-)(\d+|\$[\da-fA-F])</string>
+			<string>(\d+|\$[\da-fA-F])(\+-|[+*~\-±])(\d+|\$[\da-fA-F])</string>
 		</dict>
 		<key>number</key>
 		<dict>
@@ -248,7 +321,7 @@
 				</dict>
 			</dict>
 			<key>match</key>
-			<string>(\d+|\$[\da-fA-F])</string>
+			<string>(\$[\da-fA-F]+|\d+)(?=\s*([:#,\]})]|$))</string>
 		</dict>
 		<key>reference</key>
 		<dict>
@@ -1557,7 +1630,7 @@
 					<key>comment</key>
 					<string>this forcibly requires the colon to be on the same line as the keyname</string>
 					<key>end</key>
-					<string>(,)|$</string>
+					<string>(,)|$|^</string>
 					<key>endCaptures</key>
 					<dict>
 						<key>1</key>
@@ -1583,15 +1656,58 @@
 							<string>support.variable.rpl</string>
 						</dict>
 						<dict>
+							<key>name</key>
+							<string>meta.keyvalue</string>
 							<key>begin</key>
 							<string>:</string>
 							<key>end</key>
-							<string>(?=,|$)</string>
+							<string>(?=,|$|^)</string>
 							<key>patterns</key>
 							<array>
 								<dict>
 									<key>include</key>
 									<string>#comment</string>
+								</dict>
+								<dict>
+									<key>begin</key>
+									<string>(math)\s*(\()</string>
+									<key>end</key>
+									<string>\)</string>
+									<key>beginCaptures</key>
+									<dict>
+										<key>1</key>
+										<dict>
+											<key>name</key>
+											<string>storage.type.rpl</string>
+										</dict>
+										<key>2</key>
+										<dict>
+											<key>name</key>
+											<string>meta.brace.round.rpl</string>
+										</dict>
+									</dict>
+									<key>endCaptures</key>
+									<dict>
+										<key>0</key>
+										<dict>
+											<key>name</key>
+											<string>meta.brace.round.rpl</string>
+										</dict>
+									</dict>
+									<key>name</key>
+									<string>storage.type.rpl</string>
+									<key>patterns</key>
+									<array>
+										<!-- TODO: Highlight in string -->
+										<dict>
+											<key>include</key>
+											<string>#string</string>
+										</dict>
+										<dict>
+											<key>include</key>
+											<string>#math-body</string>
+										</dict>
+									</array>
 								</dict>
 								<dict>
 									<key>match</key>
@@ -1667,7 +1783,7 @@
 				</dict>
 				<dict>
 					<key>include</key>
-					<string>#multiline-string</string>
+					<string>#math</string>
 				</dict>
 				<dict>
 					<key>include</key>
@@ -1688,6 +1804,10 @@
 				<dict>
 					<key>include</key>
 					<string>#literal</string>
+				</dict>
+				<dict>
+					<key>include</key>
+					<string>#multiline-string</string>
 				</dict>
 				<dict>
 					<key>begin</key>
