@@ -18,7 +18,7 @@
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-import re, codecs, os
+import re, codecs, os, io
 from sys import stderr, stdout
 from textwrap import dedent
 
@@ -251,22 +251,24 @@ def genericHelp(context, moreInfo, desc, lib, defs):
 	#endif
 #enddef
 
-class OverSeek(file):
+class OverSeek(io.TextIOWrapper):
 	def seek(self, offset, whence=0, byte="\x00"):
 		if whence == 0:
-			file.seek(self, offset, 0)
+			io.TextIOWrapper.seek(self, offset, 0)
 			if offset > 0:
 				diff = self.tell() - offset
 				if diff > 0: self.write(byte * diff)
 			#endif
 		elif whence == 1:
 			start = self.tell()
-			file.seek(self, offset, 1)
+			io.TextIOWrapper.seek(self, offset, 1)
 			if offset > 0:
 				diff = self.tell() - start - offset
 				if diff > 0: self.write(byte * diff)
 			#endif
-		elif whence == 2: file.seek(self, offset, 2)
+		elif whence == 2:
+			io.TextIOWrapper.seek(self, offset, 2)
+		#endif
 	#enddef
 #endclass
 

@@ -18,7 +18,7 @@
 # along with Imperial Exchange.  If not, see <http://www.gnu.org/licenses/>.
 #
 import os, re, copy, codecs
-import helper
+from . import helper
 from math import ceil
 from zlib import crc32
 from collections import OrderedDict as odict

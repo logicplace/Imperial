@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #-*- coding:utf-8 -*-
 
 #
@@ -27,40 +27,41 @@ from time import time
 # Imports specific to the GUI.
 import difflib, glob, webbrowser
 from subprocess import Popen
+
 try:
-	import ttk, tkFileDialog, tkFont
-	import Tkinter as Tk
-except ImportError:
-	try: import tkinter as Tk
-	except ImportError: Tk = None
-#endtry
+	import tkinter as Tk
+	from tkinter import font as tkFont, filedialog as tkFileDialog
+except ImportError: Tk = None
 
 # Configuration file stuff...
-from ConfigParser import ConfigParser, NoSectionError, NoOptionError
+from configparser import ConfigParser, NoSectionError, NoOptionError
 try: from xdg.BaseDirectory import xdg_config_home
 except ImportError: xdg_config_home = None
-try:
-	from win32com.shell.shell import SHGetFolderPath
-	from win32com.shell.shellcon import CSIDL_APPDATA
-except ImportError: SHGetFolderPath = None
+import appdirs
+config_filenames = {
+	"linux": ".imperial",
+	"darwin": ".imperial",
+	# Something else..? (Bonus points: it even fits 8.3)
+	"default": "imperial" + os.extsep + "ini",
+}
 
 debug = False
 TITLE = "Imperial Exchange"
-VERSION = "0.9d Aug 15, 2013"
+VERSION = "0.0.9d Aug 15, 2013"
 
 def main():
 	global debug
 	parser = argparse.ArgumentParser(
-		description  = TITLE + " by Wa (logicplace.com)\n"
+		description = TITLE + " by Sapphire Becker (logicplace.com)\n"
 		"Easily replace resources in ROMs (or other binary formats) by use of"
 		" a standard descriptor format.",
 
-		usage        = "Usage: %(prog)s [options] {-x | -i | -m} ROM RPL [Struct names...]\n"
+		usage = "Usage: %(prog)s [options] {-x | -i | -m} ROM RPL [Struct names...]\n"
 		"       %(prog)s -h [RPL | lib]\n"
 		"       %(prog)s -t [RPL] [-l libs] [-s Struct types...]",
 
-		formatter_class=argparse.RawDescriptionHelpFormatter,
-		add_help     = False,
+		formatter_class = argparse.RawDescriptionHelpFormatter,
+		add_help = False,
 	)
 	action = parser.add_mutually_exclusive_group()
 	action.add_argument("--help", "-h", "-?", #"/?", "/h",
@@ -304,7 +305,7 @@ class GUI(object):
 		if rplfile and not romfile:
 			if not self.rpl.children:
 				try: self.rpl.parse(rplfile)
-				except (rpl.RPLError, helper.RPLInternal) as err: rplnote = unicode(err)
+				except (rpl.RPLError, helper.RPLInternal) as err: rplnote = str(err)
 			#endif
 
 			# Collect search area.
@@ -363,7 +364,7 @@ class GUI(object):
 			# It's probably nearby... Parse and look for directory structure.
 			if not self.rpl.children:
 				try: self.rpl.parse(rplfile)
-				except (rpl.RPLError, helper.RPLInternal) as err: rplnote = unicode(err)
+				except (rpl.RPLError, helper.RPLInternal) as err: rplnote = str(err)
 			#endif
 			if self.rpl.children:
 				files = []
@@ -555,19 +556,21 @@ class GUI(object):
 		# First try a direct environment variable.
 		try: fn = os.environ["IMPERIAL_CONFIG"]
 		except KeyError:
-			# Next, are we on Windows?
-			if SHGetFolderPath: fn = SHGetFolderPath(0, CSIDL_APPDATA, None, 0) + "\\imperial.ini"
-			# Or Linux? (God I hope this works on Mac, too!)
-			elif xdg_config_home: fn = os.path.join(xdg_config_home, ".imperial")
-			# Something else..? (Bonus points: it even fits 8.3)
-			else: fn = os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), "imperial" + os.extsep + "ini")
+			fn = None
+			for platform, config in config_filenames.items():
+				if sys.platform.startswith(platform):
+					fn = os.path.join(appdirs.user_config_dir(), config)
+					break
+				#endif
+			#endfor
+			if fn is None: fn = config_filenames["default"]
 		#endtry
 		if key is None: return fn
 		else:
 			config = ConfigParser()
 			config.optionxform = str
 			config.read(fn)
-			if type(key) in [str, unicode]:
+			if type(key) is str:
 				try: ret = config.get("Imperial", key)
 				except (NoSectionError, NoOptionError): ret = default
 			else:
@@ -593,9 +596,9 @@ class GUI(object):
 		except (NoSectionError, NoOptionError): new = settings
 		else: new.update(settings)
 		buff = u"[Imperial]\n"
-		for x in sorted(list(new.iteritems())): buff += u"=".join(map(unicode, x)) + u"\n"
+		for x in sorted(list(new.iteritems())): buff += u"=".join(map(str, x)) + u"\n"
 		try: helper.writeTo(fn, buff)
-		except helper.RPLInternal as err: return unicode(err)
+		except helper.RPLInternal as err: return str(err)
 		else: return u""
 	#enddef
 
@@ -606,7 +609,7 @@ class GUI(object):
 		dlg.title("Defines")
 		dlg.grid_columnconfigure(0, weight=1)
 		kvl = KVList(dlg, columns=("Key", "Value"))
-		for k, v in self.defs.iteritems(): kvl.insert(Tk.END, k, unicode(v))
+		for k, v in self.defs.iteritems(): kvl.insert(Tk.END, k, str(v))
 		kvl.grid(row=0, sticky="news")
 		dlg.grid_rowconfigure(0, weight=1)
 
@@ -728,7 +731,7 @@ class GUI(object):
 		start = time()
 		try: self.rpl.importData(romfile, self.dirsec.get(), self.what, self.args.blank)
 		except (rpl.RPLError, helper.RPLInternal) as err:
-			self.ielbl.config(text=unicode(err))
+			self.ielbl.config(text=str(err))
 		else:
 			self.ielbl.config(text="Finished %s. Time taken: %.3fs" % (
 				"blank import" if self.args.blank else "importing",
@@ -744,7 +747,7 @@ class GUI(object):
 		start = time()
 		try: self.rpl.exportData(romfile, self.dirsec.get(), self.what, self.args.blank)
 		except (rpl.RPLError, helper.RPLInternal) as err:
-			self.ielbl.config(text=unicode(err))
+			self.ielbl.config(text=str(err))
 		else:
 			self.ielbl.config(text="Finished %s. Time taken: %.3fs" % (
 				"blank export" if self.args.blank else "exporting",
@@ -767,7 +770,7 @@ class GUI(object):
 		start = time()
 		try: self.rpl.importData(romfile, self.dirsec.get(), self.what, self.args.blank)
 		except (rpl.RPLError, helper.RPLInternal) as err:
-			self.ielbl.config(text=unicode(err))
+			self.ielbl.config(text=str(err))
 		else:
 			self.ielbl.config(text="Finished %s. Time taken: %.3fs" % (
 				"test build" if self.args.blank else "building",
@@ -781,7 +784,7 @@ class GUI(object):
 		start = time()
 		try: self.rpl.run(self.dirsec.get(), self.what)
 		except (rpl.RPLError, helper.RPLInternal) as err:
-			self.ielbl.config(text=unicode(err))
+			self.ielbl.config(text=str(err))
 		else:
 			self.ielbl.config(text="Finished executing. Time taken: %.3fs" % (time() - start))
 		#endtry
@@ -806,7 +809,7 @@ class GUI(object):
 		self.rpl.reset()
 		try: self.rpl.parse(self.rplsec.get())
 		except (rpl.RPLError, helper.RPLInternal) as err:
-			self.rplsec.note(unicode(err))
+			self.rplsec.note(str(err))
 		else:
 			self.rplsec.note("")
 			for x in self.defs.iteritems(): self.rpl.addDef(*x)
@@ -820,7 +823,7 @@ class StringVar(Tk.StringVar):
 		self.set(text)
 	#enddef
 
-	def __unicode__(self): return unicode(self.get())
+	def __str__(self): return str(self.get())
 #endclass
 
 class Note(Tk.Label):
@@ -872,12 +875,12 @@ class Section(Tk.LabelFrame):
 
 	def open(self):
 		if self.isdir:
-			filename = tkFileDialog.askdirectory(
+			filename = Tk.filedialog.askdirectory(
 				initialdir = self.entry.get(),
 				title = self.title
 			)
 		else:
-			filename = tkFileDialog.askopenfilename(
+			filename = Tk.filedialog.askopenfilename(
 				filetypes = self.filetypes,
 				initialdir = os.path.dirname(self.entry.get()),
 				title = self.title
