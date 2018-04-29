@@ -36,6 +36,6 @@ When retrieved, it will return the path as defined but using your system's path 
 * ext: The file extension as a string. Reflects //data//. If there is no extension, this should be an empty string. Default is an empty string.
 * open: Boolean; whether or not there was an opening slash.
 
-Possible extensions: URIs with protocols (protocol://...), network shares (\\share\...)
+Possible extensions: URIs with protocols (protocol:~//...), network shares (~\\share\...)
 
 <<import foot.html>>
