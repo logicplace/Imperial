@@ -284,6 +284,6 @@ At least if a key is able to take a list (and they should, if it makes sense), a
 
 Syntax should be easy to remember, practical, familiar, etc. Literals are sort of the exception to this rule since they have such restrictions but if one doesn't abuse them for general strings it should generally be okay and syntax highlighters can deal with alerting users to issues. Custom syntaxes (parsed out of literals or strings) should generally be discouraged, especially if RPL is up to the task, at least not exclusively. Similarly, lists that are used like arguments for a declaration should never have more than two arguments whose meaning relies on position. Both of these things can beget faulty recollection.
 
-Additionally, RPL has the principle of assuming that an author means what they write (syntax errors aside). Any automation and value resolution should restrict itself to working within what the author has explicitly written, without changing those values. For instance, if a string does not have data but an author as explicitly given it a length, all entries must fit within that length.
+Additionally, RPL has the principle of assuming that an author means what they write (syntax errors aside). Any automation and value resolution should restrict itself to working within what the author has explicitly written, without changing those values. For instance, if a string does not have data but an author has explicitly given it a length, all entries must fit within that length.
 
 <<import foot.html>>
