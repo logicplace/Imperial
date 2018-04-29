@@ -6,13 +6,19 @@
 == Lists
 All list types must implement the following keys:
 * From [[Specification/Common Keys#Value Types|value]] type: data
-* length: (RO) The length of the list. Reflects //data//
+* length: The length of the list. Reflects //data//.
 
 Syntactic types:
 * //list//: This is the basic list type.
 * //range//: This is an interpreted list type, look at the [[Specification/RPL Syntax#Ranges|range syntax]] section for more information.
 
 === //list//
+Regular lists must also implement these keys:
+* type: The type specification of the list. The default is the special value **any**, indicating any type is appropriate.
+** If the type is serializable (that is, not **any**), the list is also serializable.
+*** If in this case, if the length (or its reflections) is not explicitely defined, it is assumed to act like **expand** from [[Specification/Standard Structures/data#data|data's]] x*'s //size//. That is, it will take the offset of the following structure and attempt to collect everything within the space. If it does not fit evenly, it will error.
+*** In this case, it may also accept any [[Specification/Common Keys#Serializable Types|serializable keys]]. However, //size// must reflect //type// and //length// such that //size// = //type//.//size// * //length//.
+
 In all possible stringified forms, we are presenting a list of the string forms of its contents, separated by a separator, and surrounded by square brackets. Pretty printing options might include:
 * Same-line opening vs. own-line opening
 * Separator options: / *, *|\n/
@@ -23,21 +29,52 @@ In all possible stringified forms, we are presenting a list of the string forms 
 * Same-line ending vs. own-line ending
 
 === //range//
-Represents a predictable list of //number//s or //hexnum//s. If one side of a range is a //hexnum// and the other is not, //number// should be preferred except for the one //hexnum// element.
+Represents a predictable list of //number//s or //hexnum//s. It's fine if one side is a //number// and one is a //hexnum//.
 
-//range// must implement the following additional keys:
+//range// is something of a supertype that represents four different types of ranges. If one key set is being used, others should not be allowed. All types implement the following keys:
 * start: The start value of the range. This does not imply the smallest value of a range. Required. Reflects //data//.
-* end: The end (last) value of the range. This does not imply the largest value of a range. Required. Reflects //data//.
-* end1: The end (last) value of the range + 1 (if increasing range) or - 1 (if decreasing range). Reflects //end//
-* difference: (RO) The positive difference between the start and end values. Reflects //start// and //end//
-* difference1: (RO) The positive difference between the start and end1 values. Reflects //start// and //end1//
+* left, multiplicand: Aliases of //start//.
 
+==== Basic range
+* Prefers //start// over the other aliases.
+** May accept **{{{*}}}** for negative infinity. This makes retrieving the full //data// (including //length// and appropriate stats) cause an error.
+* end: The end (last) value of the range. This does not imply the largest value of a range. Required. Reflects onto //data//.
+** You can use this to define an inclusive range.
+** May accept **{{{*}}}** for positive infinity. This makes retrieving the full //data// cause an error.
+* end1: The end (last) value of the range + 1 (if increasing range) or - 1 (if decreasing range). Reflects //end//.
+** You can use this to define an exclusive range.
+** If //end// is **{{{*}}}**, this must also be **{{{*}}}**, and vise-versa.
+* Read-only statistics:
+** difference: The positive difference between the start and end values. Reflects //start// and //end//.
+** difference1: The positive difference between the start and end1 values. Reflects //start// and //end1//.
+
+==== Incremental range
+* Prefers //start// over the other aliases.
+* add, plus: Generates a list from from //start// to //start// + this, exclusive. Reflects onto //data//.
+* end: The end (last) value of the range. Effectively //start// + //add// - 1. Reflects //data//.
+* end1: The end (last) value of the range + 1. Effectively //start// + //add//. Reflects //data//.
+* Implements the basic range's statistics.
+
+==== Decremental range
+* Prefers //start// over the other aliases.
+* sub, subtract, minus: Generates a list from from //start// to //start// - this, exclusive. Reflects onto //data//.
+* end: The end (last) value of the range. Effectively //start// - //sub// + 1. Reflects //data//.
+* end1: The end (last) value of the range - 1. Effectively //start// - //sub//. Reflects //data//.
+* Implements the basic range's statistics.
+
+==== Repeated elements
+* Prefers //left// over the other aliases. (//multiplicand// is difficult to remember.)
+** //left// need not resolve to a number.
+* times, multiplier: How many times //left// is repeated. Reflects onto //data//.
+* It's welcome to implement //end//, //end1//, and the statistics keys for number formulations, but they have little meaning.
+
+==== //range// examples
 Examples for the different types of ranges:
 {{{
 1~5 = { data: [1, 2, 3, 4, 5], length: 5, start: 1, end: 5, end1: 6, difference: 4, difference1: 5 }
-2*3 = { data: [2, 2, 2], length: 3, start: 2, end: 2, end1: 3, difference: 0, difference1: 1 }
-4+3 = { data: [4, 5, 6], length: 3, start: 4, end: 6, end1: 7, difference: 2, difference1: 3 }
-4+-3 = { data: [4, 3, 2], length: 3, start: 4, end: 2, end1: 1, difference: 2, difference1: 3 }
+2*3 = { data: [2, 2, 2], length: 3, left: 2, times: 3 }
+4+3 = { data: [4, 5, 6], length: 3, start: 4, add: 3, end: 6, end1: 7, difference: 2, difference1: 3 }
+4+-3 = { data: [4, 3, 2], length: 3, start: 4, sub: 3, end: 2, end1: 1, difference: 2, difference1: 3 }
 }}}
 
 <<import foot.html>>
