@@ -23,7 +23,7 @@ The //data// type is a serializable struct meant to simply represent packed bina
 *** **# end**: The address to stop reading at.
 **** If this //is not// combined with a size unit and the type given //does not// have a fixed size this will read until the given address and take that as the size.
 **** If this //is not// combined with a size unit and the type given //does// have a fixed size OR if this //is// combined with a size unit and the type given //does not// have a fixed size this will pull in elements until it runs out of space. If it does not exactly reach the end, a warning should be generated.
-*** **expand** or **~* **: Works like **# end** but uses the following entity's offset as the end point. If there is no following entity, it should expand to the end of the context. If the following entity does not have an offset (and cannot obtain one), an error should be generated.
+*** **expand** or <strong>*</strong>: Works like **# end** but uses the following entity's offset as the end point. If there is no following entity, it should expand to the end of the context. If the following entity does not have an offset (and cannot obtain one), an error should be generated.
 ** Offset: Defines when this entity begins. Data that is skipped over is ignored when serializing.
 ** endian, sign, padding, and align can specify these specifically for this data point. Irrelevant entries (such as sign for a //string//) should be ignored or possibly generate a low priority warning. If these are not defined it will use what's defined in the struct.
 
