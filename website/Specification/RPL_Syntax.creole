@@ -26,7 +26,7 @@ The syntax is:
 There is currently no multiline version planned, though there may be in the future. Comments should have whitespace between the # and the comment text.
 
 == Root
-The root is not a syntactical element but rather represents the file.
+The root is not a syntactical element but rather represents the data source, be it a binary file or a folder.
 
 It can contain only structs, and as such is of the form:
 {{{
@@ -54,10 +54,12 @@ Keys represent a single key-value pair.
 
 The basic form is:
 {{{
-key WS* ":" WS* value ("," | EOL)
+["{"] key WS* ":" WS* value ("," | EOL) ["}"]
 }}}
 
 //key// has three syntactically valid forms, depending on context. The most common form is simple form. Otherwise it may also be a quoted string or a number (or hexnum) if the struct type allows these. These forms may be referred to as strkeys and numkeys. Each of these forms are considered distinct even if they seem to contain the same value (of course strkeys that only use different quote forms are considered the same keyname).
+
+Iff a { is used, a } must also be used. This form obscures the key from substructs who would otherwise bubble up to it.
 
 //value// has the form:
 {{{
@@ -120,7 +122,7 @@ Special characters can be any of the following:
 * r = line feed, $(a)
 * t = tab, $(9)
 
-//LQUOTE// and //RQUOTE// are a pair defined by essentially any [https://en.wikipedia.org/wiki/Quotation_mark#Summary_table_for_all_languages valid quotation form]. //DASHQUOTE// is a left-marker-only style of quoting that can be found in the same list.
+//LQUOTE// and //RQUOTE// are a pair defined by essentially any [[https://en.wikipedia.org/wiki/Quotation_mark#Summary_table_for_all_languages|valid quotation form]]. //DASHQUOTE// is a left-marker-only style of quoting that can be found in the same list.
 
 A summary of quote pairs are as follows:
 ;Double quote forms (English, Dutch, Afrikaans, German, etc) Lower closing (Hebrew)
@@ -201,7 +203,7 @@ Count down from start, length amount (exclusive list):
 Example: {{{ 6+-3 => [6, 5, 4] }}}
 
 == References
-Refer to a struct or value somewhere. They all do the same thing, but there are multiple syntaxes. The first element in a reference is always a struct name and the remainder are key names.
+Refer to a struct or value somewhere. They all do the same thing, but there are multiple syntaxes. The first element in a reference is always a struct name and the remainder are key names or substruct indexes.
 
 The following WS do not include newlines.
 
@@ -211,14 +213,19 @@ For the following syntax, we define //INDEX// as:
 }}}
 When using a reference as an index here, it is assumed to be a number. When indexing at all, the struct or value is assumed to be a list.
 
+To reference a substruct by [structural] name, we define //SUB// as:
+{{{
+"{" WS* struct WS* "}"
+}}}
+
 We define //STRUCT// as:
 {{{
-struct WS* [INDEX]
+struct WS* [INDEX | SUB]
 }}}
 
 And similarly //KEY// as:
 {{{
-key WS* [INDEX] | [INDEX] WS* key
+key WS* [INDEX | SUB] | [INDEX | SUB] WS* key
 }}}
 
 Finally, the reference syntax:
@@ -229,6 +236,8 @@ Finally, the reference syntax:
 If LQ is used RQ must be used and vise versa. These can be either ( and ) or [ and ] respectively. This is particularly useful in [[#Refstrings|refstrings]].
 
 Note that there is no way to reference a key that uses a quoted string or a number for its name, even if that name is a valid literal. However, the concept of using quotes after a traversal operator should be considered reserved.
+
+It is allowable to support the form {{{ @{Substruct}.key }}} in which case it should search @this then @parent then @gparent etc. until reaching the root.
 
 == Concat
 Concatenate two (or more) values into a list. Valid values are mentioned in above contexts where concat itself is valid. There are two concatenation operators: concat and cons.
