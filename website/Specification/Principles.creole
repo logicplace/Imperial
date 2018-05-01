@@ -346,7 +346,9 @@ data Header {
 graphic TestImage {
     name: @Header.xnames[0]
     base: @Header.xfiles[0]
+    end: @Header.xfiles[1]
 
+    width: 20
     read: LRUD
     pixel: 0bRGB
 }
@@ -367,32 +369,35 @@ string filename { size: 12 }
 
 # Structure #
 string Magic {
-    base: $000000       # source: defaulted/implied
-    name: Magic         # source: implied by struct name
-    tags: []            # source: defaulted
+    base: $000000         # source: defaulted/implied
+    name: Magic           # source: implied by struct name
+    tags: []              # source: defaulted
 
-    data: "HELLO"       # source: rigid
-    length: 5           # source: implied by data
-    size: 5             # source: implied by data + encoding
-    encoding: unencoded # source: defaulted
+    data: "HELLO"         # source: rigid
+    length: 5             # source: implied by data
+    size: 5               # source: implied by data + encoding
+    encoding: unencoded   # source: defaulted
     # note that this is assuming unicode 0000~00FF
     # or whatever python assumes for its bytes repr
 
-    padding: $00        # source: defaulted
-    align: left         # source: defaulted
-    padside: right      # source: defaulted
+    padding: $00          # source: defaulted
+    align: left           # source: defaulted
+    padside: right        # source: defaulted
+
+    end: math(@this.base  # source: calulated
+        + @this.size)
 }
 
 data Header {
-    base: @Magic.end    # source: implied by linear ordering
-    name: Header        # source: implied by struct name
-    tags: []            # source: defaulted
+    base: @Magic.end      # source: implied by linear ordering
+    name: Header          # source: implied by struct name
+    tags: []              # source: defaulted
 
-    sign: unsigned      # source: defaulted
-    endian: little      # source: defaulted
-    padding: $00        # source: defaulted
-    align: left         # source: defaulted
-    padside: right      # source: defaulted
+    sign: unsigned        # source: defaulted
+    endian: little        # source: defaulted
+    padding: $00          # source: defaulted
+    align: left           # source: defaulted
+    padside: right        # source: defaulted
 
     # comment is undefined by default
 
@@ -406,6 +411,9 @@ data Header {
         size: 4                     # source: rigid
         sign: @parent.sign          # source: "inherited"
         endiant: @parent.endiant    # source: "inherited"
+
+        end: math(@this.base        # source: calculated
+            + @this.size)
     }
 
     xoffset1: number {              # source: rigid
@@ -414,6 +422,9 @@ data Header {
         size: 4                     # source: rigid
         sign: @parent.sign          # source: "inherited"
         endian: @parent.endian      # source: "inherited"
+
+        end: math(@this.base        # source: calculated
+            + @this.size)
     }
 
     xoffset2: number {              # source: rigid
@@ -422,6 +433,9 @@ data Header {
         size: 4                     # source: rigid
         sign: @parent.sign          # source: "inherited"
         endian: @parent.endian      # source: "inherited"
+
+        end: math(@this.base        # source: calculated
+            + @this.size)
     }
 
     xnames: list {                  # source: rigid
@@ -439,6 +453,9 @@ data Header {
         }
 
         length: @this.xnumfiles     # source: rigid
+
+        end: math(@this.base        # source: calculated
+            + @this.type.size * @this.length)
     }
 
     xfiles: list {                  # source: rigid
@@ -452,7 +469,12 @@ data Header {
         }
 
         length: @this.xnumfiles     # source: rigid
+
+        end: math(@this.base        # source: calculated
+            + @this.type.size * @this.length)
     }
+
+    end: @this.xfiles.end           # source: implied
 }
 
 graphic TestImage {
@@ -460,8 +482,26 @@ graphic TestImage {
     name: @Header.xnames[0] # source: rigid
     tags: []                # source: defaulted
 
+    size: math(@this.end    # source: calculated
+        - @this.base)
+    width: 20
+    height: math(@this.size # source: calculated
+        / (@this.width * @this.pixel.size))
+    dimensions: [
+        @this.width,        # source: implied
+        @this.height        # source: defaulted
+    ]
+
+    x: 0                    # source: defaulted
+    y: 0                    # source: defaulted
+    offset: [
+        @this.x,            # source: defaulted
+        @this.y             # source: defaulted
+    ]
+
     read: readdir(LRUD)     # source: rigid
     pixel: pixel {          # source: rigid
+        size: 3 bits        # source: calculated from format
         format: 0bRGB       # source: rigid
         order: forward      # source: defaulted
         chunk: forward      # source: defaulted
@@ -473,7 +513,26 @@ graphic TestImage {
     palette: []             # source: defaulted
     # data, rows, and other channels are not currently defined,
     # because the data hasn't been imported
+
+    rotate: 0               # source: defaulted
+    mirror: false           # source: defaulted
+    flip: false             # source: defaulted
+    blank: transparent      # source: defaulted
+
+    end: @Header.xfiles[1]  # source: rigid
 }
 >>
+
+The references link the structure in the following manner:
+* **xnumfiles.base** = Header.base = Magic.end = Magic.base + Magic.size
+* __xoffset1.base__ = xnumfiles.end = **xnumfiles.base** + xnumfiles.size
+* xoffset2.base = xoffset1.end = __xoffset1.base__ + xoffset1.size
+* xoffset1.data = xnames.base = xnames.end - xnames.type.size * xnames.length
+* xoffset2.data = xfiles.base = **xfiles.end** - xfiles.type.size * xfiles.length
+* **xfiles.end** = Header.end
+* __TestImage.base__ = Header.xfiles[0].data
+* TestImage.size = TestImage.end - __TestImage.base__
+
+If anything changes, such as by the application altering values, all of these established formulae must still hold true. If something occurs where they cannot hold true, it must raise some sort of error. For instance, if one attempts to set a value to TestImage.size that is not equal to the calculated value, an error must be raised, because both base and end are rigidly set.
 
 <<import foot.html>>
