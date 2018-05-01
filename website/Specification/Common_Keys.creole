@@ -4,29 +4,65 @@
 <<TOC>>
 
 = Common Keys
-== Value Types
-All value types must declare a //data// key which stores its data. This is essentially a circular reference but allows one to set the basic data for a value type when defining it in a struct form.
+== Exportable Types
+All structs, besides statics, must define the following keys:
+* name: Described in [[Principles#Naming|the Naming section of Principles]].
+* tags: A list of keywords (or tags) the describe this struct. They may be keyed off of for any purpose in the system, such as in selecting only certain tags to modify or export.
+* exports: A specialized //exports// type. May be declared as a substruct (which is still able to be referred to from the //exports// key, but is not a target for bubbling). Contains all information pertraining to how this struct's abstract, managed data would be represented on, for instance, a file system. It could also be about a database if that's the target or whatever for whatever target. The data contained here should only be relevant to this one structure, unless this is the RPL structure, in which case it should only be relevant generally.
+* source: (RO). A specialized //source// type. May be declared as a substruct in the same way as exports. This describes information about where the data came from, such as which .rpl file and where in the file it was declared, or which binary file and what position in it it came from.
+** Generally, these values should not be used by the author for anything except user edification.
 
-Most value types are also serializable types but when declared syntactically or as a keystruct it is considered managed by its owner and will not be transported by itself. However //data// being statically set (even as a reference) while being unmanaged is currently undefined behavior.
+=== //exports//
+For other than the RPL struct type:
+* format: File mimetype, standard file extension, or [mimetype, extension]
+** If only the mimetype is not given, it can be inferred from the extension, possibly in conjunction with the struct type.
+** If only the extension is not given, it can select the default (most common) for that mimetype.
+** If neither are provided, it must use the default defined by the struct type.
+* access times ?
+* file permissions ?
+* file attributes ?
+* key to column maps for db tables?
+* another internally described type that it can serialize/stringify/tofile to rather than the exportation of abstract data ?
+
+=== //source//
+All keys are read-only.
+* type: A one-word description of the source, like **rigid**
+* file: .rpl file the definition came from, if any.
+* line or line1: 1-based line number this was defined on in file.
+* line0: 0-based version of the above.
+* char or char1: 1-based column number this was defined on in the file, counting tabs as 1.
+* char0: 0-based version of the above.
+* column or column1: calculate the 1-based column number from a known tab width (user setting, in RPL, vim hint, this is an IDE, etc)
+* column0: 0-based version of the above.
+** Consider that the tab-width may change between instantiation and reporting. One suggestion is to store a list in this format: [number of tabs, number of characters, ...] alternating from there. Thus, to calculate the column number, you can multiply the first number by the tab width then add the second number. If there's a third number: subtract one from it, multiply that by the tab width, and add it to the sum; then and add the second number % the tab width. All entries must be numbers >= 1.
+* from: A one-word description of where this was from, if it was sourced from represented data.
+* source: Contains the information relevant to the the origin mentioned by //from//, above.
+
+== Value Types
+All value types must declare a //data// key which stores its data. This is essentially a circular reference but allows one to set the basic data for a value type when defining it in a struct form. Whether the data is defined through a basic instantiation or not matters and how keystructs deal with the type can be complex. For mor information, see the [[Proxying]] section.
 
 == Serializable Types
 All serializable types must define the following keys:
-* base: See [[Specification/Principles/#Binary order|Binary Order]], [[Specification/Principles/#Text order|Text Order]], and [[Specification/Principles/#Text and Bin|Bin and Text]] sections for more information.
+* base: See [[Specification/Principles/#Binary order|Binary Order]] and [[Specification/Principles/#Text and Bin|Text and Bin]] sections for more information.
 * size: Packed size of the struct. Generally determined by the struct itself and will not be set manually. Only used in binary contexts.
 * end: The absolute address following the end of this struct. Only used in binary contexts. It has the following behavior with regard to reflection:
 ** If //end// is set explicitly then it must: generate an error if it comes before //base//; not reflect //size//
 ** Otherwise it must reflect //base// and //size// such that //end// = //base// + //size//
 *** This does imply that one may declare //end// and //size// instead of //base//.
-* file: Filename. See Hierarchy, //file// key section for more details. Default: struct name
-* ext: File extension to use if the filename does not provide one. Default: defined by struct's type
-* transport: Whether or not to import and/or export this struct. Note that it may be imported or unserialized to a suspended state as needed but must not export or serialize it if it's not supposed to. Value may be (case insensitive):
-** **import** or **import only**: Only import/serialize, do not unserialize/export.
-** **export** or **export only**: Only unserialize/export, do not import/serialize.
-** Boolean true or **both**: Import and export (default).
-** Boolean false or **neither**: Neither import nor export.
+
+== Stringifiable Types
+* base: See [[Specification/Principles/#Text order|Text Order]] and [[Specification/Principles/#Text and Bin|Text and Bin]] sections for more information.
+* limit: Limit the number of entities this struct selects from its context. May accept a list of [min, max] or a single number which represents both the min and max (and them being equivalent). //max// may be the speical value **any** which means that there is no upper limit. If only one entity can be selected (limit: 1), this struct can stand on its own, but otherwise it will be cloned, once per selection, even if there is only one. Default: [1, any]
+** This could also accept a range as min~max and only use those values, rather than ever generating the whole list.
+* pretty: A specialized //pretty// type. Works in the same way as //exports// and //source//. This may have keys which refer to both style choices the type's stringification makes and style choices the context makes regarding this struct. As an example, the quotation form used is determined by the context, but since it's related to this struct it can be specified here.
+** Generally, these values should not be used by the author for anything except user edification.
+
+== Fileable Types
+* base: Some sort of means of selecting file(s) out of its context. When representing hierarchy, this should accept both / and \ separators. If they're able to be relative to the parent, it should work like when defining the //name// key, in terms of the starting slash character. If this needs to specify an extension, it should accept the . separator for it.
+* limit: If a base is capable of selecting multiple files, this can limit the number of results. It works the same as Stringifiable's //limit// key. By default, if the base is not capable of selecting multiple files, this is obviously 1. If it is, the default is [1, any] just as in Stringifiable.
 
 == Container Types
-Container types are types that accept any structure as a substruct and make it so that their substructs refer to a binary or text that they provide rather than the root's. All containers are also serializable but if they have any substructs then they should not be exported or imported themselves, even if requested to, since it would be exporting duplicate data. However it should generate a warning in such a case.
+Container types are types that accept any structure as a substruct (that fits its packing criteria, see [[Specification/Principles/#Text and Bin|Text and Bin]]) and make it so that their substructs refer to a binary, text, or virtual directory structure that they provide rather than the root's. All containers are also un/packable but if they have any substructs then they must be careful to not export duplicate data when exporting themselves.
 
 Some container types may also be value types, essentially returning a //string// or //bin// of their contents.
 
