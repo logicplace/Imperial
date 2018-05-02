@@ -376,7 +376,7 @@ graphic TestImage {
 }
 >>
 
-It may be useful to understand the //[[Standard Structures/Data|data]]// and //[[Standard Structures/Graphics Types/#graphic|graphic]]// structs first.
+It may be useful to understand the //[[Specification/Standard Structures/data|data]]// and //[[Specification/Standard Structures/Graphics Types/#graphic|graphic]]// structs first.
 
 It is important to understand how these references affect the interpretation, too. The //data// struct, by its definition, takes a type as the first element of an x-key's list. Thus, when supplying a reference instead, it interprets the target as a type. This forces the target to be removed from the context in terms of serialization and relative basing. All other references are relatively regular ones, they establish a link between the referring key and its referrant. That is, they contain the same value.
 
