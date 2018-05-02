@@ -8,8 +8,8 @@
 All structs, besides statics, must define the following keys:
 * name: Described in [[Principles#Naming|the Naming section of Principles]].
 * tags: A list of keywords (or tags) the describe this struct. They may be keyed off of for any purpose in the system, such as in selecting only certain tags to modify or export.
-* exports: A specialized //exports// type. May be declared as a substruct (which is still able to be referred to from the //exports// key, but is not a target for bubbling). Contains all information pertraining to how this struct's abstract, managed data would be represented on, for instance, a file system. It could also be about a database if that's the target or whatever for whatever target. The data contained here should only be relevant to this one structure, unless this is the RPL structure, in which case it should only be relevant generally.
-* source: (RO). A specialized //source// type. May be declared as a substruct in the same way as exports. This describes information about where the data came from, such as which .rpl file and where in the file it was declared, or which binary file and what position in it it came from.
+* exports: A specialized //exports// type. Contains all information pertraining to how this struct's abstract, managed data would be represented on, for instance, a file system. It could also be about a database if that's the target or whatever for whatever target. The data contained here should only be relevant to this one structure, unless this is the RPL structure, in which case it should only be relevant generally.
+* source: (RO). A specialized //source// type. This describes information about where the data came from, such as which .rpl file and where in the file it was declared, or which binary file and what position in it it came from.
 ** Generally, these values should not be used by the author for anything except user edification.
 
 === //exports//
@@ -54,7 +54,7 @@ All serializable types must define the following keys:
 * base: See [[Specification/Principles/#Text order|Text Order]] and [[Specification/Principles/#Text and Bin|Text and Bin]] sections for more information.
 * limit: Limit the number of entities this struct selects from its context. May accept a list of [min, max] or a single number which represents both the min and max (and them being equivalent). //max// may be the speical value **any** which means that there is no upper limit. If only one entity can be selected (limit: 1), this struct can stand on its own, but otherwise it will be cloned, once per selection, even if there is only one. Default: [1, any]
 ** This could also accept a range as min~max and only use those values, rather than ever generating the whole list.
-* pretty: A specialized //pretty// type. Works in the same way as //exports// and //source//. This may have keys which refer to both style choices the type's stringification makes and style choices the context makes regarding this struct. As an example, the quotation form used is determined by the context, but since it's related to this struct it can be specified here.
+* pretty: A specialized //pretty// type. This may have keys which refer to both style choices the type's stringification makes and style choices the context makes regarding this struct. As an example, the quotation form used is determined by the context, but since it's related to this struct it can be specified here.
 ** Generally, these values should not be used by the author for anything except user edification.
 
 == Fileable Types

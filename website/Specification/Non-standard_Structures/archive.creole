@@ -4,8 +4,10 @@
 <<TOC>>
 
 == //archive//
-Provides a binary context for a collection of files. Basally, it takes a collection of filenames and offsets and allows substructs to select a file entry by name (via //base//) to work with.
+Provides a context for a collection of files. Basally, it takes a collection of filenames and offsets and allows substructs to select a file entry by name (via //base//) to work with.
 
 TODO
+
+<!-- [[https://en.wikipedia.org/wiki/Zip_(file_format)#Compression_methods|zip]] ? -->
 
 <<import foot.html>>

@@ -4,28 +4,32 @@
 <<TOC>>
 
 == //data//
-The //data// type is a serializable struct meant to simply represent packed binary data. One could do this with only using value structs but it would be really wordy and declare too many global names. Also, you may use a reference to a //data// struct as a type in the type declaration section when defining a key in //data//.
+The //data// type is a serializable struct meant to easily represent packed binary data. One could do this with only using value structs but it would be really wordy and declare too many global names. Also, you may use a reference to a //data// struct as a type in the type declaration section when defining a key in //data//.
 
-//data// may have a sister type, //format//, which is a variant that does not define serializability keys.
+//data// may have a sister type, //format//, which is a variant that does not define serializability keys (except size).
 
 //data// must define the following keys:
-* From [[Specification/Common Keys#Serializable Types|serializable]] type: base, file, ext (Default: rpl), transport
+* From [[Specification/Common Keys#Exportable Types|exportable]] type: name, tags, exports, source
+* From [[Specification/Common Keys#Serializable Types|serializable]] type: base, size, end
 * From [[Specification/Basic Structures/Numbers#Numbers|//number//]]: endian, sign
 * From [[Specification/Basic Structures/Strings#Strings|//string//]]: padding, align
 * comment: When this struct is exported, if the format can have a comment, leave this comment above the relevant object.
 * pretty: Defines pretty-print options
-* x*: Any key that begins with x is treated as a data point and takes a list of the form [Type, Size, Offset?, endian?, sign?, padding?, align?] or a struct-form keystruct of the target type, obviously with no //data// key defined.
-** Arguments with a ? are optional and order does not matter.
-** Type: May be a string of a type name or a reference to a struct such as a //data//, //format//, or //map// struct. Though those are more common, almost any type of struct is valid.
+* x*: Any key that begins with x is treated as a data point and takes a list of the form [Type, Size, Offset?, endian?, sign?, padding?, align?], a struct-form keystruct of the target type, obviously with no //data// key defined, or a bare Type. In the bare type case, the type must have a fixed size, and there's assume to only be one of them.
+** Arguments with a ? are optional and order does not matter. It should be possible to be explicit by providing a pair such as {{{offset: value}}} where offset is the literal word and the value is a number specifying the offset from the //data// struct's base.
+** Type: May be a string of a type name or a reference to a struct such as a //data//, //format//, or //map// struct. Though those are more common, almost any type of serializeable struct is valid.
 *** The following special strings from the //size// type may be used as short-hand for declaring fixed size number types: **byte**, **short**, **long**, **double**
-** Size: Can be given an explicit //size// value or a unit of **# times** or **x#** or both size and repetition units. If one uses an explicit size for something that cannot handle it, an error should be generated. Otherwise it may be given:
+** Size: Can be given an explicit //size// value or a unit of **# times** or **x#** or both size and repetition units as a list in that order. If an auther uses an explicit size for something which does not have an adjustable size, an error should be generated. Otherwise it may be given:
 *** Only a number: If the type used does not have a fixed size (like //string// or //number//, note that something that dynamically determines its own size is still considered fixed here) then this value is the number of bytes that should be read in, otherwise it is the number of entities that should be read in.
 *** **# end**: The address to stop reading at.
 **** If this //is not// combined with a size unit and the type given //does not// have a fixed size this will read until the given address and take that as the size.
 **** If this //is not// combined with a size unit and the type given //does// have a fixed size OR if this //is// combined with a size unit and the type given //does not// have a fixed size this will pull in elements until it runs out of space. If it does not exactly reach the end, a warning should be generated.
-*** **expand** or <strong>*</strong>: Works like **# end** but uses the following entity's offset as the end point. If there is no following entity, it should expand to the end of the context. If the following entity does not have an offset (and cannot obtain one), an error should be generated.
+*** **expand** or **{{{*}}}**: Works like **# end** but uses the following entity's offset as the end point. If there is no following entity, it should expand to the end of the context. If the following entity does not have an offset (and cannot obtain one), an error should be generated.
 ** Offset: Defines when this entity begins. Data that is skipped over is ignored when serializing.
 ** endian, sign, padding, and align can specify these specifically for this data point. Irrelevant entries (such as sign for a //string//) should be ignored or possibly generate a low priority warning. If these are not defined it will use what's defined in the struct.
+* keys: A specialized //keys// static which accepts an x-key without the literal **x** as a key and its corresponding value as normal.
+** These map directly to x-keys and both references should point to the same data. That is, {{{@SomeData.xhello}}} == {{{@SomeData.keys.hello}}}
+** Unlike x-keys, this is inheritable from a parent in a usable way. This is because a //data// struct cannot reference specific x-keys it doesn't know about and it only knows about ones defined in itself.
 
 The data struct should be able to export any reasonable object notation syntax. Definitely static RPL and JSON. It should also be capable of exporting bin type, which is essentially a pass-through.
 

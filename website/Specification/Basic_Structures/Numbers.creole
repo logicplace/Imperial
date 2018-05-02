@@ -5,8 +5,10 @@
 
 == Numbers
 All number types must implement the following keys:
+* From [[Specification/Common Keys#Exportable Types|exportable]] type: name, tags, exports, source
 * From [[Specification/Common Keys#Value Types|value]] type: data
-* From [[Specification/Common Keys#Serializable Types|serializable]] type: base, file, ext (Default: txt), transport
+* From [[Specification/Common Keys#Serializable Types|serializable]] type: base, end
+* From [[Specification/Common Keys#Stringifiable Types|stringifiable]] type: base, limit, pretty
 * bits: List of the bit values of the number, index 0 being the least significant bit. Contents reflect //data// and length reflects //size//.
 * size: Size of the serialized number. Default: 4 bytes
 * sign: Can be either **signed** or **unsigned** (default).
@@ -17,5 +19,63 @@ When serializing, an error should be generated if the number cannot fit in the g
 Syntactic types:
 * //number//: This is the basic number type. String form is a decimal number.
 * //hexnum//: An interpreted number type. String form is a hexadecimal number with a dollar sign prefix.
+
+=== //pretty//
+* form: Specialized //form// type with the following keys:
+** pattern: Also from declaring //form// as a list with the first element being **pattern** and the second element is the string that would be declared here normally. Declares a simple repeating form for the number that works as follows:
+*** Assume that all the decimal digits for the number this represents are on a stack. We pop from them from right-to-left. So in **123**, 3 would be popped first, then 2, ... Popping a digit places it into the front of the output queue.
+*** Read characters of the string right-to-left.
+**** If it encounters **#** and there is a digit on the stack, pop it to the output queue.
+**** If it encounters **?** and there is a digit in the stack, continue.
+**** If there was no digit in the stack for one of these commands, stop processing.
+**** If it encounters any other character, print it literally.
+*** If the processing ended in a success (all requested digits were found), begin processing the string again.
+** base: Number. What number base to output in. This can be inferred from which //digit// keys are defined, using the highest one + 1.
+** number#: String. Represents the output when this form is equal to this exact number.
+** digit#: If it's not a list; the digit, #, is represented as this everywhere. If it's a list, it has two acceptible forms:
+*** All entries are non-lists: This digit has a limited number of positions it can appear in, equal to the length of the list. Each entry specifies the form used base on its digit position in the number. It's of the form: [1s digit, 10s, 100s, ...]
+*** One entry is a non-list: The single entry is what this digit appears as normally, but changes in specific slots. To specify the slot, use a form such as {{{digit1: [1, 2: H]}}} where 1 is the normal version, 2 is the 100s digit position (10e2), and H is the value when 1 is to be displays in the 100s digit position.
+*** All entries are lists: Like the above, but the digit may only appear in the defined spaces.
+** after#: String. Place this string after the given digit position only if this digit exists in the number. "After" refers to the reading order. That is, for english locale, to the right of the digit #.
+** before#: String. Same as //after// but places it before the digit.
+** every#: String. Order all //every// keys in descending order. For each, take the modulo of the number and # amount and output the concatenation of that many of the given string. Take the integer division of the number and # and use it in continuing to the next //every//.
+*** Example: {{{ form { every5: /, every1: l } }}}
+*** Given the number 7, this will display as "/ll"
+** replace: Specialized static type in which the key is a substring to search for and the value is the replacement substring. This assumes the final string (created from every etc) as the input, when stringifying.
+** //form// must also accept a string representing the //base// when being defined. Valid values are:
+*** **base 2** or **bin** or **binary**
+*** **base 8** or **oct** or **octal**
+*** **base 10** or **dec** or **decimal**
+*** **base 12** or **duodecimal**
+*** **base 16** or **hex** or **hexadecimal**
+*** Or any other base of the form **base** followed by the number representing it.
+*** Or any predefined form with no modifiers (see below).
+** //form// must also accept a list such that the first element represents the base form it intends to modifiy followed by its modifications. This could be anything, but some examples are:
+*** **arabic**: Arabic numerals used most everywhere, including English.
+**** **arabic:comma**: Comma separated thousands (US).
+**** **arabic:period**: Period separated thousands (UK).
+*** [**cjk**, digit1, digit2, digit3, digit4, digit5, digit6, digit7, digit8, digit9, after1, after2, after3, after4, after8, ... after(previous + 4)]
+**** All digits must be defined, but if some after is not defined then no marker is placed there.
+*** [**japanese**, ...]
+**** Same form, but there are defaults in this case, because Japanese has a standard (up to digit 48)
+**** Or using predfined modifiers **arabic** (default) or **kanji** to select the numeral representation.
+*** **korean**
+**** (default) **korean:arabic** or **korean:arabic:hangul**: Arabic numerals and hangul 10k markers.
+**** **korean:arabic:hanja**: Arabic numerals and hanja 10k markers.
+**** **korean:hangul**: Hangul numerals and place markers.
+**** **korean:hanja**: Hanja numerals and place markers.
+*** **chinese**
+**** ??
+*** **roman**: Roman numerals
+**** **roman:ascii** or **roman:ascii:upper**: Uppercase latin characters IVXLCDM
+**** **roman:ascii:lower**: Uppercase latin characters ivxlcdm
+**** **roman:modern** or **roman:unicode**: Use the unicode specified characters instead.
+***** (default) **:upper** or **:upper:composed** or **:composed**: ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫⅬⅭⅮⅯↁↂↇↈ
+***** **:lower** or **:lower:composed**: ⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹⅺⅻⅼⅽⅾⅿↁↂↇↈ
+***** **:upper:decomposed** or **:decomposed**: ⅠⅤⅩⅬⅭⅮⅯↁↂↇↈ
+***** **:lower:decomposed**: ⅰⅴⅹⅼⅽⅾⅿↁↂↇↈ
+**** [**roman**, I, V, X, L, C, D, M, 5k, 10k, 50k, 100k, ..., 10^(N-4) * 5, 10^(N-3)]
+***** Where N is the length of the list, including **roman**.
+***** After positional points in the string, it must accept pairs of the form {{{X: Y}}} where X is the # for an //every// definition and Y is the corresponding value for it. Positional entries may not come after these.
 
 <<import foot.html>>

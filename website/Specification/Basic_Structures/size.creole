@@ -7,6 +7,7 @@
 Represents sizes in bytes and bits making use of familiar C number types and SI conventions.
 
 //size// must define the keys:
+* From [[Specification/Common Keys#Exportable Types|exportable]] type: name, tags, exports, source
 * From [[Specification/Common Keys#Value Types|value]] type: data
 * bytes: The number of bytes. Reflects //data//.
 * bits: The size in bits. Reflects //data//.

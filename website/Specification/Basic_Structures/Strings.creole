@@ -5,24 +5,43 @@
 
 == Strings
 All string types must implement the following keys:
+* From [[Specification/Common Keys#Exportable Types|exportable]] type: name, tags, exports, source
 * From [[Specification/Common Keys#Value Types|value]] type: data
-* From [[Specification/Common Keys#Serializable Types|serializable]] type: base, file, ext (Default: txt), transport
+* From [[Specification/Common Keys#Serializable Types|serializable]] type: base, end
+* From [[Specification/Common Keys#Stringifiable Types|stringifiable]] type: base, limit, pretty
 * length: Length of the string in characters. Reflects //data//.
 ** Setting this shorter will truncate the string and should produce a warning.
-* size: Size of the serialize string. Default: unlimited
+* size: Size of the serialized string. Default: unlimited
 * encoding: The encoding of the serialized string. This may be a string with the name of a standard encoding or a reference to a //map// struct.
 * padding: What to pad the string with when it's too short. Default: $00
 * align: How to align the string with regard to padding. Can be **left** (default), **center**, **rcenter**, or **right**.
 * padside: Opposite ideology of //align//. Reflects //align//. Can be **left** (align = right), **both** (align center), **lboth** (align = rcenter), or **right** (align left) (default).
 
-When serializing, a warning should be generated if the string cannot fit in the target size. An error should be generated if the encoding is invalid, though //map// structs should handle their own error generation in the case of using one.
+When serializing, a error should be generated if the string cannot fit in the target size. An error should be generated if the encoding is invalid, though //map// structs should handle their own error generation in the case of using one.
+
+When stringifying, all syntactic types just return their string value as-is. This means parsing is the same as setting the value.
 
 Syntactic types:
-* //string//: This is the basic string type. String form should be the string with the most appropriate quote form chosen (ie. attempt primary for locale, then attempt secondary for locale, then start escaping things).
-* //literal//: Unquoted string. String form should attempt to write it as a literal but if any illegal characters exist in the data then it must quote it in the same way as //string//.
-* //refstr//: String with embedded references. String form is like //string// but with an at sign prefix.
+* //string//: This is the basic string type, written in RPL with quotes.
+* //literal//: Unquoted string.
+* refstr: String with embedded references.
+** Getting the value returns a string with the references replaced with their values coerced into strings.
+** May or may not allow access to the individual parts, like [string, ref, string, ...] sort of form, but should be for edification purposes only.
+* multistring: String split into multiple parts, likely over multiple lines, possibly with comments after a part. (It's up to the implementation whether or not to store and recreate the comments.)
 
-Note that multistring is not a type but rather only syntactic sugar.
+Refstr and multistring, while being a syntactic types, cannot be referred to as a type such as in a struct declaration.
+
+==== //pretty//
+* quote: Either a string containing a single quote form used on both ends, or a list containing the left end followed by the right end. This should only be used by the text context.
+* escape: Escape priority. The earliest mode is the preferred one, followed by next preferred, etc. The text context will decide which characters to escape and how. If a preference is not listed here at all, assuming at least one is viable to the context, then it will not be an option. If there is some viable preference in the list for this context but none are viable for a certain character, the context stringifier must raise an error. Possible escape forms include:
+** **special** - such as $n or $t
+*** RegEx offers two methods of encoding \n \r and \t, the second being the **caret** escapes of \cJ \cM and \cI (case insensitive) but are not generally useful. To encode them instead of the normal form, one could use a priority of [**caret**, **special**]
+*** Note there may be a difference between \{ and \u007b in certain RegEx implementations, and in such cases, the context must only succeed on whichever escapings are semantically correct.
+** **unicode** - such as $(0)
+*** JavaScript, having two unicode escape forms, may offer a separate name for each. It would be best to leave this as a "smart" version of selecting between the two rather than making it an alias of one or the other, though.
+** **byte** - such as $00
+** **octal** - such as \0 in JavaScript
+*** This should not be chosen in JavaScript if a number would follow it.
 
 === //path//
 All paths are considered relative. The basing should be something that the user of the value cares about rather than this value itself.
@@ -33,8 +52,12 @@ When retrieved, it will return the path as defined but using your system's path 
 
 //path// must implement the following additional keys:
 * path: A list of the form [folders, ..., file]. Reflects //data//. Note that the last element is not necessarily a file.
+* dirname: Everything but the last entry in //path//, as a string. Reflects //path//.
+* basename: Only the last entry in //path//. Reflects //path//.
 * ext: The file extension as a string. Reflects //data//. If there is no extension, this should be an empty string. Default is an empty string.
-* open: Boolean; whether or not there was an opening slash.
+* open: Boolean. Whether or not there was an opening slash.
+* file: Boolean. Whether it's addressing a file (true) or a folder (false).
+* folder: Boolean. Whether it's addressing a file (false) or a folder (true).
 
 Possible extensions: URIs with protocols (protocol:~//...), network shares (~\\share\...)
 

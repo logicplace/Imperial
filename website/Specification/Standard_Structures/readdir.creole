@@ -9,9 +9,7 @@ ReadDir is a string type that deals with reading direction. At least for now it 
 //readdir// must define the following keys:
 * From [[Specification/Common Keys#Value Types|value]] type: data
 
-When retrieved, it must return the same string that was written.
-
-When stringified, it must return the relevant long form in all caps.
+When retrieved, it must return the relevant long form in all caps.
 
 When defined/set, it must accept a string of either the long or the short forms, listed below (case insensitive):
 * Long forms: **LRUD**, **LRDU**, **RLUD**, **RLDU**, **UDLR**, **UDRL**, **DULR**, **DURL**

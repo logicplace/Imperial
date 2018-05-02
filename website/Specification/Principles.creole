@@ -235,6 +235,28 @@ The string used is generally a selector of some sort, however its format differs
 
 When retrieved, if this address is relative to the root, it should return the selector as-is. If it was relative to the parent, it should combine the relevant selectors as appropriate for the format and return that in order to provide an absolute selector. This sort of concept could be applied to forms of relativity besides descendants as well, such as sibling relativity (eg. in CSS, combining relevant selectors with " + ").
 
+=== Specialized keystructs
+Sometimes a key may say it takes a specialized keystruct. This is a key which can be defined in the following ways, using "test" as the key in question:
+* test: //basic form//
+* test { ... }
+* test: test { ... }
+
+When defined in the basic form, it instantiates a struct of type //test//, using the syntactic form give for defining it. This is the normal behavior for a key of //test// type.
+
+When defining the substruct, it instantiates the struct as it would a substruct, then associates the result with the //test// key. If the author defines a name here, it may also be stored as a child, depending on implementation. Despite being associated with a key, this form does not allow substructs to see it when bubbling, as it was not explicitely defined as a key. For example:
+
+<<code rpl
+tester Tester {
+    test { ... }
+
+    tester ChildTester {
+        # Does not have a test key, probably throws an error!
+    }
+}
+>>
+
+The last method is a way to allow inheritance while also defining the specifics that cannot be addressed from a basic form.
+
 == Internationalization
 RPL should support any reasonable script and language. Unreasonable scripts refers to only really archaic or constructed ones with unreasonable demands. For instance, Lojban's quotations may be unfeasible and it is not given much priority since it is not a natural language.
 

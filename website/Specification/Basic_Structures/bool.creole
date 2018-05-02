@@ -7,6 +7,7 @@
 Represents truthiness and a little more.
 
 //bool// must implement the following keys:
+* From [[Specification/Common Keys#Exportable Types|exportable]] type: name, tags, exports, source
 * From [[Specification/Common Keys#Value Types|value]] type: data
 * true: True if this is true and false if this is false (ie. normal case). Must return undefined if undefined. Reflects //data//.
 * false: True if this is false and false if this is true (ie. "not"/inverse case). Must return undefined if undefined. Reflects //data//.

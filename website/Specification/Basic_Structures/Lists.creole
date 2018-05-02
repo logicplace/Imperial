@@ -5,6 +5,7 @@
 
 == Lists
 All list types must implement the following keys:
+* From [[Specification/Common Keys#Exportable Types|exportable]] type: name, tags, exports, source
 * From [[Specification/Common Keys#Value Types|value]] type: data
 * length: The length of the list. Reflects //data//.
 
@@ -14,14 +15,15 @@ Syntactic types:
 
 === //list//
 Regular lists must also implement these keys:
+* From [[Specification/Common Keys#Stringifiable Types|stringifiable]] type: pretty
 * type: The type specification of the list. The default is the special value **any**, indicating any type is appropriate.
 ** If the type is serializable (that is, not **any**), the list is also serializable.
 *** If in this case, if the length (or its reflections) is not explicitely defined, it is assumed to act like **expand** from [[Specification/Standard Structures/data#data|data's]] x*'s //size//. That is, it will take the offset of the following structure and attempt to collect everything within the space. If it does not fit evenly, it will error.
-*** In this case, it may also accept any [[Specification/Common Keys#Serializable Types|serializable keys]]. However, //size// must reflect //type// and //length// such that //size// = //type//.//size// * //length//.
+*** In this case, it must also accept [[Specification/Common Keys#Serializable Types|serializable keys]]: base, size, end. However, //size// must reflect //type// and //length// such that //size// = //type//.//size// * //length//.
 
-In all possible stringified forms, we are presenting a list of the string forms of its contents, separated by a separator, and surrounded by square brackets. Pretty printing options might include:
+Although the basic list itself is not stringifiable on its own (a text context must manage it specifically if it wishes to stringify them), it is able to define pretty printing options for itself, some examples are:
 * Same-line opening vs. own-line opening
-* Separator options: / *, *|\n/
+* Separator options, if there are any
 * Newline after certain line length or certain number of elements
 ** With or without trailing comma
 ** Whether or not to split a single element over multiple lines (?) (This may be better handled by each element)
@@ -33,7 +35,7 @@ Represents a predictable list of //number//s or //hexnum//s. It's fine if one si
 
 //range// is something of a supertype that represents four different types of ranges. If one key set is being used, others should not be allowed. All types implement the following keys:
 * start: The start value of the range. This does not imply the smallest value of a range. Required. Reflects //data//.
-* left, multiplicand: Aliases of //start//.
+* left: Aliases of //start//.
 
 ==== Basic range
 * Prefers //start// over the other aliases.
@@ -63,9 +65,9 @@ Represents a predictable list of //number//s or //hexnum//s. It's fine if one si
 * Implements the basic range's statistics.
 
 ==== Repeated elements
-* Prefers //left// over the other aliases. (//multiplicand// is difficult to remember.)
-** //left// need not resolve to a number.
+* //multiplicand//: A dispreferred alias of //left//.
 * times, multiplier: How many times //left// is repeated. Reflects onto //data//.
+** May accept **{{{*}}}** for infinity times. This makes retrieving the full //data// (including //length// and appropriate stats) cause an error.
 * It's welcome to implement //end//, //end1//, and the statistics keys for number formulations, but they have little meaning.
 
 ==== //range// examples

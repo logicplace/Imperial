@@ -4,7 +4,7 @@
 <<TOC>>
 
 == //iostatic//
-This is much like [[Specification/Basic_Structures/static#static|//static//]] except that it offers static data that differs based on whether the RPL is being used for importing or exporting. This should mainly only be used for testing purposes.
+This is much like [[Specification/Basic_Structures/static#static|//static//]] except that it offers static data that differs based on whether the RPL is being used for importing or exporting. This should mainly only be used for testing purposes. It is not a requirement for this to be implemented.
 
 When defined, keys take a two element lists of the form: [value when importing, value when exporting]
 

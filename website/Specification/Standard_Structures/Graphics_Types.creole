@@ -7,7 +7,7 @@
 Refers to types that manage 2D images.
 
 Graphics types must implement the following keys:
-* From [[Specification/Common Keys#Serializable Types|serializable]] type: base, file, ext (Default: png), transport
+* From [[Specification/Common Keys#Exportable Types|exportable]] type: name, tags, exports, source
 * rotate: Rotate the image by a multiple of 90 degrees. Valid values are: 0 (default), 1, 90, 2, 180, 3, 270.
 * mirror: Boolean of whether or not to mirror (flip horizontally) the image. Default: false
 * flip: Boolean of whether or not to flip the image vertically. Default: false
@@ -29,6 +29,8 @@ When dealing with images one must pay special attention to color support of the 
 This is the generic struct for describing graphics data. It should be able to handle most graphical formats on its own but of course a library implementation for common formats is much faster (in terms of processing speed) and easier to read and write.
 
 //graphic// must implement the following additional keys:
+* From [[Specification/Common Keys#Serializable Types|serializable]] type: base, end
+* size: Serialized size. Calculated from: width * height * pixel.size
 * read: See [[Specification/Standard_Structures/readdir#readdir|//readdir//]] type for details.
 * pixel: A pixel format or a list of pixel formats. See [[#pixel|//pixel//]] type for details.
 ** Reading begins be reading the first pixel in the first pixel format and then the second in the second format, etc. When it reaches the end of the format list it will continue from the beginning of the list. For instance, if there are two formats, the third pixel will be read with the first format.
@@ -74,6 +76,7 @@ This should ideally keep track of the highest resolution of the color that it kn
 Represents a pixel format, that is, how to unserialize a binary value into a //color// and back again.
 
 //pixel// must implement the following keys:
+* size: Serialized size of pixel as a //size//. Reflects //format//.
 * format: Accepts a string as defined below.
 * order: Order the bits are concatenated in, either **forward** (default) or **reversed**
 * chunk: Same as //order//, but applies to the order of chunks instead of bits (see below for what a chunk is). By default, this is the same as //order// and will reflect //order// until explicitly set.

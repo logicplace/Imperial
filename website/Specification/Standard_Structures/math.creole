@@ -7,6 +7,7 @@
 Represents a mathematical expression. It can contain numbers, operators, and references. However, users should be advised to ensure that there is only one reference that is considered an unknown when importing.
 
 //math// must define the following keys:
+* From [[Specification/Common Keys#Exportable Types|exportable]] type: name, tags, exports, source
 * From [[Specification/Common Keys#Value Types|value]] type: data
 
 When defined, it must interpret the given string as the mathematical equation given the operators and syntax listed below. It must also allow for references without using refstr type. Note that using refstr type would ignore references as they're used in the set operation.
@@ -27,11 +28,11 @@ For example: 1 + 1 is the addition operator whereas 1 - +1 is the subtraction op
 
 One must be able to represent numbers in alternate bases with the following formations (where # is the number portion):
 * Hexadecimal: $$# (double for escaping) or 0x#
-* Octal: 0# or 0o#
+* Octal: 0o#
 * Binary: %# (Note you must resolve conflicts with modulo) or 0b#
 * Generally: #_base (eg. 10_3 = 3)
 
-When set, it must set the given a number that represents the result of the equation. If there exists a reference pointing to an uninitialized (or dynamic, perhaps) value, it must then solve the equation for that value and set it on the reference. If there is more than one such reference or if it would use lossy operations to solve it it must generate an appropriate error. If there is no such reference then setting should act like an assertion.
+When set, it must be given a number that represents the result of the equation. If there exists a reference pointing to an uninitialized (or dynamic, perhaps) value, it must then solve the equation for that value and set it on the reference. If there is more than one such reference or if it would use lossy operations to solve it it must generate an appropriate error. If there is no such reference then setting should act like an assertion.
 
 When retrieved as a number, it must return the result of the equation.
 

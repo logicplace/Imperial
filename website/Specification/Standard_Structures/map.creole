@@ -4,18 +4,18 @@
 <<TOC>>
 
 == //map//
-This is a struct that translates (maps) serialized (packed) encodings into useful values. A struct of this type may be referenced by, for instance, //string//.//encoding// or as the type in one of //data//'s keys.
+This is a struct that translates (maps) serialized (packed) encodings into useful values. A struct of this type may be referenced by, for instance, //[[Specification/Basic Structures/Strings#Strings|string]]//.//encoding// or as the type in one of //[[Specification/Standard_Structures/data|data]]//'s keys.
 
 //map// must implement the following keys:
-* mapping: Takes a keystruct of type //mapping// which allows strkeys and numkeys. Reflects onto //packed// and //unpacked//.
+* mapping: Takes a specialized keystruct of type //mapping// which allows strkeys and numkeys. Reflects onto //packed// and //unpacked//.
 * packed: A list or string that represents packed side of the mapping, ordered such that the index here links to the same index in //unpacked//. Required.
 * unpacked: A list or string that represents the unpacked side of the mapping, just as //packed//. Required.
 * unmapped: What to do when it tries to map a value that is not present in the relevant list. May be any of the following:
 ** "except": Generate an error about it. (default)
 ** "add": Pass the value through as-is (ie. translate it to itself).
-** "drop": Ignore the value.
-* cast: A string containing the name of the type to cast unpacked values to, for instance in extending a custom encoding already implemented by a library. Default: don't cast.
-** When defined, if //string// and/or //number// is set and not the same value, this should generate an exception.
+** "drop": Ignore the value. Should generate a warning when it happens.
+* cast: A string containing the name of the type to cast unpacked values to or a reference to a struct that will act as a type, for instance in extending a custom encoding already implemented by a library. Default: don't cast.
+** When defined, if //string// and/or //number// is set and not the same value, this should generate an error.
 ** When set, set //string// and //number// to this value.
 ** When retrieved, return the type name only if //string// and //number// have the same value or are unset. 
 * string: The type to cast unpacked strings to specifically. Default: don't cast.
