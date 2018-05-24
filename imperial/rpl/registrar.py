@@ -88,6 +88,10 @@ class Registrar(tuple):
 			#endif
 		#endfor
 
+		for key in tuplize:
+			normal_keys[key] = tuple(normal_keys[key])
+		#endfor
+
 		def loop_into(name, it, normals):
 			for k, s in it:
 				if not isinstance(s, BaseStruct):
@@ -186,7 +190,7 @@ class Registrar(tuple):
 
 			for test in key:
 				if test.test(struct):
-					return test
+					return BoundKey(test, struct)
 				#endif
 			#endfor
 
@@ -388,7 +392,33 @@ class Key(BaseKey):
 	# This is just an adaptor to make Registrar.__new__'s register function easier.
 	typename = property(itemgetter(2))
 
-	@property
+	def test(self, struct=None):
+		type, data, ancestor = self.raw_type
+
+		if ancestor is None:
+			return type, data
+		else:
+			if not isinstance(struct, BaseStruct):
+				return False
+			#endif
+
+			parent = struct.parent
+			while parent is not None:
+				if isinstance(parent, ancestor):
+					type = type(parent)
+
+					if type is None:
+						return False
+					#endif
+
+					return type, data
+				#endif
+			#endwhile
+
+			return False
+		#endif
+	#enddef
+
 	def type(self, struct=None):
 		"""
 		{Key}.type -> BaseStruct
@@ -399,39 +429,35 @@ class Key(BaseKey):
 		* TypeError - if this is a conditional type an no valid struct was provided
 		* rpl.rpl.exceptions.TypeError - if the rigid structure is invalid.
 		"""
-		type, data, ancestor = self.raw_type
+		test = self.test(struct)
 
-		if ancestor is not None:
-			if not isinstance(struct, BaseStruct):
-				raise TypeError("struct")
-			#endif
+		if test is False:
+			raise TypeError("struct")
+		#endif
 
-			parent = struct.parent
-			while parent is not None:
-				if isinstance(parent, ancestor):
-					type = type(parent)
+		type, data = test
+		conditional = self.conditional
 
-					if type is None:
-						raise TypeError("struct")
-					#endif
-
-					break
-				#endif
-			#endwhile
-
-			if parent is None:
-				raise TypeError("struct")
-			#endif
+		if conditional:
+			# TODO: Cached by type
+			pass
 		elif self._cached_type is not None:
 			return self._cached_type
 		#endif
 
-		ret = self._cached_type = type(data, source = { "type": "implied" })
+		ret = type(data, source = { "type": "implied" })
+
+		if conditional:
+			# TODO: Cached by type
+			pass
+		else:
+			self._cached_type = ret
+		#endif
 
 		return ret
 	#enddef
 
-	def default(self, parent):
+	def default(self, parent, struct=None):
 		"""
 		{Key}.default(parent) -> BaseStruct or None
 
@@ -446,7 +472,7 @@ class Key(BaseKey):
 		#endif
 
 		# Cast the default and set its source as defaulted.
-		ret = self.type(self.raw_default, source = { "type": "defaulted" })
+		ret = self.type(struct)(self.raw_default, source = { "type": "defaulted" })
 		ret.parent = parent
 		return ret
 	#enddef
@@ -458,5 +484,24 @@ class Key(BaseKey):
 		Return whether or not this key defines a default value.
 		"""
 		return not self.raw_default is NO_DEFAULT
+	#enddef
+#endclass
+
+class BoundKey:
+	def __init__(self, key, struct):
+		self.key = key
+		self.struct = struct
+	#enddef
+
+	def type(self):
+		return self.key.type(self.struct)
+	#enddef
+
+	def default(self, parent):
+		return self.key.default(parent, self.struct)
+	#enddef
+
+	def has_default(self):
+		return self.key.has_default()
 	#enddef
 #endclass
