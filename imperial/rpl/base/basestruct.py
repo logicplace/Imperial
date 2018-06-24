@@ -23,7 +23,6 @@ import time
 from collections import OrderedDict
 
 from ..makers import Basic
-from ..statics import BaseStatic
 
 from ..exceptions import errors, warnings
 from .. import decorators as struct

@@ -63,7 +63,7 @@ class LazyStruct:
 			#endif
 		#endif
 
-		return type(self.data, **self.kwargs, self.parent=parent)
+		return type(self.data, **self.kwargs, parent=self.parent)
 	#enddef
 #endclass
 

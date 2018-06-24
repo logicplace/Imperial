@@ -25,7 +25,7 @@ from .makers import make_define, make_set, make_get, make_resolve
 __all__ = ["BaseMetaclass", "StructMetaclass"]
 
 class BaseMetaclass(type):
-	def __new__(cls, clsname, superclasses, attributedict)
+	def __new__(cls, clsname, superclasses, attributedict):
 		getters = attributedict["getter"] = {}
 		setters = attributedict["setter"] = {}
 
@@ -40,7 +40,7 @@ class BaseMetaclass(type):
 
 		# Grab from superclasses.
 		for x in reversed(superclasses):
-			if issubclass(x, BaseStruct):
+			if issubclass(type(x), BaseMetaclass):
 				if valid:
 					for key in valid:
 						try:

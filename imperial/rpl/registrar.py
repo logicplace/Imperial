@@ -80,7 +80,7 @@ class Registrar(tuple):
 
 			key_name = key.name
 
-			if key.conditional:
+			if key.contextual:
 				normal_keys.setdefault(key_name, []).append(key)
 				tuplize.add(key_name)
 			else:
@@ -93,8 +93,19 @@ class Registrar(tuple):
 		#endfor
 
 		def loop_into(name, it, normals):
+			used_type = None
 			for k, s in it:
-				if not isinstance(s, BaseStruct):
+				if used_type is None:
+					if isinstance(s, type):
+						raise TypeError(name)
+					#endif
+
+					base = type(s)
+					while base is not object:
+						used_type = base
+						base = base.__bases__[0]
+					#endwhile
+				elif not isinstance(s, used_type):
 					raise TypeError(name)
 				#endif
 
@@ -175,11 +186,11 @@ class Registrar(tuple):
 
 		registrar.key(name, struct) -> rpl.rpl.registrar.Key
 
-		Get the key definition of *name* for a conditionally typed key.
+		Get the key definition of *name* for a contextually typed key.
 
 		Raises:
 		* KeyError - if name is not defined.
-		* TypeError - conditional key but no valid struct provided
+		* TypeError - contextual key but no valid struct provided
 		"""
 		key = self.__get("key", 0, name)
 
@@ -313,13 +324,13 @@ NO_DEFAULT = Sentinel()
 BaseKey = namedtuple("Key", ["name", "raw_type", "raw_default"])
 class Key(BaseKey):
 	"""
-	Key(name, type[, default])
+	Key(name, typing[, default])
 
 	Represent a key definition for use in a struct's registrar.
 
 	name: str. Internal name of the key, always possible in struct definition.
 
-	type: dict. Describe the rigid portion of a struct type.  
+	typing: dict. Describe the rigid portion of a struct type.  
 		Turns into the target type lazily.  
 		{ "": subclass of BaseStruct, **dict to pass to it as rigid data }
 
@@ -332,42 +343,42 @@ class Key(BaseKey):
 
 	_cached_type = None
 
-	def __new__(cls, name, type, default=NO_DEFAULT, *, ancestor=None):
-		conditional = False
+	def __new__(cls, name, typing, default=NO_DEFAULT, *, ancestor=None):
+		contextual = False
 
-		if isinstance(type, dict):
+		if isinstance(typing, dict):
 			try:
-				struct_type = type.pop("")
+				struct_type = typing.pop("")
 			except KeyError:
-				raise TypeError("type")
+				raise TypeError("typing")
 			#endtry
 
-			if not issubclass(struct_type, BaseStruct):
-				raise TypeError("type")
+			if not isinstance(struct_type, type):
+				raise TypeError("typing")
 			#endif
-		elif issubclass(type, BaseStruct):
-			struct_type = type
-			type = {}
-		elif callable(type):
-			struct_type = type
-			type = {}
+		elif isinstance(typing, type):
+			struct_type = typing
+			typing = {}
+		elif callable(typing):
+			struct_type = typing
+			typing = {}
 
-			if not issubclass(ancestor, BaseStruct):
+			if not isinstance(ancestor, type):
 				raise TypeError("ancestor")
 			#endif
 
-			conditional = True
+			contextual = True
 		else:
-			raise TypeError("type")
+			raise TypeError("typing")
 		#endif
 
 		ret = BaseKey.__new__(
 			cls,
 			name = name,
-			raw_type = (struct_type, frozendict(type), ancestor),
+			raw_type = (struct_type, frozendict(typing), ancestor),
 			raw_default = default)
 
-		ret.conditional = conditional
+		ret.contextual = contextual
 
 		return ret
 	#enddef
@@ -398,7 +409,7 @@ class Key(BaseKey):
 		if ancestor is None:
 			return type, data
 		else:
-			if not isinstance(struct, BaseStruct):
+			if not isinstance(struct, object):
 				return False
 			#endif
 
@@ -426,7 +437,7 @@ class Key(BaseKey):
 		Return the BaseStruct of the type. Create it if needed.
 
 		Raises:
-		* TypeError - if this is a conditional type an no valid struct was provided
+		* TypeError - if this is a contextual type an no valid struct was provided
 		* rpl.rpl.exceptions.TypeError - if the rigid structure is invalid.
 		"""
 		test = self.test(struct)
@@ -436,9 +447,9 @@ class Key(BaseKey):
 		#endif
 
 		type, data = test
-		conditional = self.conditional
+		contextual = self.contextual
 
-		if conditional:
+		if contextual:
 			# TODO: Cached by type
 			pass
 		elif self._cached_type is not None:
@@ -447,7 +458,7 @@ class Key(BaseKey):
 
 		ret = type(data, source = { "type": "implied" })
 
-		if conditional:
+		if contextual:
 			# TODO: Cached by type
 			pass
 		else:

@@ -6,12 +6,13 @@
 
 import unittest
 
-from rpl.rpl.base import BaseStruct
-from rpl.rpl.registrar import Registrar, Key
-from rpl.rpl.exceptions import errors
+from imperial.rpl.registrar import Registrar, Key
+from imperial.rpl.exceptions import errors
 
 # Toys used for testing Registrar.
-class Toy(BaseStruct):
+class Toy:
+	registrar = None
+
 	def __init__(self, data, *, source=None, name=None, parent=None):
 		if not self.registrar:
 			self.__class__.registrar = self.registrar = self.register()
@@ -31,6 +32,15 @@ class Toy(BaseStruct):
 		return Registrar()
 	#enddef
 #endclass
+
+class ToyContext(Toy):
+	def add_child(self, child):
+		self.child[child.name] = child
+	#enddef
+#endclass
+
+class ToyContext1(ToyContext): pass
+class ToyContext2(ToyContext): pass
 
 class ToyNumber(Toy):
 	def define(self, data, source=None):

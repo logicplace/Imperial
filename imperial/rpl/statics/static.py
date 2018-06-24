@@ -8,7 +8,7 @@
 The static built-in type.
 """
 
-from .base import BaseStruct
+from .base import BaseStatic
 from ..exceptions import errors
 
 __all__ = ["Static"]

@@ -27,15 +27,14 @@ Creates a make_resolve function.
 
 import time
 
-from ..numbers import BaseNumber, Number
-from ..strings import BaseString, String
-from ..lists import BaseList, List
+from .numbers import BaseNumber, Number
+from .strings import BaseString, String
+from .lists import BaseList, List
 
-from ..helper import OrderedMixed
-from ..exceptions import errors
+from .helper import OrderedMixed
+from .exceptions import errors
 
-from .basestruct import BaseStruct
-from .lazystruct import unlazy
+from .base.lazystruct import unlazy
 
 __all__ = ["Basic", "make_define_maker", "make_set_maker", "make_get", "make_resolve"]
 
@@ -63,6 +62,8 @@ class Basic:
 		self.is_number = isinstance(value, (int, BaseNumber))
 		self.is_string = isinstance(value, (str, BaseString))
 		self.is_list = isinstance(value, (list, tuple, BaseList))
+
+		from .base import BaseStruct
 
 		if isinstance(value, BaseStruct):
 			self.is_bare = value._basic_instantiation and value.source is None

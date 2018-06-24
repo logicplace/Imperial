@@ -30,7 +30,7 @@ and this will handle it.
 * resolve
 """
 
-from ..base import LazyStruct
+from ..base.lazystruct import LazyStruct
 
 from ..exceptions import errors
 
