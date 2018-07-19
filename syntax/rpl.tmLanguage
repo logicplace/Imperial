@@ -120,7 +120,11 @@
 			<array>
 				<dict>
 					<key>include</key>
-					<string>#value</string>
+					<string>#comment</string>
+				</dict>
+				<dict>
+					<key>include</key>
+					<string>#value-struct</string>
 				</dict>
 			</array>
 		</dict>
@@ -1619,6 +1623,8 @@
 		</dict>
 		<key>struct-body</key>
 		<dict>
+			<key>name</key>
+			<string>meta.structbody</string>
 			<key>begin</key>
 			<string>\{</string>
 			<key>end</key>
@@ -1635,7 +1641,7 @@
 					<key>comment</key>
 					<string>this forcibly requires the colon to be on the same line as the keyname</string>
 					<key>end</key>
-					<string>(,)|$|^</string>
+					<string>(,)|$|^|(?=})</string>
 					<key>endCaptures</key>
 					<dict>
 						<key>1</key>
@@ -1666,7 +1672,7 @@
 							<key>begin</key>
 							<string>:</string>
 							<key>end</key>
-							<string>(?=,|$|^)</string>
+							<string>(?=,|$|^|})</string>
 							<key>patterns</key>
 							<array>
 								<dict>
@@ -1715,54 +1721,8 @@
 									</array>
 								</dict>
 								<dict>
-									<key>match</key>
-									<string>\w+\d*(?=\s*[({\[])</string>
-									<key>name</key>
-									<string>storage.type.rpl</string>
-									<key>patterns</key>
-									<array>
-										<dict>
-											<key>begin</key>
-											<string>\(</string>
-											<key>beginCaptures</key>
-											<dict>
-												<key>0</key>
-												<dict>
-													<key>name</key>
-													<string>meta.brace.round.rpl</string>
-												</dict>
-											</dict>
-											<key>end</key>
-											<string>\)</string>
-											<key>endCaptures</key>
-											<dict>
-												<key>0</key>
-												<dict>
-													<key>name</key>
-													<string>meta.brace.round.rpl</string>
-												</dict>
-											</dict>
-											<key>patterns</key>
-											<array>
-												<dict>
-													<key>include</key>
-													<string>#value</string>
-												</dict>
-											</array>
-										</dict>
-										<dict>
-											<key>include</key>
-											<string>#list</string>
-										</dict>
-										<dict>
-											<key>include</key>
-											<string>#body</string>
-										</dict>
-									</array>
-								</dict>
-								<dict>
 									<key>include</key>
-									<string>#value</string>
+									<string>#value-struct</string>
 								</dict>
 							</array>
 						</dict>
@@ -1771,6 +1731,70 @@
 				<dict>
 					<key>include</key>
 					<string>#struct</string>
+				</dict>
+			</array>
+		</dict>
+		<key>value-struct</key>
+		<dict>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>begin</key>
+					<string>\w+\d*(?=\s*[({\[])</string>
+					<key>end</key>
+					<string>(?&lt;=[)}\]])</string>
+					<key>beginCaptures</key>
+					<dict>
+						<key>0</key>
+						<dict>
+							<key>name</key>
+							<string>storage.type.rpl</string>
+						</dict>
+					</dict>
+					<key>patterns</key>
+					<array>
+						<dict>
+							<key>begin</key>
+							<string>\(</string>
+							<key>beginCaptures</key>
+							<dict>
+								<key>0</key>
+								<dict>
+									<key>name</key>
+									<string>meta.brace.round.rpl</string>
+								</dict>
+							</dict>
+							<key>end</key>
+							<string>\)</string>
+							<key>endCaptures</key>
+							<dict>
+								<key>0</key>
+								<dict>
+									<key>name</key>
+									<string>meta.brace.round.rpl</string>
+								</dict>
+							</dict>
+							<key>patterns</key>
+							<array>
+								<dict>
+									<key>include</key>
+									<string>#value-struct</string>
+								</dict>
+							</array>
+						</dict>
+						<dict>
+							<key>include</key>
+							<string>#list</string>
+						</dict>
+						<dict>
+							<key>include</key>
+							<string>#struct-body</string>
+						</dict>
+					</array>
+				</dict>
+				<dict>
+					<key>include</key>
+					<string>#value</string>
 				</dict>
 			</array>
 		</dict>
