@@ -46,6 +46,9 @@ class Registrar(tuple):
 	* TypeError - if keys, structs, types, or an entry within them is of the wrong type.
 	"""
 
+	# Overrideable for test cases.
+	base_struct = BaseStruct
+
 	def __new__(cls, *, keys=None, structs=None, types=None):
 		normal_keys = {}
 		normal_structs = {}
@@ -93,19 +96,8 @@ class Registrar(tuple):
 		#endfor
 
 		def loop_into(name, it, normals):
-			used_type = None
 			for k, s in it:
-				if used_type is None:
-					if isinstance(s, type):
-						raise TypeError(name)
-					#endif
-
-					base = type(s)
-					while base is not object:
-						used_type = base
-						base = base.__bases__[0]
-					#endwhile
-				elif not isinstance(s, used_type):
+				if not isinstance(s, self.base_struct):
 					raise TypeError(name)
 				#endif
 
@@ -341,6 +333,9 @@ class Key(BaseKey):
 	* TypeError - if type is not a dict or does not contain a "" key that's a BaseStruct.
 	"""
 
+	# Overrideable for test cases.
+	base_struct = BaseStruct
+
 	_cached_type = None
 
 	def __new__(cls, name, typing, default=NO_DEFAULT, *, ancestor=None):
@@ -353,17 +348,17 @@ class Key(BaseKey):
 				raise TypeError("typing")
 			#endtry
 
-			if not isinstance(struct_type, type):
+			if not issubclass(struct_type, self.base_struct):
 				raise TypeError("typing")
 			#endif
-		elif isinstance(typing, type):
+		elif issubclass(type, self.base_struct):
 			struct_type = typing
 			typing = {}
 		elif callable(typing):
 			struct_type = typing
 			typing = {}
 
-			if not isinstance(ancestor, type):
+			if not issubclass(ancestor, self.base_struct):
 				raise TypeError("ancestor")
 			#endif
 
@@ -409,7 +404,7 @@ class Key(BaseKey):
 		if ancestor is None:
 			return type, data
 		else:
-			if not isinstance(struct, object):
+			if not isinstance(struct, self.base_struct):
 				return False
 			#endif
 
